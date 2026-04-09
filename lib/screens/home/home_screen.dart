@@ -104,7 +104,6 @@ class _HomeScreenState extends State<HomeScreen> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 140),
         curve: Curves.easeOut,
-        width: 80,
         height: 64,
         decoration: BoxDecoration(
           color: active ? const Color(0xFFFDE047) : Colors.transparent,
@@ -186,17 +185,23 @@ class _HomeScreenState extends State<HomeScreen> {
                       icon: const Icon(Icons.menu, color: Color(0xFFFDE047)),
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  const Text(
-                    'Touch Bridge',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 2,
-                      color: Color(0xFFFDE047),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: const Text(
+                        'Touch Bridge',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 2,
+                          color: Color(0xFFFDE047),
+                        ),
+                      ),
                     ),
                   ),
-                  const Spacer(),
+                  const SizedBox(width: 6),
                   Container(
                     decoration: BoxDecoration(
                       color: const Color(0x4D1C2A41),
@@ -468,31 +473,50 @@ class _HomeScreenState extends State<HomeScreen> {
                 border: Border(top: BorderSide(color: Color(0x1AFFFFFF))),
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _bottomTab(
-                    index: 0,
-                    icon: Icons.dashboard_rounded,
-                    label: 'STATUS',
-                    active: true,
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: _bottomTab(
+                        index: 0,
+                        icon: Icons.dashboard_rounded,
+                        label: 'STATUS',
+                        active: true,
+                      ),
+                    ),
                   ),
-                  _bottomTab(
-                    index: 1,
-                    icon: Icons.router_rounded,
-                    label: 'DEVICES',
-                    active: false,
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: _bottomTab(
+                        index: 1,
+                        icon: Icons.router_rounded,
+                        label: 'DEVICES',
+                        active: false,
+                      ),
+                    ),
                   ),
-                  _bottomTab(
-                    index: 2,
-                    icon: Icons.mic_rounded,
-                    label: 'VOICE',
-                    active: false,
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: _bottomTab(
+                        index: 2,
+                        icon: Icons.mic_rounded,
+                        label: 'VOICE',
+                        active: false,
+                      ),
+                    ),
                   ),
-                  _bottomTab(
-                    index: 3,
-                    icon: Icons.settings_suggest_rounded,
-                    label: 'SETUP',
-                    active: false,
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: _bottomTab(
+                        index: 3,
+                        icon: Icons.settings_suggest_rounded,
+                        label: 'SETUP',
+                        active: false,
+                      ),
+                    ),
                   ),
                 ],
               ),

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
+import '../../widgets/responsive_scale.dart';
 import '../connection/device_connect_screen.dart';
 import '../control/remote_control_screen.dart';
 import '../home/home_screen.dart';
@@ -100,8 +101,12 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         _statusMessage = available ? '말씀해 주세요. 듣고 있습니다.' : '음성 인식을 사용할 수 없어요.';
       });
 
+      // Do not auto-start listening on screen entry; this prevents plugin/permission race crashes.
       if (available) {
-        await _startListening();
+        setState(() {
+          _isListening = false;
+          _statusMessage = '듣기를 시작하려면 아래 버튼을 눌러주세요.';
+        });
       }
     } on MissingPluginException {
       if (!mounted) {
@@ -269,6 +274,14 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     _stopWaveAnimation();
   }
 
+  Future<void> _toggleListening() async {
+    if (_isListening) {
+      await _stopListening();
+      return;
+    }
+    await _startListening();
+  }
+
   Future<void> _armAndRun({
     required String id,
     required String guide,
@@ -418,7 +431,11 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
   @override
   void dispose() {
-    _speech.cancel();
+    try {
+      _speech.cancel();
+    } catch (_) {
+      // Ignore plugin cancellation errors during dispose.
+    }
     _waveTimer?.cancel();
     _navResetTimer?.cancel();
     _actionResetTimer?.cancel();
@@ -428,14 +445,18 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final rs = ResponsiveScale.factor(context);
+
     return Scaffold(
       backgroundColor: const Color(0xFF041329),
       body: SafeArea(
         child: Column(
           children: [
             Container(
-              height: 64,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              height: ResponsiveScale.v(context, 64),
+              padding: EdgeInsets.symmetric(
+                horizontal: ResponsiveScale.v(context, 16),
+              ),
               decoration: const BoxDecoration(
                 border: Border(bottom: BorderSide(color: Color(0x33FDE047))),
                 boxShadow: [
@@ -492,163 +513,262 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
-                    child: Column(
-                      children: [
-                        const Text(
-                          'Listening...',
-                          style: TextStyle(
-                            color: Color(0xFFFDE047),
-                            fontSize: 56,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -1,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _statusMessage,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Color(0xFFCEC6AD),
-                            fontSize: 20,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        Text(
-                          _recognizedText,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Color(0xFFB6C6ED),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 34),
-                        SizedBox(
-                          height: 120,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: _waveHeights
-                                .asMap()
-                                .entries
-                                .map(
-                                  (entry) => Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 4,
-                                    ),
-                                    child: AnimatedContainer(
-                                      duration: const Duration(
-                                        milliseconds: 240,
-                                      ),
-                                      width: 6,
-                                      height: 120 * entry.value,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFFDE047)
-                                            .withValues(
-                                              alpha: _isListening
-                                                  ? 0.35 + (entry.value * 0.65)
-                                                  : 0.25,
-                                            ),
-                                        borderRadius: BorderRadius.circular(3),
-                                      ),
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                        ),
-                        const SizedBox(height: 30),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: () {
-                              _armAndRun(
-                                id: 'cancel_voice',
-                                guide: '취소 버튼입니다. 다시 누르면 음성 대기를 중지합니다.',
-                                onConfirmed: _stopListening,
-                              );
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF27354C),
-                              foregroundColor: const Color(0xFFE2C62D),
-                              minimumSize: const Size.fromHeight(84),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                side: BorderSide(
-                                  color: _armedActionId == 'cancel_voice'
-                                      ? Colors.white
-                                      : const Color(0x334B4734),
-                                  width: _armedActionId == 'cancel_voice'
-                                      ? 2.5
-                                      : 1,
-                                ),
-                              ),
+                    padding: EdgeInsets.fromLTRB(
+                      ResponsiveScale.v(context, 24),
+                      ResponsiveScale.v(context, 28),
+                      ResponsiveScale.v(context, 24),
+                      0,
+                    ),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        return SingleChildScrollView(
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minHeight: constraints.maxHeight,
                             ),
-                            child: const Text(
-                              '취소 (Cancel)',
-                              style: TextStyle(
-                                fontSize: 30,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        Wrap(
-                          alignment: WrapAlignment.center,
-                          spacing: 8,
-                          runSpacing: 10,
-                          children: _quickCommands.map((command) {
-                            final id = 'chip_$command';
-                            final armed = _armedActionId == id;
-
-                            return InkWell(
-                              borderRadius: BorderRadius.circular(999),
-                              onTap: () {
-                                _armAndRun(
-                                  id: id,
-                                  guide: '$command 명령입니다. 다시 누르면 이 문장을 선택합니다.',
-                                  onConfirmed: () {
-                                    setState(() {
-                                      _recognizedText = command;
-                                      _statusMessage = '추천 명령을 선택했습니다.';
-                                    });
-                                  },
-                                );
-                              },
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 140),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 10,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF0D1C32),
-                                  borderRadius: BorderRadius.circular(999),
-                                  border: Border.all(
-                                    color: armed
-                                        ? Colors.white
-                                        : const Color(0x334B4734),
-                                    width: armed ? 2.2 : 1,
+                            child: Column(
+                              children: [
+                                Text(
+                                  'Listening...',
+                                  style: TextStyle(
+                                    color: Color(0xFFFDE047),
+                                    fontSize: 56 * rs,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: -1,
                                   ),
                                 ),
-                                child: Text(
-                                  '"$command"',
-                                  style: const TextStyle(
+                                SizedBox(height: ResponsiveScale.v(context, 8)),
+                                Text(
+                                  _statusMessage,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
                                     color: Color(0xFFCEC6AD),
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
+                                    fontSize: 20 * rs,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ],
+                                SizedBox(
+                                  height: ResponsiveScale.v(context, 14),
+                                ),
+                                Text(
+                                  _recognizedText,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Color(0xFFB6C6ED),
+                                    fontSize: 14 * rs,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                SizedBox(
+                                  height: ResponsiveScale.v(context, 34),
+                                ),
+                                SizedBox(
+                                  height: ResponsiveScale.v(context, 120),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
+                                    children: _waveHeights
+                                        .asMap()
+                                        .entries
+                                        .map(
+                                          (entry) => Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 4,
+                                            ),
+                                            child: AnimatedContainer(
+                                              duration: const Duration(
+                                                milliseconds: 240,
+                                              ),
+                                              width: ResponsiveScale.v(
+                                                context,
+                                                6,
+                                              ),
+                                              height:
+                                                  ResponsiveScale.v(
+                                                    context,
+                                                    120,
+                                                  ) *
+                                                  entry.value,
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFFDE047)
+                                                    .withValues(
+                                                      alpha: _isListening
+                                                          ? 0.35 +
+                                                                (entry.value *
+                                                                    0.65)
+                                                          : 0.25,
+                                                    ),
+                                                borderRadius:
+                                                    BorderRadius.circular(3),
+                                              ),
+                                            ),
+                                          ),
+                                        )
+                                        .toList(),
+                                  ),
+                                ),
+                                SizedBox(
+                                  height: ResponsiveScale.v(context, 18),
+                                ),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton.icon(
+                                    onPressed: () {
+                                      _armAndRun(
+                                        id: 'toggle_listening',
+                                        guide: _isListening
+                                            ? '다시 누르면 듣기를 멈춥니다.'
+                                            : '다시 누르면 듣기를 시작합니다.',
+                                        onConfirmed: () {
+                                          _toggleListening();
+                                        },
+                                      );
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFFFDE047),
+                                      foregroundColor: const Color(0xFF726300),
+                                      minimumSize: Size.fromHeight(
+                                        ResponsiveScale.v(context, 62),
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                        side: BorderSide(
+                                          color:
+                                              _armedActionId ==
+                                                  'toggle_listening'
+                                              ? Colors.white
+                                              : Colors.transparent,
+                                          width:
+                                              _armedActionId ==
+                                                  'toggle_listening'
+                                              ? 2.5
+                                              : 0,
+                                        ),
+                                      ),
+                                    ),
+                                    icon: Icon(
+                                      _isListening
+                                          ? Icons.hearing_disabled
+                                          : Icons.hearing,
+                                      size: 24 * rs,
+                                    ),
+                                    label: Text(
+                                      _isListening ? '듣기 멈추기' : '듣기 시작',
+                                      style: TextStyle(
+                                        fontSize: 22 * rs,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(
+                                  height: ResponsiveScale.v(context, 14),
+                                ),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton(
+                                    onPressed: () {
+                                      _armAndRun(
+                                        id: 'cancel_voice',
+                                        guide: '취소 버튼입니다. 다시 누르면 음성 대기를 중지합니다.',
+                                        onConfirmed: _stopListening,
+                                      );
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF27354C),
+                                      foregroundColor: const Color(0xFFE2C62D),
+                                      minimumSize: Size.fromHeight(
+                                        ResponsiveScale.v(context, 72),
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                        side: BorderSide(
+                                          color:
+                                              _armedActionId == 'cancel_voice'
+                                              ? Colors.white
+                                              : const Color(0x334B4734),
+                                          width:
+                                              _armedActionId == 'cancel_voice'
+                                              ? 2.5
+                                              : 1,
+                                        ),
+                                      ),
+                                    ),
+                                    child: const Text(
+                                      '취소 (Cancel)',
+                                      style: TextStyle(
+                                        fontSize: 26,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(
+                                  height: ResponsiveScale.v(context, 14),
+                                ),
+                                Wrap(
+                                  alignment: WrapAlignment.center,
+                                  spacing: 8,
+                                  runSpacing: 10,
+                                  children: _quickCommands.map((command) {
+                                    final id = 'chip_$command';
+                                    final armed = _armedActionId == id;
+
+                                    return InkWell(
+                                      borderRadius: BorderRadius.circular(999),
+                                      onTap: () {
+                                        _armAndRun(
+                                          id: id,
+                                          guide:
+                                              '$command 명령입니다. 다시 누르면 이 문장을 선택합니다.',
+                                          onConfirmed: () {
+                                            setState(() {
+                                              _recognizedText = command;
+                                              _statusMessage = '추천 명령을 선택했습니다.';
+                                            });
+                                          },
+                                        );
+                                      },
+                                      child: AnimatedContainer(
+                                        duration: const Duration(
+                                          milliseconds: 140,
+                                        ),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 14,
+                                          vertical: 10,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF0D1C32),
+                                          borderRadius: BorderRadius.circular(
+                                            999,
+                                          ),
+                                          border: Border.all(
+                                            color: armed
+                                                ? Colors.white
+                                                : const Color(0x334B4734),
+                                            width: armed ? 2.2 : 1,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          '"$command"',
+                                          style: const TextStyle(
+                                            color: Color(0xFFCEC6AD),
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ],

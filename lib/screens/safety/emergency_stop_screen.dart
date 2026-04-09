@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
+import '../../widgets/responsive_scale.dart';
 import 'stop_done_screen.dart';
 
 class EmergencyStopScreen extends StatefulWidget {
@@ -119,17 +120,19 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
 
   @override
   Widget build(BuildContext context) {
+    final rs = ResponsiveScale.factor(context);
+
     return Scaffold(
       backgroundColor: const Color(0xFF041329),
       body: Stack(
         children: [
           Positioned(
-            top: 120,
-            right: -120,
+            top: ResponsiveScale.v(context, 120),
+            right: -ResponsiveScale.v(context, 120),
             child: IgnorePointer(
               child: Container(
-                width: 380,
-                height: 380,
+                width: ResponsiveScale.v(context, 380),
+                height: ResponsiveScale.v(context, 380),
                 decoration: BoxDecoration(
                   color: const Color(0x1AFDE047),
                   borderRadius: BorderRadius.circular(190),
@@ -138,12 +141,12 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
             ),
           ),
           Positioned(
-            bottom: 180,
-            left: -100,
+            bottom: ResponsiveScale.v(context, 180),
+            left: -ResponsiveScale.v(context, 100),
             child: IgnorePointer(
               child: Container(
-                width: 320,
-                height: 320,
+                width: ResponsiveScale.v(context, 320),
+                height: ResponsiveScale.v(context, 320),
                 decoration: BoxDecoration(
                   color: const Color(0x1AFFB4AB),
                   borderRadius: BorderRadius.circular(160),
@@ -155,8 +158,10 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
             child: Column(
               children: [
                 Container(
-                  height: 64,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  height: ResponsiveScale.v(context, 64),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: ResponsiveScale.v(context, 16),
+                  ),
                   child: Row(
                     children: [
                       const Icon(
@@ -196,7 +201,12 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                 ),
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                    padding: EdgeInsets.fromLTRB(
+                      ResponsiveScale.v(context, 20),
+                      ResponsiveScale.v(context, 8),
+                      ResponsiveScale.v(context, 20),
+                      ResponsiveScale.v(context, 12),
+                    ),
                     child: Column(
                       children: [
                         const SizedBox(height: 4),
@@ -250,7 +260,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                             letterSpacing: 3,
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        SizedBox(height: ResponsiveScale.v(context, 8)),
                         SizedBox(
                           width: double.infinity,
                           child: FittedBox(
@@ -258,9 +268,9 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                             child: Text(
                               _formatMMSS(_secondsLeft),
                               // 7rem equivalent target while preventing overflow on small widths.
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: Color(0xFFFDE047),
-                                fontSize: 112,
+                                fontSize: 112 * rs,
                                 fontWeight: FontWeight.w900,
                                 height: 1,
                                 letterSpacing: -2,
@@ -297,7 +307,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                             ),
                           ),
                         ),
-                        const SizedBox(height: 14),
+                        SizedBox(height: ResponsiveScale.v(context, 14)),
                         AnimatedBuilder(
                           animation: _holdController,
                           builder: (context, _) {
@@ -320,7 +330,9 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                                     ),
                                   ),
                                 ),
-                                const SizedBox(height: 12),
+                                SizedBox(
+                                  height: ResponsiveScale.v(context, 12),
+                                ),
                                 GestureDetector(
                                   onTap: () {
                                     _speak('중단하려면 버튼을 3초간 길게 누르세요.');
@@ -332,7 +344,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                                     duration: const Duration(milliseconds: 180),
                                     curve: Curves.easeOut,
                                     width: double.infinity,
-                                    height: 250,
+                                    height: ResponsiveScale.v(context, 220),
                                     decoration: BoxDecoration(
                                       gradient: const LinearGradient(
                                         colors: [
@@ -378,28 +390,28 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                                         Center(
                                           child: Column(
                                             mainAxisSize: MainAxisSize.min,
-                                            children: const [
+                                            children: [
                                               Icon(
                                                 Icons.back_hand,
-                                                size: 96,
+                                                size: 86 * rs,
                                                 color: Colors.white,
                                               ),
-                                              SizedBox(height: 8),
+                                              const SizedBox(height: 8),
                                               Text(
                                                 '길게 눌러서 중단',
                                                 style: TextStyle(
                                                   color: Colors.white,
-                                                  fontSize: 40,
+                                                  fontSize: 34 * rs,
                                                   fontWeight: FontWeight.w900,
                                                   letterSpacing: -1,
                                                 ),
                                               ),
-                                              SizedBox(height: 6),
+                                              const SizedBox(height: 6),
                                               Text(
                                                 'HOLD FOR 3 SEC',
                                                 style: TextStyle(
                                                   color: Color(0xFFFFDAD6),
-                                                  fontSize: 22,
+                                                  fontSize: 18 * rs,
                                                   fontWeight: FontWeight.w800,
                                                   letterSpacing: 2,
                                                 ),

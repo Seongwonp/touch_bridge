@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
+import '../../widgets/responsive_scale.dart';
 import '../home/home_screen.dart';
 import '../settings/settings_screen.dart';
 import '../voice/voice_listening_screen.dart';
@@ -371,14 +372,18 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final rs = ResponsiveScale.factor(context);
+
     return Scaffold(
       backgroundColor: const Color(0xFF041329),
       body: SafeArea(
         child: Column(
           children: [
             Container(
-              height: 64,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              height: ResponsiveScale.v(context, 64),
+              padding: EdgeInsets.symmetric(
+                horizontal: ResponsiveScale.v(context, 16),
+              ),
               decoration: const BoxDecoration(
                 border: Border(bottom: BorderSide(color: Color(0x33FDE047))),
                 boxShadow: [
@@ -422,29 +427,34 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
             ),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                padding: EdgeInsets.fromLTRB(
+                  ResponsiveScale.v(context, 16),
+                  ResponsiveScale.v(context, 12),
+                  ResponsiveScale.v(context, 16),
+                  ResponsiveScale.v(context, 4),
+                ),
                 child: Column(
                   children: [
-                    const Text(
+                    Text(
                       '남은 시간',
                       style: TextStyle(
                         color: Color(0xFFCEC6AD),
-                        fontSize: 13,
+                        fontSize: 13 * rs,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 2,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    SizedBox(height: ResponsiveScale.v(context, 6)),
                     Text(
                       _formatMMSS(_secondsLeft),
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Color(0xFFFDE047),
-                        fontSize: 72,
+                        fontSize: 72 * rs,
                         fontWeight: FontWeight.w900,
                         height: 1,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    SizedBox(height: ResponsiveScale.v(context, 6)),
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 14,
@@ -464,7 +474,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 14),
+                    SizedBox(height: ResponsiveScale.v(context, 14)),
                     Expanded(
                       child: GridView.count(
                         physics: const NeverScrollableScrollPhysics(),
@@ -488,10 +498,10 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: ResponsiveScale.v(context, 8)),
                     SizedBox(
                       width: double.infinity,
-                      height: 70,
+                      height: ResponsiveScale.v(context, 70),
                       child: ElevatedButton.icon(
                         onPressed: () {
                           _armAndRun(
@@ -518,14 +528,14 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                         icon: const Icon(Icons.mic, size: 28),
                         label: Text(
                           _running ? '실행 중...' : '시작 / 음성 제어',
-                          style: const TextStyle(
-                            fontSize: 25,
+                          style: TextStyle(
+                            fontSize: 22 * rs,
                             fontWeight: FontWeight.w900,
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: ResponsiveScale.v(context, 8)),
                     TextButton.icon(
                       onPressed: () {
                         _armAndRun(

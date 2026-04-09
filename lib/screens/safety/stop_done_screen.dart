@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../widgets/responsive_scale.dart';
+
 class StopDoneScreen extends StatefulWidget {
   const StopDoneScreen({super.key});
 
@@ -87,17 +89,19 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final rs = ResponsiveScale.factor(context);
+
     return Scaffold(
       backgroundColor: const Color(0xFF020617),
       body: Stack(
         children: [
           Positioned(
-            top: 150,
-            left: 40,
+            top: ResponsiveScale.v(context, 150),
+            left: ResponsiveScale.v(context, 40),
             child: IgnorePointer(
               child: Container(
-                width: 360,
-                height: 360,
+                width: ResponsiveScale.v(context, 320),
+                height: ResponsiveScale.v(context, 320),
                 decoration: BoxDecoration(
                   color: const Color(0x08FDE047),
                   borderRadius: BorderRadius.circular(180),
@@ -106,12 +110,12 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
             ),
           ),
           Positioned(
-            bottom: 120,
-            right: 40,
+            bottom: ResponsiveScale.v(context, 120),
+            right: ResponsiveScale.v(context, 40),
             child: IgnorePointer(
               child: Container(
-                width: 300,
-                height: 300,
+                width: ResponsiveScale.v(context, 260),
+                height: ResponsiveScale.v(context, 260),
                 decoration: BoxDecoration(
                   color: const Color(0x063B82F6),
                   borderRadius: BorderRadius.circular(150),
@@ -123,8 +127,10 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
             child: Column(
               children: [
                 Container(
-                  height: 64,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  height: ResponsiveScale.v(context, 64),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: ResponsiveScale.v(context, 16),
+                  ),
                   decoration: const BoxDecoration(
                     color: Color(0xCC020617),
                     border: Border(
@@ -168,13 +174,18 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
                 ),
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 108),
+                    padding: EdgeInsets.fromLTRB(
+                      ResponsiveScale.v(context, 24),
+                      ResponsiveScale.v(context, 20),
+                      ResponsiveScale.v(context, 24),
+                      ResponsiveScale.v(context, 108),
+                    ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Container(
-                          width: 192,
-                          height: 192,
+                          width: ResponsiveScale.v(context, 170),
+                          height: ResponsiveScale.v(context, 170),
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: const Color(0x100F172A),
@@ -188,8 +199,8 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
                           ),
                           child: Center(
                             child: Container(
-                              width: 160,
-                              height: 160,
+                              width: ResponsiveScale.v(context, 140),
+                              height: ResponsiveScale.v(context, 140),
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 border: Border.all(
@@ -205,18 +216,19 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 28),
-                        const Text(
+                        SizedBox(height: ResponsiveScale.v(context, 20)),
+                        Text(
                           '작동이 안전하게\n중단되었습니다',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: Color(0xFFFDE047),
-                            fontSize: 40,
+                            fontSize: 34 * rs,
                             height: 1.15,
                             fontWeight: FontWeight.w900,
                             letterSpacing: -0.7,
                           ),
                         ),
+                        SizedBox(height: ResponsiveScale.v(context, 14)),
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 18,
@@ -239,10 +251,10 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 24),
+                        SizedBox(height: ResponsiveScale.v(context, 20)),
                         SizedBox(
                           width: double.infinity,
-                          height: 96,
+                          height: ResponsiveScale.v(context, 86),
                           child: ElevatedButton(
                             onPressed: _goHome,
                             style: ElevatedButton.styleFrom(
@@ -254,15 +266,15 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
                               elevation: 12,
                               shadowColor: const Color(0x26FDE047),
                             ),
-                            child: const Row(
+                            child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.home, size: 42),
-                                SizedBox(width: 10),
+                                Icon(Icons.home, size: 34 * rs),
+                                SizedBox(width: ResponsiveScale.v(context, 10)),
                                 Text(
                                   '홈으로 돌아가기',
                                   style: TextStyle(
-                                    fontSize: 33,
+                                    fontSize: 28 * rs,
                                     fontWeight: FontWeight.w900,
                                     letterSpacing: -0.4,
                                   ),
