@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 
 import 'screens/home/home_screen.dart';
 import 'theme/app_theme.dart';
@@ -16,6 +17,14 @@ class TouchBridgeApp extends StatelessWidget {
       title: 'Touch Bridge',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
+      scrollBehavior: const MaterialScrollBehavior().copyWith(
+        dragDevices: {
+          PointerDeviceKind.touch,
+          PointerDeviceKind.mouse,
+          PointerDeviceKind.stylus,
+          PointerDeviceKind.unknown,
+        },
+      ),
       home: const HomeScreen(),
     );
   }

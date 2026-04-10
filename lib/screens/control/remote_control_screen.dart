@@ -6,6 +6,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 
 import '../../widgets/responsive_scale.dart';
 import '../home/home_screen.dart';
+import '../safety/emergency_stop_screen.dart';
 import '../settings/settings_screen.dart';
 import '../voice/voice_listening_screen.dart';
 
@@ -18,6 +19,7 @@ class RemoteControlScreen extends StatefulWidget {
 
 class _RemoteControlScreenState extends State<RemoteControlScreen> {
   final FlutterTts _tts = FlutterTts();
+  static const String _activeDeviceName = 'Kitchen Hub';
 
   Timer? _navResetTimer;
   int? _armedNavIndex;
@@ -132,6 +134,18 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
+  String _formatKoreanDuration(int totalSeconds) {
+    final int minutes = totalSeconds ~/ 60;
+    final int seconds = totalSeconds % 60;
+    if (minutes > 0 && seconds > 0) {
+      return '$minutes분 $seconds초';
+    }
+    if (minutes > 0) {
+      return '$minutes분';
+    }
+    return '$seconds초';
+  }
+
   void _updateFromDraft() {
     final min = int.parse(_draft.substring(0, 2));
     final sec = int.parse(_draft.substring(2, 4)).clamp(0, 59);
@@ -170,9 +184,10 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   }
 
   void _toggleStart() {
-    if (_running) {
+    if (!mounted) {
       return;
     }
+
     if (_secondsLeft <= 0) {
       setState(() {
         _draft = '0030';
@@ -180,53 +195,36 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
       });
     }
 
-    setState(() {
-      _running = true;
-    });
+    final int startSeconds = _secondsLeft;
+    final String runningLabel =
+        '$_activeDeviceName ${_formatKoreanDuration(startSeconds)} 작동 중';
+    _speak(
+      '$_activeDeviceName가 ${_formatKoreanDuration(startSeconds)} 작동됩니다. 긴급 중단 화면으로 이동합니다.',
+    );
 
-    _countdownTimer?.cancel();
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-
-      if (_secondsLeft <= 1) {
-        timer.cancel();
-        setState(() {
-          _secondsLeft = 0;
-          _running = false;
-        });
-        _speak('타이머가 종료되었습니다.');
-        return;
-      }
-
-      setState(() {
-        _secondsLeft -= 1;
-      });
-    });
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => EmergencyStopScreen(
+          initialSeconds: startSeconds,
+          runningLabel: runningLabel,
+        ),
+      ),
+    );
   }
 
-  void _stopTimer() {
-    _countdownTimer?.cancel();
-    setState(() {
-      _running = false;
-      _draft = _formatMMSS(_secondsLeft).replaceAll(':', '');
-    });
-  }
-
-  Widget _numberKey(int number) {
+  Widget _numberKey(int number, double rs) {
     final id = 'num_$number';
     final isArmed = _armedActionId == id;
+    final double numberFontSize = (26 * rs).clamp(20, 30).toDouble();
 
     return _ActionKey(
       borderColor: const Color(0x1A97917A),
       armed: isArmed,
       child: Text(
         '$number',
-        style: const TextStyle(
+        style: TextStyle(
           color: Color(0xFFD6E3FF),
-          fontSize: 30,
+          fontSize: numberFontSize,
           fontWeight: FontWeight.w800,
         ),
       ),
@@ -240,22 +238,24 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     );
   }
 
-  Widget _cancelKey() {
+  Widget _cancelKey(double rs) {
     final isArmed = _armedActionId == 'cancel';
+    final double iconSize = (24 * rs).clamp(20, 28).toDouble();
+    final double labelSize = (11 * rs).clamp(10, 13).toDouble();
     return _ActionKey(
       color: const Color(0x3393000A),
       borderColor: const Color(0x22FFB4AB),
       armed: isArmed,
-      child: const Column(
+      child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.cancel, color: Color(0xFFFFB4AB), size: 28),
-          SizedBox(height: 4),
+          Icon(Icons.cancel, color: const Color(0xFFFFB4AB), size: iconSize),
+          const SizedBox(height: 4),
           Text(
             '취소',
             style: TextStyle(
               color: Color(0xFFFFB4AB),
-              fontSize: 12,
+              fontSize: labelSize,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -271,22 +271,24 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     );
   }
 
-  Widget _backspaceKey() {
+  Widget _backspaceKey(double rs) {
     final isArmed = _armedActionId == 'backspace';
+    final double iconSize = (22 * rs).clamp(18, 26).toDouble();
+    final double labelSize = (11 * rs).clamp(10, 13).toDouble();
     return _ActionKey(
       color: const Color(0xFF27354C),
       borderColor: const Color(0x1A97917A),
       armed: isArmed,
-      child: const Column(
+      child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.backspace, color: Color(0xFFD6E3FF), size: 26),
-          SizedBox(height: 4),
+          Icon(Icons.backspace, color: const Color(0xFFD6E3FF), size: iconSize),
+          const SizedBox(height: 4),
           Text(
             '지우기',
             style: TextStyle(
               color: Color(0xFFD6E3FF),
-              fontSize: 12,
+              fontSize: labelSize,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -476,26 +478,47 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                     ),
                     SizedBox(height: ResponsiveScale.v(context, 14)),
                     Expanded(
-                      child: GridView.count(
-                        physics: const NeverScrollableScrollPhysics(),
-                        crossAxisCount: 3,
-                        crossAxisSpacing: 10,
-                        mainAxisSpacing: 10,
-                        childAspectRatio: 1,
-                        children: [
-                          _numberKey(1),
-                          _numberKey(2),
-                          _numberKey(3),
-                          _numberKey(4),
-                          _numberKey(5),
-                          _numberKey(6),
-                          _numberKey(7),
-                          _numberKey(8),
-                          _numberKey(9),
-                          _cancelKey(),
-                          _numberKey(0),
-                          _backspaceKey(),
-                        ],
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final double maxGridWidth = constraints.maxWidth > 520
+                              ? 420
+                              : constraints.maxWidth;
+                          final double spacing = constraints.maxWidth > 420
+                              ? 10
+                              : 8;
+                          final double ratio = constraints.maxWidth > 420
+                              ? 1.15
+                              : 1.0;
+
+                          return Center(
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: maxGridWidth,
+                              ),
+                              child: GridView.count(
+                                physics: const NeverScrollableScrollPhysics(),
+                                crossAxisCount: 3,
+                                crossAxisSpacing: spacing,
+                                mainAxisSpacing: spacing,
+                                childAspectRatio: ratio,
+                                children: [
+                                  _numberKey(1, rs),
+                                  _numberKey(2, rs),
+                                  _numberKey(3, rs),
+                                  _numberKey(4, rs),
+                                  _numberKey(5, rs),
+                                  _numberKey(6, rs),
+                                  _numberKey(7, rs),
+                                  _numberKey(8, rs),
+                                  _numberKey(9, rs),
+                                  _cancelKey(rs),
+                                  _numberKey(0, rs),
+                                  _backspaceKey(rs),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ),
                     SizedBox(height: ResponsiveScale.v(context, 8)),
@@ -506,7 +529,8 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                         onPressed: () {
                           _armAndRun(
                             id: 'start_voice',
-                            guide: '시작 음성 제어 버튼입니다. 다시 누르면 타이머가 시작됩니다.',
+                            guide:
+                                '시작 음성 제어 버튼입니다. 시작하려면 한 번 더 탭하세요. 음성 인식으로 가려면 아래 VOICE 탭을 두 번 탭하세요.',
                             onConfirmed: _toggleStart,
                           );
                         },
@@ -539,14 +563,14 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                     TextButton.icon(
                       onPressed: () {
                         _armAndRun(
-                          id: 'stop_timer',
-                          guide: '타이머 정지 버튼입니다. 다시 누르면 정지합니다.',
-                          onConfirmed: _stopTimer,
+                          id: 'reset_timer',
+                          guide: '타이머 초기화 버튼입니다. 다시 누르면 2분 30초로 초기화합니다.',
+                          onConfirmed: _cancelTimer,
                         );
                       },
-                      icon: const Icon(Icons.stop_circle, size: 22),
+                      icon: const Icon(Icons.restart_alt, size: 22),
                       label: const Text(
-                        '타이머 정지',
+                        '타이머 초기화',
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w800,
@@ -556,10 +580,10 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                       style: TextButton.styleFrom(
                         foregroundColor: const Color(0xFFCEC6AD),
                         side: BorderSide(
-                          color: _armedActionId == 'stop_timer'
+                          color: _armedActionId == 'reset_timer'
                               ? Colors.white
                               : Colors.transparent,
-                          width: _armedActionId == 'stop_timer' ? 2 : 0,
+                          width: _armedActionId == 'reset_timer' ? 2 : 0,
                         ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),

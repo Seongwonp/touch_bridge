@@ -22,6 +22,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Timer? _navResetTimer;
   int? _armedNavIndex;
+  Timer? _actionResetTimer;
+  String? _armedActionId;
   int _currentDeviceIndex = 0;
 
   final List<({String name, String status, IconData icon})> _devices = const [
@@ -29,6 +31,48 @@ class _HomeScreenState extends State<HomeScreen> {
     (name: '스마트 공기청정기', status: '공기 질 분석 중', icon: Icons.air_rounded),
     (name: '스마트 전등 허브', status: '원격 제어 가능', icon: Icons.light_mode_rounded),
   ];
+
+  Future<void> _speak(String message) async {
+    await _tts.setLanguage('ko-KR');
+    await _tts.setSpeechRate(0.45);
+    await _tts.setPitch(1.0);
+    await _tts.stop();
+    await _tts.speak(message);
+  }
+
+  Future<void> _armAndRun({
+    required String id,
+    required String guide,
+    required VoidCallback onConfirmed,
+  }) async {
+    if (_armedActionId != id) {
+      setState(() {
+        _armedActionId = id;
+      });
+      HapticFeedback.mediumImpact();
+
+      _actionResetTimer?.cancel();
+      _actionResetTimer = Timer(const Duration(seconds: 4), () {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _armedActionId = null;
+        });
+      });
+
+      await _speak(guide);
+      return;
+    }
+
+    _actionResetTimer?.cancel();
+    setState(() {
+      _armedActionId = null;
+    });
+    await _tts.stop();
+    HapticFeedback.selectionClick();
+    onConfirmed();
+  }
 
   Future<void> _handleBottomTap(int index) async {
     const List<String> labels = ['상태', '기기', '음성', '설정'];
@@ -49,11 +93,7 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       });
 
-      await _tts.setLanguage('ko-KR');
-      await _tts.setSpeechRate(0.45);
-      await _tts.setPitch(1.0);
-      await _tts.stop();
-      await _tts.speak('${labels[index]} 탭입니다. 다시 한 번 누르면 이동합니다.');
+      await _speak('${labels[index]} 탭입니다. 다시 한 번 누르면 이동합니다.');
       return;
     }
 
@@ -151,6 +191,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _navResetTimer?.cancel();
+    _actionResetTimer?.cancel();
     _tts.stop();
     _pageController.dispose();
     super.dispose();
@@ -176,10 +217,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     child: IconButton(
                       onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const RemoteControlScreen(),
-                          ),
+                        _armAndRun(
+                          id: 'go_remote',
+                          guide: '원격 제어 메뉴 버튼입니다. 다시 한 번 누르면 원격 제어 화면으로 이동합니다.',
+                          onConfirmed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => const RemoteControlScreen(),
+                              ),
+                            );
+                          },
                         );
                       },
                       icon: const Icon(Icons.menu, color: Color(0xFFFDE047)),
@@ -209,10 +256,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     child: IconButton(
                       onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const SettingsScreen(),
-                          ),
+                        _armAndRun(
+                          id: 'go_settings',
+                          guide: '설정 버튼입니다. 다시 한 번 누르면 설정 화면으로 이동합니다.',
+                          onConfirmed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => const SettingsScreen(),
+                              ),
+                            );
+                          },
                         );
                       },
                       icon: const Icon(
@@ -296,120 +349,137 @@ class _HomeScreenState extends State<HomeScreen> {
                         itemCount: _devices.length,
                         itemBuilder: (context, index) {
                           final device = _devices[index];
+                          final bool isArmed =
+                              _armedActionId == 'device_$index';
                           return Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 4),
                             child: GestureDetector(
-                              onLongPress: () {
-                                HapticFeedback.heavyImpact();
-                                Navigator.of(context).push(
-                                  MaterialPageRoute<void>(
-                                    builder: (_) =>
-                                        const VoiceListeningScreen(),
-                                  ),
+                              onTap: () {
+                                _armAndRun(
+                                  id: 'device_$index',
+                                  guide:
+                                      '${device.name}. 현재 상태는 ${device.status}. 다시 한 번 누르면 시간 제어 화면으로 이동합니다.',
+                                  onConfirmed: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                        builder: (_) =>
+                                            const RemoteControlScreen(),
+                                      ),
+                                    );
+                                  },
                                 );
                               },
-                              child: Container(
-                                padding: const EdgeInsets.fromLTRB(
-                                  22,
-                                  20,
-                                  22,
-                                  20,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0x4027354D),
-                                  borderRadius: BorderRadius.circular(40),
-                                  border: Border.all(
-                                    color: const Color(0x22FDE047),
+                              child: Semantics(
+                                button: true,
+                                label: '${device.name}, ${device.status}',
+                                hint: '한 번 누르면 상태 안내, 두 번 누르면 시간 제어 화면 이동',
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 140),
+                                  curve: Curves.easeOut,
+                                  padding: const EdgeInsets.fromLTRB(
+                                    22,
+                                    20,
+                                    22,
+                                    20,
                                   ),
-                                  boxShadow: const [
-                                    BoxShadow(
-                                      color: Color(0x26000000),
-                                      blurRadius: 28,
-                                      offset: Offset(0, 14),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0x4027354D),
+                                    borderRadius: BorderRadius.circular(40),
+                                    border: Border.all(
+                                      color: isArmed
+                                          ? Colors.white
+                                          : const Color(0x22FDE047),
+                                      width: isArmed ? 2.8 : 1,
                                     ),
-                                  ],
-                                ),
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  alignment: Alignment.center,
-                                  child: SizedBox(
-                                    width: 380,
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Container(
-                                          width: 140,
-                                          height: 140,
-                                          decoration: BoxDecoration(
-                                            gradient: const LinearGradient(
-                                              colors: [
-                                                Color(0xFF27354D),
-                                                Color(0xFF1C2A41),
-                                              ],
-                                              begin: Alignment.topLeft,
-                                              end: Alignment.bottomRight,
-                                            ),
-                                            borderRadius: BorderRadius.circular(
-                                              34,
-                                            ),
-                                            border: Border.all(
-                                              color: const Color(0x26FFFFFF),
-                                            ),
-                                          ),
-                                          child: Icon(
-                                            device.icon,
-                                            color: const Color(0xFFFDE047),
-                                            size: 74,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 20),
-                                        Text(
-                                          device.name,
-                                          style: const TextStyle(
-                                            fontSize: 36,
-                                            fontWeight: FontWeight.w900,
-                                            color: Colors.white,
-                                            height: 1.1,
-                                          ),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Container(
-                                              width: 9,
-                                              height: 9,
-                                              decoration: const BoxDecoration(
-                                                color: Color(0xFF3BF7FF),
-                                                shape: BoxShape.circle,
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: Color(0x26000000),
+                                        blurRadius: 28,
+                                        offset: Offset(0, 14),
+                                      ),
+                                    ],
+                                  ),
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.center,
+                                    child: SizedBox(
+                                      width: 380,
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Container(
+                                            width: 140,
+                                            height: 140,
+                                            decoration: BoxDecoration(
+                                              gradient: const LinearGradient(
+                                                colors: [
+                                                  Color(0xFF27354D),
+                                                  Color(0xFF1C2A41),
+                                                ],
+                                                begin: Alignment.topLeft,
+                                                end: Alignment.bottomRight,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(34),
+                                              border: Border.all(
+                                                color: const Color(0x26FFFFFF),
                                               ),
                                             ),
-                                            const SizedBox(width: 8),
-                                            Text(
-                                              device.status,
-                                              style: const TextStyle(
-                                                fontSize: 18,
-                                                fontWeight: FontWeight.w700,
-                                                color: Color(0x99D6E3FF),
-                                              ),
+                                            child: Icon(
+                                              device.icon,
+                                              color: const Color(0xFFFDE047),
+                                              size: 74,
                                             ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 24),
-                                        const Text(
-                                          '기기를 3초간 길게 누르면\n음성 명령이 시작됩니다',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
-                                            letterSpacing: 1.2,
-                                            color: Color(0x99CEC6AD),
                                           ),
-                                        ),
-                                      ],
+                                          const SizedBox(height: 20),
+                                          Text(
+                                            device.name,
+                                            style: const TextStyle(
+                                              fontSize: 36,
+                                              fontWeight: FontWeight.w900,
+                                              color: Colors.white,
+                                              height: 1.1,
+                                            ),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Container(
+                                                width: 9,
+                                                height: 9,
+                                                decoration: const BoxDecoration(
+                                                  color: Color(0xFF3BF7FF),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                device.status,
+                                                style: const TextStyle(
+                                                  fontSize: 18,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: Color(0x99D6E3FF),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 24),
+                                          const Text(
+                                            '기기를 한 번 누르면 상태를 읽어주고\n다시 누르면 음성 명령이 시작됩니다',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              letterSpacing: 1.2,
+                                              color: Color(0x99CEC6AD),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -426,9 +496,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         children: [
                           IconButton(
                             onPressed: () {
-                              _pageController.previousPage(
-                                duration: const Duration(milliseconds: 220),
-                                curve: Curves.easeOut,
+                              _armAndRun(
+                                id: 'prev_device',
+                                guide: '이전 기기 버튼입니다. 다시 누르면 이전 기기로 이동합니다.',
+                                onConfirmed: () {
+                                  _pageController.previousPage(
+                                    duration: const Duration(milliseconds: 220),
+                                    curve: Curves.easeOut,
+                                  );
+                                },
                               );
                             },
                             icon: const Icon(
@@ -447,9 +523,15 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           IconButton(
                             onPressed: () {
-                              _pageController.nextPage(
-                                duration: const Duration(milliseconds: 220),
-                                curve: Curves.easeOut,
+                              _armAndRun(
+                                id: 'next_device',
+                                guide: '다음 기기 버튼입니다. 다시 누르면 다음 기기로 이동합니다.',
+                                onConfirmed: () {
+                                  _pageController.nextPage(
+                                    duration: const Duration(milliseconds: 220),
+                                    curve: Curves.easeOut,
+                                  );
+                                },
                               );
                             },
                             icon: const Icon(

@@ -8,7 +8,14 @@ import '../../widgets/responsive_scale.dart';
 import 'stop_done_screen.dart';
 
 class EmergencyStopScreen extends StatefulWidget {
-  const EmergencyStopScreen({super.key});
+  const EmergencyStopScreen({
+    super.key,
+    this.initialSeconds = 150,
+    this.runningLabel = '전자레인지 30초 작동 중',
+  });
+
+  final int initialSeconds;
+  final String runningLabel;
 
   @override
   State<EmergencyStopScreen> createState() => _EmergencyStopScreenState();
@@ -17,23 +24,28 @@ class EmergencyStopScreen extends StatefulWidget {
 class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     with SingleTickerProviderStateMixin {
   final FlutterTts _tts = FlutterTts();
+  static const int _holdSeconds = 2;
 
   late final AnimationController _holdController;
   Timer? _countdownTimer;
 
-  int _secondsLeft = 150;
+  late int _secondsLeft;
   bool _isHolding = false;
+  bool _timerFinishedHandled = false;
 
   @override
   void initState() {
     super.initState();
+    _secondsLeft = widget.initialSeconds;
     _holdController =
-        AnimationController(vsync: this, duration: const Duration(seconds: 3))
-          ..addStatusListener((status) {
-            if (status == AnimationStatus.completed) {
-              _onHoldCompleted();
-            }
-          });
+        AnimationController(
+          vsync: this,
+          duration: const Duration(seconds: _holdSeconds),
+        )..addStatusListener((status) {
+          if (status == AnimationStatus.completed) {
+            _onHoldCompleted();
+          }
+        });
 
     _startCountdown();
   }
@@ -45,8 +57,13 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
         timer.cancel();
         return;
       }
-      if (_secondsLeft <= 0) {
+
+      if (_secondsLeft <= 1) {
         timer.cancel();
+        setState(() {
+          _secondsLeft = 0;
+        });
+        _onTimerCompleted();
         return;
       }
 
@@ -54,6 +71,21 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
         _secondsLeft -= 1;
       });
     });
+  }
+
+  Future<void> _onTimerCompleted() async {
+    if (_timerFinishedHandled || !mounted) {
+      return;
+    }
+
+    _timerFinishedHandled = true;
+    await _speak('타이머가 종료되었습니다. 홈 화면으로 이동합니다.');
+
+    if (!mounted) {
+      return;
+    }
+
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   String _formatMMSS(int totalSeconds) {
@@ -230,18 +262,18 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                               ),
                             ],
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(
+                              const Icon(
                                 Icons.microwave,
                                 color: Color(0xFFFDE047),
                                 size: 24,
                               ),
-                              SizedBox(width: 8),
+                              const SizedBox(width: 8),
                               Text(
-                                '전자레인지 30초 작동 중',
-                                style: TextStyle(
+                                widget.runningLabel,
+                                style: const TextStyle(
                                   color: Color(0xFFFDE047),
                                   fontSize: 20,
                                   fontWeight: FontWeight.w800,
@@ -297,7 +329,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                             border: Border.all(color: const Color(0xFF4B4734)),
                           ),
                           child: const Text(
-                            '중단하려면 아래 버튼을 3초간 길게 누르세요',
+                            '중단하려면 아래 버튼을 2초간 길게 누르세요',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Color(0xFFD6E3FF),
@@ -335,7 +367,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                                 ),
                                 GestureDetector(
                                   onTap: () {
-                                    _speak('중단하려면 버튼을 3초간 길게 누르세요.');
+                                    _speak('중단하려면 버튼을 2초간 길게 누르세요.');
                                   },
                                   onLongPressStart: (_) => _onHoldStart(),
                                   onLongPressEnd: (_) => _onHoldEnd(),
@@ -408,7 +440,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                                               ),
                                               const SizedBox(height: 6),
                                               Text(
-                                                'HOLD FOR 3 SEC',
+                                                'HOLD FOR 2 SEC',
                                                 style: TextStyle(
                                                   color: Color(0xFFFFDAD6),
                                                   fontSize: 18 * rs,
