@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_tts/flutter_tts.dart';
 
+import '../../services/tts_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../home/home_screen.dart';
 import '../safety/emergency_stop_screen.dart';
@@ -18,7 +18,7 @@ class RemoteControlScreen extends StatefulWidget {
 }
 
 class _RemoteControlScreenState extends State<RemoteControlScreen> {
-  final FlutterTts _tts = FlutterTts();
+  final TtsService _ttsService = TtsService();
   static const String _activeDeviceName = 'Kitchen Hub';
 
   Timer? _navResetTimer;
@@ -33,11 +33,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   String _draft = '0230';
 
   Future<void> _speak(String message) async {
-    await _tts.setLanguage('ko-KR');
-    await _tts.setSpeechRate(0.45);
-    await _tts.setPitch(1.0);
-    await _tts.stop();
-    await _tts.speak(message);
+    await _ttsService.speak(message);
   }
 
   Future<void> _armAndRun({
@@ -66,7 +62,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     }
 
     _actionResetTimer?.cancel();
-    await _tts.stop();
+    await _ttsService.stop();
     setState(() {
       _armedActionId = null;
     });
@@ -101,7 +97,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     setState(() {
       _armedNavIndex = null;
     });
-    await _tts.stop();
+    await _ttsService.stop();
 
     if (!mounted) {
       return;
@@ -368,7 +364,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     _countdownTimer?.cancel();
     _navResetTimer?.cancel();
     _actionResetTimer?.cancel();
-    _tts.stop();
+    _ttsService.stop();
     super.dispose();
   }
 

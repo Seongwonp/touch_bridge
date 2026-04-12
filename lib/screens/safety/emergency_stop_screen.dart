@@ -2,8 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_tts/flutter_tts.dart';
-
+import '../../services/tts_service.dart';
 import '../../widgets/responsive_scale.dart';
 import 'stop_done_screen.dart';
 
@@ -23,7 +22,7 @@ class EmergencyStopScreen extends StatefulWidget {
 
 class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     with SingleTickerProviderStateMixin {
-  final FlutterTts _tts = FlutterTts();
+  final TtsService _ttsService = TtsService();
   static const int _holdSeconds = 2;
 
   late final AnimationController _holdController;
@@ -95,11 +94,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   }
 
   Future<void> _speak(String message) async {
-    await _tts.setLanguage('ko-KR');
-    await _tts.setSpeechRate(0.45);
-    await _tts.setPitch(1.0);
-    await _tts.stop();
-    await _tts.speak(message);
+    await _ttsService.speak(message);
   }
 
   void _onHoldStart() {
@@ -146,7 +141,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   void dispose() {
     _countdownTimer?.cancel();
     _holdController.dispose();
-    _tts.stop();
+    _ttsService.stop();
     super.dispose();
   }
 

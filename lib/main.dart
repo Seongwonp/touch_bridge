@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 
 import 'screens/home/home_screen.dart';
+import 'services/tts_service.dart';
 import 'theme/app_theme.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await TtsService().initialize();
   runApp(const TouchBridgeApp());
 }
 

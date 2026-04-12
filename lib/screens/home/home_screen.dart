@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_tts/flutter_tts.dart';
 
+import '../../services/tts_service.dart';
 import '../connection/device_connect_screen.dart';
 import '../control/remote_control_screen.dart';
 import '../settings/settings_screen.dart';
@@ -17,7 +17,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final FlutterTts _tts = FlutterTts();
+  final TtsService _ttsService = TtsService();
   final PageController _pageController = PageController(viewportFraction: 0.94);
 
   Timer? _navResetTimer;
@@ -33,11 +33,7 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
 
   Future<void> _speak(String message) async {
-    await _tts.setLanguage('ko-KR');
-    await _tts.setSpeechRate(0.45);
-    await _tts.setPitch(1.0);
-    await _tts.stop();
-    await _tts.speak(message);
+    await _ttsService.speak(message);
   }
 
   Future<void> _armAndRun({
@@ -69,7 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _armedActionId = null;
     });
-    await _tts.stop();
+    await _ttsService.stop();
     HapticFeedback.selectionClick();
     onConfirmed();
   }
@@ -101,7 +97,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _armedNavIndex = null;
     });
-    await _tts.stop();
+    await _ttsService.stop();
 
     if (!mounted) {
       return;
@@ -192,7 +188,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _navResetTimer?.cancel();
     _actionResetTimer?.cancel();
-    _tts.stop();
+    _ttsService.stop();
     _pageController.dispose();
     super.dispose();
   }

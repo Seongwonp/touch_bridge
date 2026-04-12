@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_tts/flutter_tts.dart';
 
+import '../../services/tts_service.dart';
 import '../connection/device_connect_screen.dart';
 import '../home/home_screen.dart';
 import '../voice/voice_listening_screen.dart';
@@ -16,21 +16,23 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final FlutterTts _tts = FlutterTts();
+  final TtsService _ttsService = TtsService();
 
   Timer? _navResetTimer;
   int? _armedNavIndex;
 
-  double _speed = 1.2;
+  late double _speed;
   double _volume = 85;
   bool _guardianMode = true;
 
+  @override
+  void initState() {
+    super.initState();
+    _speed = _ttsService.speed;
+  }
+
   Future<void> _announce(String message) async {
-    await _tts.setLanguage('ko-KR');
-    await _tts.setSpeechRate(0.45);
-    await _tts.setPitch(1.0);
-    await _tts.stop();
-    await _tts.speak(message);
+    await _ttsService.speak(message);
   }
 
   Future<void> _handleBottomTap(int index) async {
@@ -60,7 +62,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _armedNavIndex = null;
     });
-    await _tts.stop();
+    await _ttsService.stop();
 
     if (!mounted) {
       return;
@@ -142,7 +144,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void dispose() {
     _navResetTimer?.cancel();
-    _tts.stop();
+    _ttsService.stop();
     super.dispose();
   }
 
@@ -243,6 +245,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   setState(() {
                                     _speed = value;
                                   });
+                                  _ttsService.setSpeed(value);
                                 },
                               ),
                             ],

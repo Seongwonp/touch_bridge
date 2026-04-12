@@ -3,9 +3,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_tts/flutter_tts.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
+import '../../services/tts_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../connection/device_connect_screen.dart';
 import '../control/remote_control_screen.dart';
@@ -21,7 +21,7 @@ class VoiceListeningScreen extends StatefulWidget {
 
 class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   final SpeechToText _speech = SpeechToText();
-  final FlutterTts _tts = FlutterTts();
+  final TtsService _ttsService = TtsService();
   final math.Random _random = math.Random();
 
   bool _isSpeechReady = false;
@@ -65,10 +65,6 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
   Future<void> _initializeVoiceFeatures() async {
     try {
-      await _tts.setLanguage('ko-KR');
-      await _tts.setSpeechRate(0.45);
-      await _tts.setPitch(1.0);
-
       final bool available = await _speech.initialize(
         onStatus: (status) {
           if (!mounted) {
@@ -143,11 +139,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
   Future<void> _speak(String message) async {
     try {
-      await _tts.setLanguage('ko-KR');
-      await _tts.setSpeechRate(0.45);
-      await _tts.setPitch(1.0);
-      await _tts.stop();
-      await _tts.speak(message);
+      await _ttsService.speak(message);
     } catch (_) {
       // TTS failure should not crash the voice screen.
     }
@@ -308,7 +300,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     }
 
     _actionResetTimer?.cancel();
-    await _tts.stop();
+    await _ttsService.stop();
     setState(() {
       _armedActionId = null;
     });
@@ -343,7 +335,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     setState(() {
       _armedNavIndex = null;
     });
-    await _tts.stop();
+    await _ttsService.stop();
 
     if (!mounted) {
       return;
@@ -439,7 +431,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     _waveTimer?.cancel();
     _navResetTimer?.cancel();
     _actionResetTimer?.cancel();
-    _tts.stop();
+    _ttsService.stop();
     super.dispose();
   }
 

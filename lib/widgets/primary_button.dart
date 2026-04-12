@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_tts/flutter_tts.dart';
+
+import '../services/tts_service.dart';
 
 class PrimaryButton extends StatefulWidget {
   const PrimaryButton({
@@ -25,7 +26,7 @@ class PrimaryButton extends StatefulWidget {
 }
 
 class _PrimaryButtonState extends State<PrimaryButton> {
-  final FlutterTts _tts = FlutterTts();
+  final TtsService _ttsService = TtsService();
   Timer? _confirmResetTimer;
   bool _armed = false;
 
@@ -55,11 +56,7 @@ class _PrimaryButtonState extends State<PrimaryButton> {
         });
       });
 
-      await _tts.setLanguage('ko-KR');
-      await _tts.setSpeechRate(0.45);
-      await _tts.setPitch(1.0);
-      await _tts.stop();
-      await _tts.speak(
+      await _ttsService.speak(
         widget.firstTapGuide ?? '${widget.label}. 다시 한 번 누르면 실행됩니다.',
       );
       return;
@@ -69,14 +66,14 @@ class _PrimaryButtonState extends State<PrimaryButton> {
     setState(() {
       _armed = false;
     });
-    await _tts.stop();
+    await _ttsService.stop();
     widget.onPressed!.call();
   }
 
   @override
   void dispose() {
     _confirmResetTimer?.cancel();
-    _tts.stop();
+    _ttsService.stop();
     super.dispose();
   }
 
