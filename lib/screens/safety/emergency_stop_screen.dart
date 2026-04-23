@@ -3,12 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../widgets/responsive_scale.dart';
 import 'stop_done_screen.dart';
 
 class EmergencyStopScreen extends StatefulWidget {
-  const EmergencyStopScreen({super.key});
+  const EmergencyStopScreen({super.key, this.initialSeconds = 150});
+
+  final int initialSeconds;
 
   @override
   State<EmergencyStopScreen> createState() => _EmergencyStopScreenState();
@@ -17,16 +20,20 @@ class EmergencyStopScreen extends StatefulWidget {
 class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     with SingleTickerProviderStateMixin {
   final FlutterTts _tts = FlutterTts();
+  final SpeechToText _speech = SpeechToText();
 
   late final AnimationController _holdController;
   Timer? _countdownTimer;
 
-  int _secondsLeft = 150;
+  late int _secondsLeft;
   bool _isHolding = false;
+  bool _isListening = false;
+  bool _speechEnabled = false;
 
   @override
   void initState() {
     super.initState();
+    _secondsLeft = widget.initialSeconds;
     _holdController =
         AnimationController(vsync: this, duration: const Duration(seconds: 3))
           ..addStatusListener((status) {
@@ -36,6 +43,45 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
           });
 
     _startCountdown();
+    _initSpeech();
+  }
+
+  Future<void> _initSpeech() async {
+    try {
+      _speechEnabled = await _speech.initialize(
+        onStatus: (status) {
+          if (status == 'notListening' || status == 'done') {
+            if (mounted && _secondsLeft > 0) {
+              // Keep listening as long as the timer is running
+              _startListening();
+            }
+          }
+        },
+      );
+      if (_speechEnabled) {
+        _startListening();
+      }
+    } catch (_) {}
+  }
+
+  void _startListening() async {
+    if (!_speechEnabled || _speech.isListening) return;
+
+    setState(() => _isListening = true);
+    await _speech.listen(
+      onResult: (result) {
+        final words = result.recognizedWords.toLowerCase();
+        if (words.contains('멈춰') ||
+            words.contains('정지') ||
+            words.contains('그만') ||
+            words.contains('중단') ||
+            words.contains('stop')) {
+          _onHoldCompleted();
+        }
+      },
+      localeId: 'ko_KR',
+      listenOptions: SpeechListenOptions(listenMode: ListenMode.deviceDefault),
+    );
   }
 
   void _startCountdown() {
@@ -97,7 +143,12 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
 
     setState(() {
       _isHolding = false;
+      _isListening = false;
     });
+
+    _speech.stop();
+    _countdownTimer?.cancel();
+
     HapticFeedback.heavyImpact();
     await _speak('작동이 중단되었습니다.');
 
@@ -115,6 +166,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     _countdownTimer?.cancel();
     _holdController.dispose();
     _tts.stop();
+    _speech.stop();
     super.dispose();
   }
 
@@ -126,6 +178,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
       backgroundColor: const Color(0xFF041329),
       body: Stack(
         children: [
+          // Background Decoration Glows
           Positioned(
             top: ResponsiveScale.v(context, 120),
             right: -ResponsiveScale.v(context, 120),
@@ -134,7 +187,14 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                 width: ResponsiveScale.v(context, 380),
                 height: ResponsiveScale.v(context, 380),
                 decoration: BoxDecoration(
-                  color: const Color(0x1AFDE047),
+                  color: const Color(0x33FDE047),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x33FDE047),
+                      blurRadius: 120,
+                      spreadRadius: 20,
+                    ),
+                  ],
                   borderRadius: BorderRadius.circular(190),
                 ),
               ),
@@ -148,7 +208,14 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                 width: ResponsiveScale.v(context, 320),
                 height: ResponsiveScale.v(context, 320),
                 decoration: BoxDecoration(
-                  color: const Color(0x1AFFB4AB),
+                  color: const Color(0x33FFB4AB),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x33FFB4AB),
+                      blurRadius: 100,
+                      spreadRadius: 10,
+                    ),
+                  ],
                   borderRadius: BorderRadius.circular(160),
                 ),
               ),
@@ -157,28 +224,74 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
           SafeArea(
             child: Column(
               children: [
+                // TopAppBar
                 Container(
                   height: ResponsiveScale.v(context, 64),
                   padding: EdgeInsets.symmetric(
-                    horizontal: ResponsiveScale.v(context, 16),
+                    horizontal: ResponsiveScale.v(context, 24),
                   ),
                   child: Row(
                     children: [
                       const Icon(
                         Icons.menu,
                         color: Color(0xFFFDE047),
-                        size: 26,
+                        size: 28,
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 12),
                       const Text(
                         'Touch Bridge',
                         style: TextStyle(
                           color: Color(0xFFFDE047),
                           fontSize: 22,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.5,
                         ),
                       ),
                       const Spacer(),
+                      // Voice Listening Indicator
+                      if (_speechEnabled)
+                        Container(
+                          margin: const EdgeInsets.only(right: 12),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _isListening
+                                ? const Color(0x33FDE047)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: _isListening
+                                  ? const Color(0xFFFDE047)
+                                  : const Color(0x40FDE047),
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.mic,
+                                size: 14,
+                                color: _isListening
+                                    ? const Color(0xFFFDE047)
+                                    : const Color(0x80FDE047),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                _isListening ? '듣는 중' : '대기 중',
+                                style: TextStyle(
+                                  color: _isListening
+                                      ? const Color(0xFFFDE047)
+                                      : const Color(0x80FDE047),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       Container(
                         width: 40,
                         height: 40,
@@ -193,7 +306,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                         child: const Icon(
                           Icons.person,
                           color: Color(0xFFD6E3FF),
-                          size: 20,
+                          size: 22,
                         ),
                       ),
                     ],
@@ -201,32 +314,30 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                 ),
                 Expanded(
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      ResponsiveScale.v(context, 20),
-                      ResponsiveScale.v(context, 8),
-                      ResponsiveScale.v(context, 20),
-                      ResponsiveScale.v(context, 12),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: ResponsiveScale.v(context, 24),
                     ),
                     child: Column(
                       children: [
-                        const SizedBox(height: 4),
+                        SizedBox(height: ResponsiveScale.v(context, 32)),
+                        // Status Card
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 18,
-                            vertical: 10,
+                            horizontal: 24,
+                            vertical: 14,
                           ),
                           decoration: BoxDecoration(
                             color: const Color(0xFF1C2A41),
                             borderRadius: BorderRadius.circular(999),
                             border: Border.all(
                               color: const Color(0xFFFDE047),
-                              width: 2,
+                              width: 2.5,
                             ),
                             boxShadow: const [
                               BoxShadow(
-                                color: Color(0x40000000),
-                                blurRadius: 10,
-                                offset: Offset(0, 6),
+                                color: Color(0x66000000),
+                                blurRadius: 15,
+                                offset: Offset(0, 8),
                               ),
                             ],
                           ),
@@ -236,197 +347,214 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                               Icon(
                                 Icons.microwave,
                                 color: Color(0xFFFDE047),
-                                size: 24,
+                                size: 28,
                               ),
-                              SizedBox(width: 8),
+                              SizedBox(width: 10),
                               Text(
                                 '전자레인지 30초 작동 중',
                                 style: TextStyle(
                                   color: Color(0xFFFDE047),
                                   fontSize: 20,
-                                  fontWeight: FontWeight.w800,
+                                  fontWeight: FontWeight.w900,
                                 ),
                               ),
                             ],
                           ),
                         ),
                         const Spacer(),
+                        // Timer Section
                         const Text(
                           '남은 시간',
                           style: TextStyle(
                             color: Color(0xFFCEC6AD),
                             fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 3,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 4,
                           ),
                         ),
                         SizedBox(height: ResponsiveScale.v(context, 8)),
-                        SizedBox(
-                          width: double.infinity,
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              _formatMMSS(_secondsLeft),
-                              // 7rem equivalent target while preventing overflow on small widths.
-                              style: TextStyle(
-                                color: Color(0xFFFDE047),
-                                fontSize: 112 * rs,
-                                fontWeight: FontWeight.w900,
-                                height: 1,
-                                letterSpacing: -2,
-                                shadows: [
-                                  Shadow(
-                                    color: Color(0x66FDE047),
-                                    blurRadius: 20,
-                                  ),
-                                ],
+                        Text(
+                          _formatMMSS(_secondsLeft),
+                          style: TextStyle(
+                            color: const Color(0xFFFDE047),
+                            fontSize: 100 * rs,
+                            fontWeight: FontWeight.w900,
+                            height: 1,
+                            letterSpacing: -4,
+                            shadows: const [
+                              Shadow(
+                                color: Color(0x66FDE047),
+                                blurRadius: 30,
+                                offset: Offset(0, 0),
                               ),
-                            ),
+                            ],
                           ),
                         ),
                         const Spacer(),
+                        // Instruction Text
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 14,
+                            horizontal: 20,
+                            vertical: 18,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0x80112D4D),
+                            color: const Color(0x660D1C32),
                             borderRadius: BorderRadius.circular(999),
-                            border: Border.all(color: const Color(0xFF4B4734)),
+                            border: Border.all(color: const Color(0xFF27354C)),
                           ),
-                          child: const Text(
-                            '중단하려면 아래 버튼을 3초간 길게 누르세요',
+                          child: RichText(
                             textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Color(0xFFD6E3FF),
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              height: 1.3,
+                            text: const TextSpan(
+                              style: TextStyle(
+                                color: Color(0xFFD6E3FF),
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                height: 1.4,
+                                fontFamily: 'Inter',
+                              ),
+                              children: [
+                                TextSpan(text: '\'중단하려면 아래 버튼을 '),
+                                TextSpan(
+                                  text: '3초간 길게',
+                                  style: TextStyle(color: Color(0xFFFDE047)),
+                                ),
+                                TextSpan(text: ' 누르세요\''),
+                              ],
                             ),
                           ),
                         ),
-                        SizedBox(height: ResponsiveScale.v(context, 14)),
-                        AnimatedBuilder(
-                          animation: _holdController,
-                          builder: (context, _) {
-                            return Column(
-                              children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(999),
-                                  child: Container(
-                                    height: 6,
-                                    width: double.infinity,
-                                    color: const Color(0xFF27354C),
-                                    child: Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: FractionallySizedBox(
+                        SizedBox(height: ResponsiveScale.v(context, 20)),
+                        // Emergency Button Area
+                        Column(
+                          children: [
+                            // Progress Bar
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(999),
+                              child: Container(
+                                height: 8,
+                                width: double.infinity,
+                                color: const Color(0xFF27354C),
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: AnimatedBuilder(
+                                    animation: _holdController,
+                                    builder: (context, child) {
+                                      return FractionallySizedBox(
                                         widthFactor: _holdController.value,
-                                        child: Container(
-                                          color: const Color(0xFFFDE047),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                SizedBox(
-                                  height: ResponsiveScale.v(context, 12),
-                                ),
-                                GestureDetector(
-                                  onTap: () {
-                                    _speak('중단하려면 버튼을 3초간 길게 누르세요.');
-                                  },
-                                  onLongPressStart: (_) => _onHoldStart(),
-                                  onLongPressEnd: (_) => _onHoldEnd(),
-                                  onLongPressCancel: _onHoldEnd,
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 180),
-                                    curve: Curves.easeOut,
-                                    width: double.infinity,
-                                    height: ResponsiveScale.v(context, 220),
-                                    decoration: BoxDecoration(
-                                      gradient: const LinearGradient(
-                                        colors: [
-                                          Color(0xFFFF5252),
-                                          Color(0xFF93000A),
+                                        child: child,
+                                      );
+                                    },
+                                    child: Container(
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFFFDE047),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Color(0xFFFDE047),
+                                            blurRadius: 10,
+                                          ),
                                         ],
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
                                       ),
-                                      borderRadius: BorderRadius.circular(40),
-                                      border: Border.all(
-                                        color: _isHolding
-                                            ? Colors.white
-                                            : const Color(0xFFFFB4AB),
-                                        width: _isHolding ? 5 : 4,
-                                      ),
-                                      boxShadow: const [
-                                        BoxShadow(
-                                          color: Color(0x6693000A),
-                                          blurRadius: 30,
-                                          offset: Offset(0, 16),
-                                        ),
-                                      ],
-                                    ),
-                                    child: Stack(
-                                      children: [
-                                        Positioned.fill(
-                                          child: IgnorePointer(
-                                            child: Container(
-                                              decoration: BoxDecoration(
-                                                borderRadius:
-                                                    BorderRadius.circular(40),
-                                                border: Border.all(
-                                                  color: const Color(
-                                                    0x12FFFFFF,
-                                                  ),
-                                                  width: 16,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        Center(
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                Icons.back_hand,
-                                                size: 86 * rs,
-                                                color: Colors.white,
-                                              ),
-                                              const SizedBox(height: 8),
-                                              Text(
-                                                '길게 눌러서 중단',
-                                                style: TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 34 * rs,
-                                                  fontWeight: FontWeight.w900,
-                                                  letterSpacing: -1,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 6),
-                                              Text(
-                                                'HOLD FOR 3 SEC',
-                                                style: TextStyle(
-                                                  color: Color(0xFFFFDAD6),
-                                                  fontSize: 18 * rs,
-                                                  fontWeight: FontWeight.w800,
-                                                  letterSpacing: 2,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
                                     ),
                                   ),
                                 ),
-                              ],
-                            );
-                          },
+                              ),
+                            ),
+                            SizedBox(height: ResponsiveScale.v(context, 16)),
+                            GestureDetector(
+                              onTap: () {
+                                _speak('중단하려면 버튼을 3초간 길게 누르세요.');
+                              },
+                              onLongPressStart: (_) => _onHoldStart(),
+                              onLongPressEnd: (_) => _onHoldEnd(),
+                              onLongPressCancel: _onHoldEnd,
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                width: double.infinity,
+                                height: ResponsiveScale.v(context, 240),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFFFF5252),
+                                      Color(0xFF93000A),
+                                    ],
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                  ),
+                                  borderRadius: BorderRadius.circular(40),
+                                  border: Border.all(
+                                    color: _isHolding
+                                        ? Colors.white
+                                        : const Color(0xFFFFB4AB),
+                                    width: _isHolding ? 6 : 4,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0x9993000A),
+                                      blurRadius: _isHolding ? 50 : 30,
+                                      offset: const Offset(0, 16),
+                                    ),
+                                  ],
+                                ),
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    // Pulse Ring Effect (Static Border for UI recreation)
+                                    Container(
+                                      margin: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(32),
+                                        border: Border.all(
+                                          color: Colors.white.withValues(alpha: 0.1),
+                                          width: 16,
+                                        ),
+                                      ),
+                                    ),
+                                    Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.back_hand,
+                                          size: 90 * rs,
+                                          color: Colors.white,
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Text(
+                                          '길게 눌러서 중단',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 36 * rs,
+                                            fontWeight: FontWeight.w900,
+                                            letterSpacing: -1.5,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'HOLD FOR 3 SEC',
+                                          style: TextStyle(
+                                            color: const Color(0xFFFFDAD6),
+                                            fontSize: 18 * rs,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 3,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    if (_isHolding)
+                                      Container(
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withValues(alpha: 0.1),
+                                          borderRadius:
+                                              BorderRadius.circular(40),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
+                        SizedBox(height: ResponsiveScale.v(context, 24)),
                       ],
                     ),
                   ),

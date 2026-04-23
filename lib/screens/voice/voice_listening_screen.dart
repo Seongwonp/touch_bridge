@@ -7,10 +7,6 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../widgets/responsive_scale.dart';
-import '../connection/device_connect_screen.dart';
-import '../control/remote_control_screen.dart';
-import '../home/home_screen.dart';
-import '../settings/settings_screen.dart';
 
 class VoiceListeningScreen extends StatefulWidget {
   const VoiceListeningScreen({super.key});
@@ -30,23 +26,11 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   String _recognizedText = '아직 인식된 음성이 없어요.';
 
   Timer? _waveTimer;
-  Timer? _navResetTimer;
   Timer? _actionResetTimer;
-  int? _armedNavIndex;
   String? _armedActionId;
 
   List<double> _waveHeights = const [
-    0.20,
-    0.50,
-    0.80,
-    1.00,
-    0.60,
-    0.30,
-    1.00,
-    0.50,
-    0.70,
-    0.80,
-    0.20,
+    0.20, 0.50, 0.80, 1.00, 0.60, 0.30, 1.00, 0.50, 0.70, 0.80, 0.20,
   ];
 
   final List<String> _quickCommands = const [
@@ -67,105 +51,50 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     try {
       await _tts.setLanguage('ko-KR');
       await _tts.setSpeechRate(0.45);
-      await _tts.setPitch(1.0);
-
       final bool available = await _speech.initialize(
         onStatus: (status) {
-          if (!mounted) {
-            return;
+          if (mounted) {
+            setState(() {
+              _statusMessage = '상태: $status';
+              if (status == 'notListening' || status == 'done') _isListening = false;
+            });
           }
-          setState(() {
-            _statusMessage = '상태: $status';
-            if (status == 'notListening' || status == 'done') {
-              _isListening = false;
-            }
-          });
         },
         onError: (error) {
-          if (!mounted) {
-            return;
+          if (mounted) {
+            setState(() {
+              _statusMessage = '오류: ${error.errorMsg}';
+              _isListening = false;
+            });
           }
-          setState(() {
-            _statusMessage = '오류: ${error.errorMsg}';
-            _isListening = false;
-          });
         },
       );
 
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _isSpeechReady = available;
-        _statusMessage = available ? '말씀해 주세요. 듣고 있습니다.' : '음성 인식을 사용할 수 없어요.';
-      });
-
-      // Do not auto-start listening on screen entry; this prevents plugin/permission race crashes.
-      if (available) {
+      if (mounted) {
         setState(() {
-          _isListening = false;
-          _statusMessage = '듣기를 시작하려면 아래 버튼을 눌러주세요.';
+          _isSpeechReady = available;
+          _statusMessage = available ? '말씀해 주세요. 듣고 있습니다.' : '음성 인식을 사용할 수 없어요.';
         });
       }
-    } on MissingPluginException {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _isSpeechReady = false;
-        _isListening = false;
-        _statusMessage = '음성 기능을 사용할 수 없는 기기예요.';
-      });
-      _stopWaveAnimation();
-    } on PlatformException catch (e) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _isSpeechReady = false;
-        _isListening = false;
-        _statusMessage = '음성 초기화 실패: ${e.message ?? e.code}';
-      });
-      _stopWaveAnimation();
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _isSpeechReady = false;
-        _isListening = false;
-        _statusMessage = '음성 기능 준비 중 오류가 발생했어요.';
-      });
-      _stopWaveAnimation();
-    }
+    } catch (_) {}
   }
 
   Future<void> _speak(String message) async {
-    try {
-      await _tts.setLanguage('ko-KR');
-      await _tts.setSpeechRate(0.45);
-      await _tts.setPitch(1.0);
-      await _tts.stop();
-      await _tts.speak(message);
-    } catch (_) {
-      // TTS failure should not crash the voice screen.
-    }
+    await _tts.stop();
+    await _tts.speak(message);
   }
 
   void _startWaveAnimation() {
     _waveTimer?.cancel();
     _waveTimer = Timer.periodic(const Duration(milliseconds: 300), (_) {
-      if (!mounted || !_isListening) {
-        return;
+      if (mounted && _isListening) {
+        setState(() {
+          _waveHeights = List<double>.generate(
+            _waveHeights.length,
+            (index) => 0.18 + _random.nextDouble() * 0.82,
+          );
+        });
       }
-
-      setState(() {
-        _waveHeights = List<double>.generate(
-          _waveHeights.length,
-          (index) => 0.18 + _random.nextDouble() * 0.82,
-        );
-      });
     });
   }
 
@@ -173,113 +102,29 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     _waveTimer?.cancel();
     setState(() {
       _waveHeights = const [
-        0.20,
-        0.50,
-        0.80,
-        1.00,
-        0.60,
-        0.30,
-        1.00,
-        0.50,
-        0.70,
-        0.80,
-        0.20,
+        0.20, 0.50, 0.80, 1.00, 0.60, 0.30, 1.00, 0.50, 0.70, 0.80, 0.20,
       ];
     });
   }
 
-  Future<void> _startListening() async {
-    if (!_isSpeechReady) {
-      await _speak('현재 기기에서 음성 인식을 사용할 수 없습니다.');
-      return;
-    }
-
-    if (_speech.isListening) {
-      return;
-    }
-
-    setState(() {
-      _isListening = true;
-      _statusMessage = '말씀해 주세요. 듣고 있습니다.';
-    });
-    _startWaveAnimation();
-
-    try {
-      await _speech.listen(
-        onResult: (result) {
-          if (!mounted) {
-            return;
-          }
-
-          setState(() {
-            _recognizedText = result.recognizedWords.isEmpty
-                ? '음성을 인식하지 못했어요. 다시 천천히 말씀해 주세요.'
-                : result.recognizedWords;
-          });
-        },
-        localeId: 'ko_KR',
-        listenOptions: SpeechListenOptions(listenMode: ListenMode.confirmation),
-        pauseFor: const Duration(seconds: 3),
-        listenFor: const Duration(seconds: 30),
-      );
-    } on MissingPluginException {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _isListening = false;
-        _isSpeechReady = false;
-        _statusMessage = '음성 기능 플러그인을 찾을 수 없어요.';
-      });
-      _stopWaveAnimation();
-    } on PlatformException catch (e) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _isListening = false;
-        _statusMessage = '음성 듣기 실패: ${e.message ?? e.code}';
-      });
-      _stopWaveAnimation();
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _isListening = false;
-        _statusMessage = '음성 듣기 중 오류가 발생했어요.';
-      });
-      _stopWaveAnimation();
-    }
-  }
-
-  Future<void> _stopListening() async {
-    if (!_isListening) {
-      return;
-    }
-
-    try {
-      await _speech.stop();
-    } catch (_) {
-      // Ignore stop failures to keep UI stable.
-    }
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _isListening = false;
-      _statusMessage = '음성 대기를 종료했습니다.';
-    });
-    _stopWaveAnimation();
-  }
-
   Future<void> _toggleListening() async {
     if (_isListening) {
-      await _stopListening();
-      return;
+      await _speech.stop();
+      setState(() => _isListening = false);
+      _stopWaveAnimation();
+    } else {
+      if (!_isSpeechReady) return;
+      await _speech.listen(
+        onResult: (result) {
+          if (mounted) {
+            setState(() => _recognizedText = result.recognizedWords);
+          }
+        },
+        localeId: 'ko_KR',
+      );
+      setState(() => _isListening = true);
+      _startWaveAnimation();
     }
-    await _startListening();
   }
 
   Future<void> _armAndRun({
@@ -288,156 +133,23 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     required VoidCallback onConfirmed,
   }) async {
     if (_armedActionId != id) {
-      setState(() {
-        _armedActionId = id;
-      });
+      setState(() => _armedActionId = id);
       HapticFeedback.mediumImpact();
-
       _actionResetTimer?.cancel();
       _actionResetTimer = Timer(const Duration(seconds: 4), () {
-        if (!mounted) {
-          return;
-        }
-        setState(() {
-          _armedActionId = null;
-        });
+        if (mounted) setState(() => _armedActionId = null);
       });
-
       await _speak(guide);
-      return;
+    } else {
+      _actionResetTimer?.cancel();
+      setState(() => _armedActionId = null);
+      onConfirmed();
     }
-
-    _actionResetTimer?.cancel();
-    await _tts.stop();
-    setState(() {
-      _armedActionId = null;
-    });
-    HapticFeedback.selectionClick();
-    onConfirmed();
-  }
-
-  Future<void> _handleBottomTap(int index) async {
-    const labels = ['홈', '기기', '음성', '설정'];
-
-    if (_armedNavIndex != index) {
-      setState(() {
-        _armedNavIndex = index;
-      });
-      HapticFeedback.mediumImpact();
-
-      _navResetTimer?.cancel();
-      _navResetTimer = Timer(const Duration(seconds: 4), () {
-        if (!mounted) {
-          return;
-        }
-        setState(() {
-          _armedNavIndex = null;
-        });
-      });
-
-      await _speak('${labels[index]} 탭입니다. 다시 한 번 누르면 이동합니다.');
-      return;
-    }
-
-    _navResetTimer?.cancel();
-    setState(() {
-      _armedNavIndex = null;
-    });
-    await _tts.stop();
-
-    if (!mounted) {
-      return;
-    }
-
-    switch (index) {
-      case 0:
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
-        );
-        break;
-      case 1:
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute<void>(builder: (_) => const DeviceConnectScreen()),
-        );
-        break;
-      case 2:
-        return;
-      case 3:
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
-        );
-        break;
-    }
-  }
-
-  Widget _bottomItem({
-    required int index,
-    required IconData icon,
-    required String label,
-    required bool active,
-  }) {
-    final isArmed = _armedNavIndex == index;
-
-    return InkWell(
-      onTap: () => _handleBottomTap(index),
-      borderRadius: BorderRadius.circular(18),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
-        curve: Curves.easeOut,
-        width: 80,
-        height: 60,
-        decoration: BoxDecoration(
-          color: active ? const Color(0xFFFDE047) : Colors.transparent,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: isArmed ? Colors.white : Colors.transparent,
-            width: isArmed ? 2.5 : 0,
-          ),
-          boxShadow: active
-              ? const [
-                  BoxShadow(
-                    color: Color(0x40FDE047),
-                    blurRadius: 18,
-                    offset: Offset(0, 8),
-                  ),
-                ]
-              : null,
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              color: active ? const Color(0xFF726300) : const Color(0xFF94A3B8),
-              size: 22,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1,
-                color: active
-                    ? const Color(0xFF726300)
-                    : const Color(0xFF94A3B8),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   @override
   void dispose() {
-    try {
-      _speech.cancel();
-    } catch (_) {
-      // Ignore plugin cancellation errors during dispose.
-    }
     _waveTimer?.cancel();
-    _navResetTimer?.cancel();
     _actionResetTimer?.cancel();
     _tts.stop();
     super.dispose();
@@ -446,372 +158,186 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   @override
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
+    final bool armed = _armedActionId == 'toggle';
 
     return Scaffold(
-      backgroundColor: const Color(0xFF041329),
+      backgroundColor: Colors.black,
       body: SafeArea(
         child: Column(
           children: [
+            // 상단 바
             Container(
-              height: ResponsiveScale.v(context, 64),
-              padding: EdgeInsets.symmetric(
-                horizontal: ResponsiveScale.v(context, 16),
-              ),
+              height: 64,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
               decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: Color(0x33FDE047))),
-                boxShadow: [
-                  BoxShadow(
-                    color: Color(0x1AFDE047),
-                    blurRadius: 14,
-                    offset: Offset(0, 4),
-                  ),
-                ],
+                border: Border(bottom: BorderSide(color: Color(0xFF2A2A2A))),
               ),
-              child: Row(
+              child: const Row(
                 children: [
-                  IconButton(
-                    onPressed: () => Navigator.of(context).pushReplacement(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const RemoteControlScreen(),
-                      ),
-                    ),
-                    icon: const Icon(Icons.grid_view, color: Color(0xFFFDE047)),
-                  ),
-                  const SizedBox(width: 4),
-                  const Text(
+                  Text(
                     'Touch Bridge',
                     style: TextStyle(
-                      color: Color(0xFFFDE047),
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
+                      color: Color(0xFFFFEB00),
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.5,
                     ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const SettingsScreen(),
-                      ),
-                    ),
-                    icon: const Icon(Icons.settings, color: Color(0xFF94A3B8)),
                   ),
                 ],
               ),
             ),
             Expanded(
-              child: Stack(
-                children: [
-                  Align(
-                    alignment: Alignment.center,
-                    child: Container(
-                      width: 500,
-                      height: 500,
-                      decoration: BoxDecoration(
-                        color: const Color(0x0DFDE047),
-                        borderRadius: BorderRadius.circular(250),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      '음성 인식',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 28 * rs,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
-                  ),
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      ResponsiveScale.v(context, 24),
-                      ResponsiveScale.v(context, 28),
-                      ResponsiveScale.v(context, 24),
-                      0,
+                    const SizedBox(height: 6),
+                    Text(
+                      _statusMessage,
+                      style: TextStyle(
+                        color: const Color(0xFF888888),
+                        fontSize: 14 * rs,
+                      ),
                     ),
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        return SingleChildScrollView(
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(
-                              minHeight: constraints.maxHeight,
-                            ),
-                            child: Column(
-                              children: [
-                                Text(
-                                  'Listening...',
-                                  style: TextStyle(
-                                    color: Color(0xFFFDE047),
-                                    fontSize: 56 * rs,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: -1,
-                                  ),
-                                ),
-                                SizedBox(height: ResponsiveScale.v(context, 8)),
-                                Text(
-                                  _statusMessage,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: Color(0xFFCEC6AD),
-                                    fontSize: 20 * rs,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                SizedBox(
-                                  height: ResponsiveScale.v(context, 14),
-                                ),
-                                Text(
-                                  _recognizedText,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: Color(0xFFB6C6ED),
-                                    fontSize: 14 * rs,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                SizedBox(
-                                  height: ResponsiveScale.v(context, 34),
-                                ),
-                                SizedBox(
-                                  height: ResponsiveScale.v(context, 120),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.center,
-                                    children: _waveHeights
-                                        .asMap()
-                                        .entries
-                                        .map(
-                                          (entry) => Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 4,
-                                            ),
-                                            child: AnimatedContainer(
-                                              duration: const Duration(
-                                                milliseconds: 240,
-                                              ),
-                                              width: ResponsiveScale.v(
-                                                context,
-                                                6,
-                                              ),
-                                              height:
-                                                  ResponsiveScale.v(
-                                                    context,
-                                                    120,
-                                                  ) *
-                                                  entry.value,
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFFFDE047)
-                                                    .withValues(
-                                                      alpha: _isListening
-                                                          ? 0.35 +
-                                                                (entry.value *
-                                                                    0.65)
-                                                          : 0.25,
-                                                    ),
-                                                borderRadius:
-                                                    BorderRadius.circular(3),
-                                              ),
-                                            ),
-                                          ),
-                                        )
-                                        .toList(),
-                                  ),
-                                ),
-                                SizedBox(
-                                  height: ResponsiveScale.v(context, 18),
-                                ),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: ElevatedButton.icon(
-                                    onPressed: () {
-                                      _armAndRun(
-                                        id: 'toggle_listening',
-                                        guide: _isListening
-                                            ? '다시 누르면 듣기를 멈춥니다.'
-                                            : '다시 누르면 듣기를 시작합니다.',
-                                        onConfirmed: () {
-                                          _toggleListening();
-                                        },
-                                      );
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFFFDE047),
-                                      foregroundColor: const Color(0xFF726300),
-                                      minimumSize: Size.fromHeight(
-                                        ResponsiveScale.v(context, 62),
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(14),
-                                        side: BorderSide(
-                                          color:
-                                              _armedActionId ==
-                                                  'toggle_listening'
-                                              ? Colors.white
-                                              : Colors.transparent,
-                                          width:
-                                              _armedActionId ==
-                                                  'toggle_listening'
-                                              ? 2.5
-                                              : 0,
-                                        ),
-                                      ),
-                                    ),
-                                    icon: Icon(
-                                      _isListening
-                                          ? Icons.hearing_disabled
-                                          : Icons.hearing,
-                                      size: 24 * rs,
-                                    ),
-                                    label: Text(
-                                      _isListening ? '듣기 멈추기' : '듣기 시작',
-                                      style: TextStyle(
-                                        fontSize: 22 * rs,
-                                        fontWeight: FontWeight.w900,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                SizedBox(
-                                  height: ResponsiveScale.v(context, 14),
-                                ),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: ElevatedButton(
-                                    onPressed: () {
-                                      _armAndRun(
-                                        id: 'cancel_voice',
-                                        guide: '취소 버튼입니다. 다시 누르면 음성 대기를 중지합니다.',
-                                        onConfirmed: _stopListening,
-                                      );
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF27354C),
-                                      foregroundColor: const Color(0xFFE2C62D),
-                                      minimumSize: Size.fromHeight(
-                                        ResponsiveScale.v(context, 72),
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(14),
-                                        side: BorderSide(
-                                          color:
-                                              _armedActionId == 'cancel_voice'
-                                              ? Colors.white
-                                              : const Color(0x334B4734),
-                                          width:
-                                              _armedActionId == 'cancel_voice'
-                                              ? 2.5
-                                              : 1,
-                                        ),
-                                      ),
-                                    ),
-                                    child: const Text(
-                                      '취소 (Cancel)',
-                                      style: TextStyle(
-                                        fontSize: 26,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                SizedBox(
-                                  height: ResponsiveScale.v(context, 14),
-                                ),
-                                Wrap(
-                                  alignment: WrapAlignment.center,
-                                  spacing: 8,
-                                  runSpacing: 10,
-                                  children: _quickCommands.map((command) {
-                                    final id = 'chip_$command';
-                                    final armed = _armedActionId == id;
+                    const SizedBox(height: 20),
 
-                                    return InkWell(
-                                      borderRadius: BorderRadius.circular(999),
-                                      onTap: () {
-                                        _armAndRun(
-                                          id: id,
-                                          guide:
-                                              '$command 명령입니다. 다시 누르면 이 문장을 선택합니다.',
-                                          onConfirmed: () {
-                                            setState(() {
-                                              _recognizedText = command;
-                                              _statusMessage = '추천 명령을 선택했습니다.';
-                                            });
-                                          },
-                                        );
-                                      },
-                                      child: AnimatedContainer(
-                                        duration: const Duration(
-                                          milliseconds: 140,
-                                        ),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 14,
-                                          vertical: 10,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF0D1C32),
-                                          borderRadius: BorderRadius.circular(
-                                            999,
-                                          ),
-                                          border: Border.all(
-                                            color: armed
-                                                ? Colors.white
-                                                : const Color(0x334B4734),
-                                            width: armed ? 2.2 : 1,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          '"$command"',
-                                          style: const TextStyle(
-                                            color: Color(0xFFCEC6AD),
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  }).toList(),
-                                ),
-                              ],
+                    // 인식된 텍스트 박스
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF111111),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFF2A2A2A)),
+                      ),
+                      child: Text(
+                        _recognizedText,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18 * rs,
+                          fontWeight: FontWeight.w700,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 36),
+
+                    // 파형
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: _waveHeights.map((h) => AnimatedContainer(
+                        duration: const Duration(milliseconds: 240),
+                        width: 7,
+                        height: 80 * h,
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        decoration: BoxDecoration(
+                          color: _isListening
+                              ? const Color(0xFFFFEB00)
+                              : const Color(0xFF333333),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      )).toList(),
+                    ),
+                    const SizedBox(height: 36),
+
+                    // 메인 버튼
+                    GestureDetector(
+                      onTap: () => _armAndRun(
+                        id: 'toggle',
+                        guide: _isListening ? '듣기를 멈춥니다.' : '듣기를 시작합니다.',
+                        onConfirmed: _toggleListening,
+                      ),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        height: 72,
+                        decoration: BoxDecoration(
+                          color: _isListening
+                              ? const Color(0xFF1A1A1A)
+                              : const Color(0xFFFFEB00),
+                          borderRadius: BorderRadius.circular(16),
+                          border: armed
+                              ? Border.all(color: Colors.white, width: 2.5)
+                              : _isListening
+                                  ? Border.all(color: const Color(0xFFFFEB00), width: 2)
+                                  : null,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              _isListening ? Icons.mic_off_rounded : Icons.mic_rounded,
+                              color: _isListening
+                                  ? const Color(0xFFFFEB00)
+                                  : Colors.black,
+                              size: 26,
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              _isListening ? '듣기 멈추기' : '듣기 시작',
+                              style: TextStyle(
+                                fontSize: 20 * rs,
+                                fontWeight: FontWeight.w800,
+                                color: _isListening
+                                    ? const Color(0xFFFFEB00)
+                                    : Colors.black,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // 빠른 명령
+                    const Text(
+                      '빠른 명령',
+                      style: TextStyle(
+                        color: Color(0xFF888888),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _quickCommands.map((cmd) {
+                        return GestureDetector(
+                          onTap: () => setState(() => _recognizedText = cmd),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF111111),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: const Color(0xFF2A2A2A)),
+                            ),
+                            child: Text(
+                              cmd,
+                              style: const TextStyle(
+                                color: Color(0xFFCCCCCC),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         );
-                      },
+                      }).toList(),
                     ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.fromLTRB(8, 4, 8, 18),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF0D1C32), Color(0xFF041329)],
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
+                  ],
                 ),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _bottomItem(
-                    index: 0,
-                    icon: Icons.home_filled,
-                    label: 'HOME',
-                    active: false,
-                  ),
-                  _bottomItem(
-                    index: 1,
-                    icon: Icons.vibration,
-                    label: 'DEVICES',
-                    active: false,
-                  ),
-                  _bottomItem(
-                    index: 2,
-                    icon: Icons.mic,
-                    label: 'VOICE',
-                    active: true,
-                  ),
-                  _bottomItem(
-                    index: 3,
-                    icon: Icons.settings,
-                    label: 'SETTINGS',
-                    active: false,
-                  ),
-                ],
               ),
             ),
           ],

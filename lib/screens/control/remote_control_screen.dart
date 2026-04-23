@@ -5,9 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
 import '../../widgets/responsive_scale.dart';
-import '../home/home_screen.dart';
-import '../settings/settings_screen.dart';
-import '../voice/voice_listening_screen.dart';
+import '../safety/emergency_stop_screen.dart';
 
 class RemoteControlScreen extends StatefulWidget {
   const RemoteControlScreen({super.key});
@@ -19,9 +17,6 @@ class RemoteControlScreen extends StatefulWidget {
 class _RemoteControlScreenState extends State<RemoteControlScreen> {
   final FlutterTts _tts = FlutterTts();
 
-  Timer? _navResetTimer;
-  int? _armedNavIndex;
-
   Timer? _actionResetTimer;
   String? _armedActionId;
 
@@ -29,6 +24,12 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   int _secondsLeft = 150;
   bool _running = false;
   String _draft = '0230';
+
+  @override
+  void initState() {
+    super.initState();
+    _speak('기기 제어 화면입니다. 타이머를 설정하고 시작하세요.');
+  }
 
   Future<void> _speak(String message) async {
     await _tts.setLanguage('ko-KR');
@@ -51,9 +52,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
 
       _actionResetTimer?.cancel();
       _actionResetTimer = Timer(const Duration(seconds: 4), () {
-        if (!mounted) {
-          return;
-        }
+        if (!mounted) return;
         setState(() {
           _armedActionId = null;
         });
@@ -72,60 +71,6 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     onConfirmed();
   }
 
-  Future<void> _handleBottomTap(int index) async {
-    const labels = ['홈', '기기', '음성', '설정'];
-
-    if (_armedNavIndex != index) {
-      setState(() {
-        _armedNavIndex = index;
-      });
-      HapticFeedback.mediumImpact();
-
-      _navResetTimer?.cancel();
-      _navResetTimer = Timer(const Duration(seconds: 4), () {
-        if (!mounted) {
-          return;
-        }
-        setState(() {
-          _armedNavIndex = null;
-        });
-      });
-
-      await _speak('${labels[index]} 탭입니다. 다시 한 번 누르면 이동합니다.');
-      return;
-    }
-
-    _navResetTimer?.cancel();
-    setState(() {
-      _armedNavIndex = null;
-    });
-    await _tts.stop();
-
-    if (!mounted) {
-      return;
-    }
-
-    switch (index) {
-      case 0:
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
-        );
-        break;
-      case 1:
-        return;
-      case 2:
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute<void>(builder: (_) => const VoiceListeningScreen()),
-        );
-        break;
-      case 3:
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
-        );
-        break;
-    }
-  }
-
   String _formatMMSS(int totalSeconds) {
     final minutes = totalSeconds ~/ 60;
     final seconds = totalSeconds % 60;
@@ -141,9 +86,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   }
 
   void _appendDigit(int value) {
-    if (_running) {
-      return;
-    }
+    if (_running) return;
     setState(() {
       _draft = (_draft.substring(1) + value.toString());
     });
@@ -151,9 +94,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   }
 
   void _backspaceDigit() {
-    if (_running) {
-      return;
-    }
+    if (_running) return;
     setState(() {
       _draft = '0${_draft.substring(0, 3)}';
     });
@@ -170,9 +111,6 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   }
 
   void _toggleStart() {
-    if (_running) {
-      return;
-    }
     if (_secondsLeft <= 0) {
       setState(() {
         _draft = '0030';
@@ -180,31 +118,11 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
       });
     }
 
-    setState(() {
-      _running = true;
-    });
-
-    _countdownTimer?.cancel();
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-
-      if (_secondsLeft <= 1) {
-        timer.cancel();
-        setState(() {
-          _secondsLeft = 0;
-          _running = false;
-        });
-        _speak('타이머가 종료되었습니다.');
-        return;
-      }
-
-      setState(() {
-        _secondsLeft -= 1;
-      });
-    });
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => EmergencyStopScreen(initialSeconds: _secondsLeft),
+      ),
+    );
   }
 
   void _stopTimer() {
@@ -220,12 +138,12 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     final isArmed = _armedActionId == id;
 
     return _ActionKey(
-      borderColor: const Color(0x1A97917A),
+      borderColor: const Color(0xFF2A2A2A),
       armed: isArmed,
       child: Text(
         '$number',
         style: const TextStyle(
-          color: Color(0xFFD6E3FF),
+          color: Colors.white,
           fontSize: 30,
           fontWeight: FontWeight.w800,
         ),
@@ -243,18 +161,18 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   Widget _cancelKey() {
     final isArmed = _armedActionId == 'cancel';
     return _ActionKey(
-      color: const Color(0x3393000A),
-      borderColor: const Color(0x22FFB4AB),
+      color: const Color(0xFF1A0A0A),
+      borderColor: const Color(0xFF3A1A1A),
       armed: isArmed,
       child: const Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.cancel, color: Color(0xFFFFB4AB), size: 28),
+          Icon(Icons.cancel_rounded, color: Color(0xFFFF4444), size: 28),
           SizedBox(height: 4),
           Text(
             '취소',
             style: TextStyle(
-              color: Color(0xFFFFB4AB),
+              color: Color(0xFFFF4444),
               fontSize: 12,
               fontWeight: FontWeight.w800,
             ),
@@ -274,18 +192,18 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   Widget _backspaceKey() {
     final isArmed = _armedActionId == 'backspace';
     return _ActionKey(
-      color: const Color(0xFF27354C),
-      borderColor: const Color(0x1A97917A),
+      color: const Color(0xFF1A1A1A),
+      borderColor: const Color(0xFF2A2A2A),
       armed: isArmed,
       child: const Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.backspace, color: Color(0xFFD6E3FF), size: 26),
+          Icon(Icons.backspace_rounded, color: Color(0xFF888888), size: 26),
           SizedBox(height: 4),
           Text(
             '지우기',
             style: TextStyle(
-              color: Color(0xFFD6E3FF),
+              color: Color(0xFF888888),
               fontSize: 12,
               fontWeight: FontWeight.w800,
             ),
@@ -302,69 +220,9 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     );
   }
 
-  Widget _bottomItem({
-    required int index,
-    required IconData icon,
-    required String label,
-    required bool active,
-  }) {
-    final isArmed = _armedNavIndex == index;
-
-    return InkWell(
-      onTap: () => _handleBottomTap(index),
-      borderRadius: BorderRadius.circular(18),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
-        curve: Curves.easeOut,
-        width: 80,
-        height: 60,
-        decoration: BoxDecoration(
-          color: active ? const Color(0xFFFDE047) : Colors.transparent,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: isArmed ? Colors.white : Colors.transparent,
-            width: isArmed ? 2.5 : 0,
-          ),
-          boxShadow: active
-              ? const [
-                  BoxShadow(
-                    color: Color(0x40FDE047),
-                    blurRadius: 18,
-                    offset: Offset(0, 8),
-                  ),
-                ]
-              : null,
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              color: active ? const Color(0xFF726300) : const Color(0xFF94A3B8),
-              size: 22,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1,
-                color: active
-                    ? const Color(0xFF726300)
-                    : const Color(0xFF94A3B8),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   void dispose() {
     _countdownTimer?.cancel();
-    _navResetTimer?.cancel();
     _actionResetTimer?.cancel();
     _tts.stop();
     super.dispose();
@@ -375,52 +233,35 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     final rs = ResponsiveScale.factor(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF041329),
+      backgroundColor: Colors.black,
       body: SafeArea(
         child: Column(
           children: [
+            // 상단 바 - 뒤로가기 버튼 포함
             Container(
               height: ResponsiveScale.v(context, 64),
               padding: EdgeInsets.symmetric(
-                horizontal: ResponsiveScale.v(context, 16),
+                horizontal: ResponsiveScale.v(context, 8),
               ),
               decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: Color(0x33FDE047))),
-                boxShadow: [
-                  BoxShadow(
-                    color: Color(0x1AFDE047),
-                    blurRadius: 14,
-                    offset: Offset(0, 4),
-                  ),
-                ],
+                border: Border(bottom: BorderSide(color: Color(0xFF2A2A2A))),
               ),
               child: Row(
                 children: [
                   IconButton(
-                    onPressed: () => Navigator.of(context).pushReplacement(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const HomeScreen(),
-                      ),
-                    ),
-                    icon: const Icon(Icons.grid_view, color: Color(0xFFFDE047)),
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFFFFEB00)),
+                    tooltip: '뒤로 가기',
                   ),
                   const SizedBox(width: 4),
                   const Text(
                     'Touch Bridge',
                     style: TextStyle(
-                      color: Color(0xFFFDE047),
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
+                      color: Color(0xFFFFEB00),
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.5,
                     ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const SettingsScreen(),
-                      ),
-                    ),
-                    icon: const Icon(Icons.settings, color: Color(0xFFFDE047)),
                   ),
                 ],
               ),
@@ -438,40 +279,54 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                     Text(
                       '남은 시간',
                       style: TextStyle(
-                        color: Color(0xFFCEC6AD),
+                        color: const Color(0xFF888888),
                         fontSize: 13 * rs,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 2,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.5,
                       ),
                     ),
                     SizedBox(height: ResponsiveScale.v(context, 6)),
                     Text(
                       _formatMMSS(_secondsLeft),
                       style: TextStyle(
-                        color: Color(0xFFFDE047),
+                        color: const Color(0xFFFFEB00),
                         fontSize: 72 * rs,
                         fontWeight: FontWeight.w900,
                         height: 1,
                       ),
                     ),
-                    SizedBox(height: ResponsiveScale.v(context, 6)),
+                    SizedBox(height: ResponsiveScale.v(context, 8)),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
+                        horizontal: 12,
                         vertical: 5,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1C2A41),
-                        borderRadius: BorderRadius.circular(999),
+                        color: const Color(0xFF111111),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFF2A2A2A)),
                       ),
-                      child: const Text(
-                        'Kitchen Hub Active',
-                        style: TextStyle(
-                          color: Color(0xFF38DEBB),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.7,
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 7,
+                            height: 7,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF00FF88),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 7),
+                          const Text(
+                            '스마트 전자레인지 연결됨',
+                            style: TextStyle(
+                              color: Color(0xFF00FF88),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     SizedBox(height: ResponsiveScale.v(context, 14)),
@@ -506,13 +361,13 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                         onPressed: () {
                           _armAndRun(
                             id: 'start_voice',
-                            guide: '시작 음성 제어 버튼입니다. 다시 누르면 타이머가 시작됩니다.',
+                            guide: '시작 버튼입니다. 다시 누르면 타이머가 시작됩니다.',
                             onConfirmed: _toggleStart,
                           );
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFFDE047),
-                          foregroundColor: const Color(0xFF726300),
+                          backgroundColor: const Color(0xFFFFEB00),
+                          foregroundColor: Colors.black,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
                             side: BorderSide(
@@ -522,12 +377,11 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                               width: _armedActionId == 'start_voice' ? 2.5 : 0,
                             ),
                           ),
-                          elevation: 14,
-                          shadowColor: const Color(0x40FDE047),
+                          elevation: 0,
                         ),
-                        icon: const Icon(Icons.mic, size: 28),
+                        icon: const Icon(Icons.play_arrow_rounded, size: 28),
                         label: Text(
-                          _running ? '실행 중...' : '시작 / 음성 제어',
+                          _running ? '실행 중...' : '시작',
                           style: TextStyle(
                             fontSize: 22 * rs,
                             fontWeight: FontWeight.w900,
@@ -554,7 +408,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                         ),
                       ),
                       style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFFCEC6AD),
+                        foregroundColor: const Color(0xFF888888),
                         side: BorderSide(
                           color: _armedActionId == 'stop_timer'
                               ? Colors.white
@@ -570,46 +424,6 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                 ),
               ),
             ),
-            Container(
-              padding: const EdgeInsets.fromLTRB(8, 4, 8, 18),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF0D1C32), Color(0xFF041329)],
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                ),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _bottomItem(
-                    index: 0,
-                    icon: Icons.home_filled,
-                    label: 'HOME',
-                    active: false,
-                  ),
-                  _bottomItem(
-                    index: 1,
-                    icon: Icons.vibration,
-                    label: 'DEVICES',
-                    active: true,
-                  ),
-                  _bottomItem(
-                    index: 2,
-                    icon: Icons.mic,
-                    label: 'VOICE',
-                    active: false,
-                  ),
-                  _bottomItem(
-                    index: 3,
-                    icon: Icons.settings,
-                    label: 'SETTINGS',
-                    active: false,
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),
@@ -621,8 +435,8 @@ class _ActionKey extends StatelessWidget {
   const _ActionKey({
     required this.child,
     required this.onTap,
-    this.color = const Color(0xFF0D1C32),
-    this.borderColor = const Color(0x1A97917A),
+    this.color = const Color(0xFF111111),
+    this.borderColor = const Color(0xFF2A2A2A),
     this.armed = false,
   });
 

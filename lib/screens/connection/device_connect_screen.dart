@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/app_colors.dart';
-import '../home/home_screen.dart';
-import '../voice/voice_listening_screen.dart';
 import 'qr_scan_screen.dart';
 
 class DeviceConnectScreen extends StatelessWidget {
@@ -19,63 +17,23 @@ class DeviceConnectScreen extends StatelessWidget {
     );
   }
 
-  Widget _topBar(BuildContext context) {
-    return Container(
-      height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: const BoxDecoration(
-        color: Color(0xFF041329),
-        border: Border(bottom: BorderSide(color: Color(0x22FDE047))),
-      ),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: () => Navigator.of(context).maybePop(),
-            icon: const Icon(Icons.grid_view_rounded, color: Color(0xFFFDE047)),
-            tooltip: '뒤로 가기',
-          ),
-          const SizedBox(width: 4),
-          const Text(
-            'Touch Bridge',
-            style: TextStyle(
-              color: Color(0xFFFDE047),
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -0.3,
-            ),
-          ),
-          const Spacer(),
-          IconButton(
-            onPressed: () => _showPlaceholder(context, '설정'),
-            icon: const Icon(Icons.settings, color: Color(0xFFFDE047)),
-            tooltip: '설정',
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _statusCard(bool compact) {
+  Widget _statusCard() {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.symmetric(
-        horizontal: compact ? 14 : 16,
-        vertical: compact ? 10 : 12,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: const Color(0xFF0D1C32),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0x335DF9D4)),
+        color: const Color(0xFF111111),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF2A2A2A)),
       ),
       child: Row(
         children: [
           Container(
-            width: 14,
-            height: 14,
+            width: 10,
+            height: 10,
             decoration: const BoxDecoration(
-              color: Color(0xFF5DF9D4),
+              color: Color(0xFF00FF88),
               shape: BoxShape.circle,
-              boxShadow: [BoxShadow(color: Color(0xAA5DF9D4), blurRadius: 12)],
             ),
           ),
           const SizedBox(width: 12),
@@ -86,18 +44,18 @@ class DeviceConnectScreen extends StatelessWidget {
                 Text(
                   'ESP32 Smart Hub',
                   style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
                   ),
                 ),
+                SizedBox(height: 2),
                 Text(
                   '연결 가능한 기기 감지됨',
                   style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5,
-                    color: Color(0xFF5DF9D4),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF00FF88),
                   ),
                 ),
               ],
@@ -115,57 +73,42 @@ class DeviceConnectScreen extends StatelessWidget {
     required String subtitle,
     required VoidCallback onTap,
     required bool highlighted,
-    required bool compact,
   }) {
-    final Color cardColor = highlighted
-        ? const Color(0xFFFDE047)
-        : const Color(0xFF1C2A41);
-    final Color titleColor = highlighted
-        ? const Color(0xFF211B00)
-        : AppColors.textPrimary;
-    final Color subtitleColor = highlighted
-        ? const Color(0xFF524600)
-        : const Color(0xFFCEC6AD);
-
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: compact ? 14 : 16,
-            vertical: compact ? 12 : 14,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           decoration: BoxDecoration(
-            color: cardColor,
-            borderRadius: BorderRadius.circular(18),
+            color: highlighted ? const Color(0xFFFFEB00) : const Color(0xFF111111),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: highlighted
-                  ? const Color(0x88FFFFFF)
-                  : const Color(0x26FFFFFF),
+              color: highlighted ? Colors.transparent : const Color(0xFF2A2A2A),
             ),
           ),
           child: Row(
             children: [
               Container(
-                width: compact ? 44 : 48,
-                height: compact ? 44 : 48,
+                width: 48,
+                height: 48,
                 decoration: BoxDecoration(
                   color: highlighted
-                      ? const Color(0xFF726300)
-                      : const Color(0x2200B8FF),
+                      ? Colors.black.withValues(alpha: 0.15)
+                      : const Color(0xFF1A1A1A),
                   borderRadius: BorderRadius.circular(12),
+                  border: highlighted
+                      ? null
+                      : Border.all(color: const Color(0xFF333333)),
                 ),
                 child: Icon(
                   icon,
-                  size: 26,
-                  color: highlighted
-                      ? const Color(0xFFFDE047)
-                      : const Color(0xFF00B8FF),
+                  color: highlighted ? Colors.black : const Color(0xFFFFEB00),
+                  size: 24,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -173,28 +116,30 @@ class DeviceConnectScreen extends StatelessWidget {
                     Text(
                       title,
                       style: TextStyle(
-                        fontSize: compact ? 18 : 20,
+                        fontSize: 18,
                         fontWeight: FontWeight.w800,
-                        color: titleColor,
+                        color: highlighted ? Colors.black : Colors.white,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 13,
                         fontWeight: FontWeight.w500,
-                        color: subtitleColor,
+                        color: highlighted
+                            ? Colors.black.withValues(alpha: 0.6)
+                            : const Color(0xFF888888),
                       ),
                     ),
                   ],
                 ),
               ),
               Icon(
-                Icons.chevron_right,
+                Icons.chevron_right_rounded,
                 color: highlighted
-                    ? const Color(0xFF211B00)
-                    : AppColors.textSecondary,
+                    ? Colors.black.withValues(alpha: 0.5)
+                    : const Color(0xFF555555),
               ),
             ],
           ),
@@ -216,242 +161,144 @@ class DeviceConnectScreen extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(14),
           child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 10),
+            padding: const EdgeInsets.symmetric(vertical: 14),
             decoration: BoxDecoration(
-              color: const Color(0xFF1C2A41),
+              color: const Color(0xFF111111),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0x26FFFFFF)),
+              border: Border.all(color: const Color(0xFF2A2A2A)),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(icon, color: const Color(0xFFB6C6ED), size: 22),
-                const SizedBox(height: 4),
+                Icon(icon, color: const Color(0xFF888888), size: 22),
+                const SizedBox(height: 6),
                 Text(
                   title,
                   style: const TextStyle(
-                    fontSize: 12,
+                    fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                    color: Colors.white,
                   ),
                 ),
               ],
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _bottomIconNav(BuildContext context) {
-    Widget navItem({
-      required IconData icon,
-      required String label,
-      required bool active,
-      required VoidCallback onTap,
-    }) {
-      return Expanded(
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 4),
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            decoration: BoxDecoration(
-              color: active ? const Color(0xFFFDE047) : Colors.transparent,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  icon,
-                  size: 24,
-                  color: active
-                      ? const Color(0xFF726300)
-                      : const Color(0x88D6E3FF),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: active
-                        ? const Color(0xFF726300)
-                        : const Color(0x88D6E3FF),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Container(
-      height: 86,
-      padding: const EdgeInsets.fromLTRB(8, 8, 8, 14),
-      decoration: const BoxDecoration(
-        color: Color(0xF2041329),
-        border: Border(top: BorderSide(color: Color(0x22FFFFFF))),
-      ),
-      child: Row(
-        children: [
-          navItem(
-            icon: Icons.home_rounded,
-            label: '홈',
-            active: false,
-            onTap: () {
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
-              );
-            },
-          ),
-          navItem(
-            icon: Icons.vibration_rounded,
-            label: '기기',
-            active: true,
-            onTap: () {},
-          ),
-          navItem(
-            icon: Icons.mic_rounded,
-            label: '음성',
-            active: false,
-            onTap: () {
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute<void>(
-                  builder: (_) => const VoiceListeningScreen(),
-                ),
-              );
-            },
-          ),
-          navItem(
-            icon: Icons.settings_rounded,
-            label: '설정',
-            active: false,
-            onTap: () => _showPlaceholder(context, '설정'),
-          ),
-        ],
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final bool compact = constraints.maxHeight < 760;
-
-        return Scaffold(
-          backgroundColor: const Color(0xFF041329),
-          body: SafeArea(
-            child: Column(
-              children: [
-                _topBar(context),
-                Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      16,
-                      compact ? 8 : 10,
-                      16,
-                      compact ? 8 : 10,
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // 상단 바
+            Container(
+              height: 64,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: const BoxDecoration(
+                border: Border(bottom: BorderSide(color: Color(0xFF2A2A2A))),
+              ),
+              child: const Row(
+                children: [
+                  Text(
+                    'Touch Bridge',
+                    style: TextStyle(
+                      color: Color(0xFFFFEB00),
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.5,
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      '기기 연결',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      '기기를 연결하여 제어를 시작하세요',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Color(0xFF888888),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    _statusCard(),
+                    const SizedBox(height: 12),
+                    _optionCard(
+                      context: context,
+                      icon: Icons.qr_code_scanner_rounded,
+                      title: 'QR 코드 스캔',
+                      subtitle: '허브의 QR을 촬영하여 즉시 연결',
+                      highlighted: true,
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const QrScanScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    _optionCard(
+                      context: context,
+                      icon: Icons.bluetooth_rounded,
+                      title: '블루투스 연결',
+                      subtitle: '주변 기기 자동 검색 및 페어링',
+                      highlighted: false,
+                      onTap: () => _showPlaceholder(context, '블루투스 연결'),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
                       children: [
-                        Text(
-                          'STEP 1: CONNECTION',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: const Color(
-                              0xFFFDE047,
-                            ).withValues(alpha: 0.8),
-                            fontWeight: FontWeight.w800,
-                            fontSize: 10,
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        const Text(
-                          '기기 연결 설정',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 30,
-                            fontWeight: FontWeight.w900,
-                            color: Colors.white,
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                        SizedBox(height: compact ? 8 : 12),
-                        _statusCard(compact),
-                        SizedBox(height: compact ? 8 : 10),
-                        _optionCard(
+                        _smallAction(
                           context: context,
-                          icon: Icons.qr_code_scanner_rounded,
-                          title: 'QR 코드 스캔',
-                          subtitle: '허브의 QR을 촬영하여 즉시 연결',
-                          highlighted: true,
-                          compact: compact,
-                          onTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const QrScanScreen(),
-                              ),
-                            );
-                          },
+                          title: 'NFC 태그',
+                          icon: Icons.nfc_rounded,
+                          onTap: () => _showPlaceholder(context, 'NFC 태그'),
                         ),
-                        SizedBox(height: compact ? 8 : 10),
-                        _optionCard(
+                        const SizedBox(width: 10),
+                        _smallAction(
                           context: context,
-                          icon: Icons.bluetooth_rounded,
-                          title: '블루투스 연결',
-                          subtitle: '주변 기기 자동 검색 및 페어링',
-                          highlighted: false,
-                          compact: compact,
-                          onTap: () => _showPlaceholder(context, '블루투스 연결'),
-                        ),
-                        SizedBox(height: compact ? 8 : 10),
-                        Row(
-                          children: [
-                            _smallAction(
-                              context: context,
-                              title: 'NFC 태그',
-                              icon: Icons.contactless_rounded,
-                              onTap: () => _showPlaceholder(context, 'NFC 태그'),
-                            ),
-                            const SizedBox(width: 10),
-                            _smallAction(
-                              context: context,
-                              title: '수동 입력',
-                              icon: Icons.edit_rounded,
-                              onTap: () => _showPlaceholder(context, '수동 입력'),
-                            ),
-                          ],
-                        ),
-                        const Spacer(),
-                        Center(
-                          child: Text(
-                            '연결에 문제가 있나요? 도움말 보기',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.textSecondary.withValues(
-                                alpha: 0.85,
-                              ),
-                            ),
-                          ),
+                          title: '수동 입력',
+                          icon: Icons.keyboard_rounded,
+                          onTap: () => _showPlaceholder(context, '수동 입력'),
                         ),
                       ],
                     ),
-                  ),
+                    const Spacer(),
+                    Center(
+                      child: Text(
+                        '연결에 문제가 있나요? 도움말 보기',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                _bottomIconNav(context),
-              ],
+              ),
             ),
-          ),
-        );
-      },
+          ],
+        ),
+      ),
     );
   }
 }

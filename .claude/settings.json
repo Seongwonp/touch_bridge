@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter analyze *)",
+      "Read(//c/Users/82103/OneDrive/文서/touch_bridge/lib/**)"
+    ]
+  }
+}
