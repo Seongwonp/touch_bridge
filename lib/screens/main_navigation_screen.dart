@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_tts/flutter_tts.dart';
 
 import 'home/home_screen.dart';
 import 'connection/device_connect_screen.dart';
 import 'voice/voice_listening_screen.dart';
 import 'settings/settings_screen.dart';
+import '../services/tts_service.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -17,7 +17,7 @@ class MainNavigationScreen extends StatefulWidget {
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
-  final FlutterTts _tts = FlutterTts();
+  final TtsService _tts = TtsService();
   Timer? _navResetTimer;
   int? _armedNavIndex;
 
@@ -53,9 +53,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         }
       });
 
-      await _tts.setLanguage('ko-KR');
-      await _tts.setSpeechRate(0.45);
-      await _tts.stop();
       await _tts.speak('${_navItems[index].label} 탭입니다. 한 번 더 누르면 이동합니다.');
       return;
     }

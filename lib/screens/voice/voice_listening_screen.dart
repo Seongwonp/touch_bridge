@@ -1,12 +1,21 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_tts/flutter_tts.dart';
-import 'package:speech_to_text/speech_to_text.dart';
+import '../../services/tts_service.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart';
 
 import '../../widgets/responsive_scale.dart';
+import '../safety/emergency_stop_screen.dart';
+import '../connection/device_connect_screen.dart';
+import '../mapping/photo_mapping_screen.dart';
+import '../settings/settings_screen.dart';
 
 class VoiceListeningScreen extends StatefulWidget {
   const VoiceListeningScreen({super.key});
@@ -16,82 +25,35 @@ class VoiceListeningScreen extends StatefulWidget {
 }
 
 class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
-  final SpeechToText _speech = SpeechToText();
-  final FlutterTts _tts = FlutterTts();
+  final AudioRecorder _audioRecorder = AudioRecorder();
+  final TtsService _tts = TtsService();
   final math.Random _random = math.Random();
 
-  bool _isSpeechReady = false;
-  bool _isListening = false;
-  String _statusMessage = '말씀해 주세요. 듣고 있습니다.';
-  String _recognizedText = '아직 인식된 음성이 없어요.';
+  bool _isRecording = false;
+  bool _isProcessing = false;
+  String _statusMessage = '버튼을 눌러 명령을 말씀해 주세요.';
+  String _recognizedText = '아직 인식된 명령이 없어요.';
 
   Timer? _waveTimer;
-  Timer? _actionResetTimer;
-  String? _armedActionId;
-
   List<double> _waveHeights = const [
     0.20, 0.50, 0.80, 1.00, 0.60, 0.30, 1.00, 0.50, 0.70, 0.80, 0.20,
   ];
 
-  final List<String> _quickCommands = const [
-    '거실 불 켜줘',
-    '내일 오전 7시 알람',
-    '오늘 날씨 어때?',
-    '에어컨 24도로 설정',
-    '음악 틀어줘',
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _initializeVoiceFeatures();
-  }
-
-  Future<void> _initializeVoiceFeatures() async {
-    try {
-      await _tts.setLanguage('ko-KR');
-      await _tts.setSpeechRate(0.45);
-      final bool available = await _speech.initialize(
-        onStatus: (status) {
-          if (mounted) {
-            setState(() {
-              _statusMessage = '상태: $status';
-              if (status == 'notListening' || status == 'done') _isListening = false;
-            });
-          }
-        },
-        onError: (error) {
-          if (mounted) {
-            setState(() {
-              _statusMessage = '오류: ${error.errorMsg}';
-              _isListening = false;
-            });
-          }
-        },
-      );
-
-      if (mounted) {
-        setState(() {
-          _isSpeechReady = available;
-          _statusMessage = available ? '말씀해 주세요. 듣고 있습니다.' : '음성 인식을 사용할 수 없어요.';
-        });
-      }
-    } catch (_) {}
-  }
+  // dotenv에서 서버 주소를 읽어옵니다.
+  final String _serverUrl = dotenv.get('VOICE_SERVER_URL', fallback: 'http://localhost:8000/voice-command');
 
   Future<void> _speak(String message) async {
-    await _tts.stop();
     await _tts.speak(message);
   }
 
   void _startWaveAnimation() {
     _waveTimer?.cancel();
-    _waveTimer = Timer.periodic(const Duration(milliseconds: 300), (_) {
-      if (mounted && _isListening) {
+    _waveTimer = Timer.periodic(const Duration(milliseconds: 200), (_) {
+      if (mounted && _isRecording) {
         setState(() {
           _waveHeights = List<double>.generate(
             _waveHeights.length,
-            (index) => 0.18 + _random.nextDouble() * 0.82,
+            (index) => 0.2 + _random.nextDouble() * 0.8,
           );
         });
       }
@@ -107,50 +69,128 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     });
   }
 
-  Future<void> _toggleListening() async {
-    if (_isListening) {
-      await _speech.stop();
-      setState(() => _isListening = false);
+  Future<void> _toggleRecording() async {
+    if (_isRecording) {
+      final path = await _audioRecorder.stop();
+      setState(() {
+        _isRecording = false;
+        _isProcessing = true;
+        _statusMessage = '명령 분석 중...';
+      });
       _stopWaveAnimation();
+      if (path != null) {
+        _sendAudioToServer(path);
+      }
     } else {
-      if (!_isSpeechReady) return;
-      await _speech.listen(
-        onResult: (result) {
-          if (mounted) {
-            setState(() => _recognizedText = result.recognizedWords);
-          }
-        },
-        localeId: 'ko_KR',
-      );
-      setState(() => _isListening = true);
-      _startWaveAnimation();
+      if (await _audioRecorder.hasPermission()) {
+        final directory = await getTemporaryDirectory();
+        final path = '${directory.path}/voice_cmd.m4a';
+        
+        const config = RecordConfig(encoder: AudioEncoder.aacLc, sampleRate: 16000);
+        
+        await _audioRecorder.start(config, path: path);
+        setState(() {
+          _isRecording = true;
+          _statusMessage = '듣고 있습니다...';
+        });
+        _startWaveAnimation();
+        HapticFeedback.mediumImpact();
+      }
     }
   }
 
-  Future<void> _armAndRun({
-    required String id,
-    required String guide,
-    required VoidCallback onConfirmed,
-  }) async {
-    if (_armedActionId != id) {
-      setState(() => _armedActionId = id);
-      HapticFeedback.mediumImpact();
-      _actionResetTimer?.cancel();
-      _actionResetTimer = Timer(const Duration(seconds: 4), () {
-        if (mounted) setState(() => _armedActionId = null);
+  Future<void> _sendAudioToServer(String path) async {
+    try {
+      final request = http.MultipartRequest('POST', Uri.parse(_serverUrl));
+      request.files.add(await http.MultipartFile.fromPath('file', path));
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        _handleCommand(data);
+      } else {
+        setState(() {
+          _statusMessage = '서버 연결 오류가 발생했습니다.';
+          _isProcessing = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _statusMessage = '네트워크 오류: $e';
+        _isProcessing = false;
       });
-      await _speak(guide);
-    } else {
-      _actionResetTimer?.cancel();
-      setState(() => _armedActionId = null);
-      onConfirmed();
     }
+  }
+
+  void _handleCommand(Map<String, dynamic> data) {
+    final action = data['action'];
+    final message = data['message'] ?? '';
+    final recognized = data['text'] ?? '';
+
+    setState(() {
+      _isProcessing = false;
+      _recognizedText = recognized.isNotEmpty ? recognized : (action == 'NONE' ? '명령을 이해하지 못함' : '명령 수행 중');
+    });
+
+    if (message.isNotEmpty) _speak(message);
+
+    switch (action) {
+      case 'EMERGENCY_STOP':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const EmergencyStopScreen()),
+        );
+        break;
+      case 'NAVIGATE':
+        final target = data['target'];
+        Widget? screen;
+        if (target == 'connection') screen = const DeviceConnectScreen();
+        if (target == 'mapping') screen = const PhotoMappingScreen();
+        if (target == 'settings') screen = const SettingsScreen();
+        
+        if (screen != null) {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => screen!));
+        }
+        break;
+      case 'MICROWAVE_CONTROL':
+        final commands = data['commands'] as List<dynamic>?;
+        if (commands != null && commands.isNotEmpty) {
+          setState(() {
+            _statusMessage = '명령 수행 중: ${commands.join(" → ")}';
+          });
+          // 실제 환경에서는 여기서 하드웨어로 명령을 전송하거나 
+          // UI 상에서 버튼이 눌리는 애니메이션을 보여줄 수 있습니다.
+          _showMicrowaveAction(commands.cast<String>());
+        }
+        break;
+      default:
+        setState(() => _statusMessage = '다시 말씀해 주세요.');
+    }
+  }
+
+  void _showMicrowaveAction(List<String> commands) {
+    // 사용자에게 시각적 피드백을 주기 위한 스낵바
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('전자레인지 조작: ${commands.join(" → ")}'),
+        backgroundColor: const Color(0xFFFFEB00),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+        action: SnackBarAction(
+          label: '확인',
+          textColor: Colors.black,
+          onPressed: () {},
+        ),
+      ),
+    );
   }
 
   @override
   void dispose() {
     _waveTimer?.cancel();
-    _actionResetTimer?.cancel();
+    _audioRecorder.dispose();
     _tts.stop();
     super.dispose();
   }
@@ -158,14 +198,12 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   @override
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
-    final bool armed = _armedActionId == 'toggle';
 
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
         child: Column(
           children: [
-            // 상단 바
             Container(
               height: 64,
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -175,166 +213,108 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
               child: const Row(
                 children: [
                   Text(
-                    'Touch Bridge',
+                    'Touch Bridge AI',
                     style: TextStyle(
                       color: Color(0xFFFFEB00),
                       fontSize: 22,
                       fontWeight: FontWeight.w900,
-                      letterSpacing: 0.5,
                     ),
                   ),
                 ],
               ),
             ),
             Expanded(
-              child: SingleChildScrollView(
+              child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      '음성 인식',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 28 * rs,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
                     Text(
                       _statusMessage,
                       style: TextStyle(
-                        color: const Color(0xFF888888),
-                        fontSize: 14 * rs,
+                        color: _isRecording ? const Color(0xFFFFEB00) : Colors.white,
+                        fontSize: 24 * rs,
+                        fontWeight: FontWeight.w800,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 40),
+                    
+                    // 음성 파형 애니메이션
+                    SizedBox(
+                      height: 100,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: _waveHeights.map((h) => AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          width: 8,
+                          height: 100 * h,
+                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          decoration: BoxDecoration(
+                            color: _isRecording ? const Color(0xFFFFEB00) : const Color(0xFF333333),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        )).toList(),
                       ),
                     ),
-                    const SizedBox(height: 20),
-
-                    // 인식된 텍스트 박스
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF111111),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFF2A2A2A)),
-                      ),
-                      child: Text(
-                        _recognizedText,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18 * rs,
-                          fontWeight: FontWeight.w700,
-                          height: 1.4,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 36),
-
-                    // 파형
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: _waveHeights.map((h) => AnimatedContainer(
-                        duration: const Duration(milliseconds: 240),
-                        width: 7,
-                        height: 80 * h,
-                        margin: const EdgeInsets.symmetric(horizontal: 3),
-                        decoration: BoxDecoration(
-                          color: _isListening
-                              ? const Color(0xFFFFEB00)
-                              : const Color(0xFF333333),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      )).toList(),
-                    ),
-                    const SizedBox(height: 36),
-
-                    // 메인 버튼
+                    
+                    const SizedBox(height: 60),
+                    
+                    // 메인 녹음 버튼
                     GestureDetector(
-                      onTap: () => _armAndRun(
-                        id: 'toggle',
-                        guide: _isListening ? '듣기를 멈춥니다.' : '듣기를 시작합니다.',
-                        onConfirmed: _toggleListening,
-                      ),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
-                        height: 72,
+                      onTap: _isProcessing ? null : _toggleRecording,
+                      child: Container(
+                        width: 120,
+                        height: 120,
                         decoration: BoxDecoration(
-                          color: _isListening
-                              ? const Color(0xFF1A1A1A)
-                              : const Color(0xFFFFEB00),
-                          borderRadius: BorderRadius.circular(16),
-                          border: armed
-                              ? Border.all(color: Colors.white, width: 2.5)
-                              : _isListening
-                                  ? Border.all(color: const Color(0xFFFFEB00), width: 2)
-                                  : null,
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              _isListening ? Icons.mic_off_rounded : Icons.mic_rounded,
-                              color: _isListening
-                                  ? const Color(0xFFFFEB00)
-                                  : Colors.black,
-                              size: 26,
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              _isListening ? '듣기 멈추기' : '듣기 시작',
-                              style: TextStyle(
-                                fontSize: 20 * rs,
-                                fontWeight: FontWeight.w800,
-                                color: _isListening
-                                    ? const Color(0xFFFFEB00)
-                                    : Colors.black,
-                              ),
-                            ),
+                          color: _isRecording ? const Color(0xFF2A2A2A) : const Color(0xFFFFEB00),
+                          shape: BoxShape.circle,
+                          border: _isRecording ? Border.all(color: const Color(0xFFFFEB00), width: 4) : null,
+                          boxShadow: [
+                            BoxShadow(
+                              color: _isRecording ? const Color(0x66FFEB00) : Colors.black45,
+                              blurRadius: 20,
+                              spreadRadius: 5,
+                            )
                           ],
                         ),
+                        child: Icon(
+                          _isProcessing ? Icons.sync : (_isRecording ? Icons.stop : Icons.mic),
+                          color: _isRecording ? const Color(0xFFFFEB00) : Colors.black,
+                          size: 50,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 24),
-
-                    // 빠른 명령
-                    const Text(
-                      '빠른 명령',
-                      style: TextStyle(
-                        color: Color(0xFF888888),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.5,
+                    
+                    const SizedBox(height: 40),
+                    
+                    // 인식된 결과 텍스트 박스
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF111111),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFF2A2A2A)),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: _quickCommands.map((cmd) {
-                        return GestureDetector(
-                          onTap: () => setState(() => _recognizedText = cmd),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 10,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF111111),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: const Color(0xFF2A2A2A)),
-                            ),
-                            child: Text(
-                              cmd,
-                              style: const TextStyle(
-                                color: Color(0xFFCCCCCC),
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
+                      child: Column(
+                        children: [
+                          const Text(
+                            '인식 결과',
+                            style: TextStyle(color: Color(0xFF888888), fontSize: 14),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _recognizedText,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18 * rs,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
-                        );
-                      }).toList(),
+                        ],
+                      ),
                     ),
                   ],
                 ),

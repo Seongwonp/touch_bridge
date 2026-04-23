@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_tts/flutter_tts.dart';
+import '../../services/tts_service.dart';
 
 import '../control/remote_control_screen.dart';
 import '../voice/voice_listening_screen.dart';
@@ -15,7 +15,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final FlutterTts _tts = FlutterTts();
+  final TtsService _tts = TtsService();
   final PageController _pageController = PageController(viewportFraction: 0.92);
 
   int _currentDeviceIndex = 0;
@@ -33,8 +33,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _announceScreen() async {
-    await _tts.setLanguage('ko-KR');
-    await _tts.setSpeechRate(0.45);
     await _tts.speak('홈 화면입니다. 기기를 선택하여 제어하세요.');
   }
 

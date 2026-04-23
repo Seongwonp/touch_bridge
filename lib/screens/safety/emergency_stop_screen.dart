@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_tts/flutter_tts.dart';
+import '../../services/timer_service.dart';
+import '../../services/tts_service.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../widgets/responsive_scale.dart';
@@ -19,11 +20,11 @@ class EmergencyStopScreen extends StatefulWidget {
 
 class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     with SingleTickerProviderStateMixin {
-  final FlutterTts _tts = FlutterTts();
+  final TtsService _tts = TtsService();
   final SpeechToText _speech = SpeechToText();
 
   late final AnimationController _holdController;
-  Timer? _countdownTimer;
+  final CountdownService _timerService = CountdownService();
 
   late int _secondsLeft;
   bool _isHolding = false;
@@ -85,21 +86,19 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   }
 
   void _startCountdown() {
-    _countdownTimer?.cancel();
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      if (_secondsLeft <= 0) {
-        timer.cancel();
-        return;
-      }
-
-      setState(() {
-        _secondsLeft -= 1;
-      });
-    });
+    _timerService.start(
+      _secondsLeft,
+      onTick: (seconds) {
+        if (mounted) {
+          setState(() {
+            _secondsLeft = seconds;
+          });
+        }
+      },
+      onFinished: () {
+        // Handle timer finish if needed
+      },
+    );
   }
 
   String _formatMMSS(int totalSeconds) {
@@ -109,10 +108,6 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   }
 
   Future<void> _speak(String message) async {
-    await _tts.setLanguage('ko-KR');
-    await _tts.setSpeechRate(0.45);
-    await _tts.setPitch(1.0);
-    await _tts.stop();
     await _tts.speak(message);
   }
 
@@ -147,7 +142,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     });
 
     _speech.stop();
-    _countdownTimer?.cancel();
+    _timerService.stop();
 
     HapticFeedback.heavyImpact();
     await _speak('작동이 중단되었습니다.');
@@ -163,7 +158,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
 
   @override
   void dispose() {
-    _countdownTimer?.cancel();
+    _timerService.stop();
     _holdController.dispose();
     _tts.stop();
     _speech.stop();
