@@ -21,11 +21,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Timer? _navResetTimer;
   int? _armedNavIndex;
 
-  final List<Widget> _screens = [
-    const HomeScreen(),
-    const DeviceConnectScreen(),
-    const VoiceListeningScreen(),
-    const SettingsScreen(),
+  final List<Widget> _screens = const [ // const 추가
+    HomeScreen(),
+    DeviceConnectScreen(),
+    VoiceListeningScreen(),
+    SettingsScreen(),
   ];
 
   final List<({IconData icon, String label})> _navItems = const [
@@ -36,7 +36,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   ];
 
   Future<void> _handleBottomTap(int index) async {
-    if (_currentIndex == index) return;
+    if (_currentIndex == index) {
+      // 현재 활성화된 탭을 다시 누른 경우, TTS로 현재 탭을 다시 안내
+      await _tts.speak('${_navItems[index].label} 탭이 이미 활성화되어 있습니다.');
+      return;
+    }
 
     if (_armedNavIndex != index) {
       setState(() {
@@ -64,6 +68,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     });
     await _tts.stop();
     HapticFeedback.lightImpact();
+    await _tts.speak('${_navItems[index].label} 탭으로 이동합니다.'); // 이동 완료 TTS 추가
   }
 
   Widget _buildBottomBar() {
@@ -80,36 +85,41 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           final bool isArmed = _armedNavIndex == index;
 
           return Expanded(
-            child: GestureDetector(
-              onTap: () => _handleBottomTap(index),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-                decoration: BoxDecoration(
-                  color: isActive ? const Color(0xFFFFEB00) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
-                  border: isArmed
-                      ? Border.all(color: Colors.white, width: 2)
-                      : null,
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      item.icon,
-                      color: isActive ? Colors.black : const Color(0xFF888888),
-                      size: 24,
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      item.label,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
+            child: Semantics( // Semantics 위젯 추가
+              label: '${item.label} 탭. ${isActive ? '현재 선택됨' : ''} ${isArmed ? '활성화하려면 두 번 탭하세요.' : ''}',
+              selected: isActive,
+              button: true,
+              child: GestureDetector(
+                onTap: () => _handleBottomTap(index),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isActive ? const Color(0xFFFFEB00) : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                    border: isArmed
+                        ? Border.all(color: Colors.white, width: 2)
+                        : null,
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        item.icon,
                         color: isActive ? Colors.black : const Color(0xFF888888),
+                        size: 24,
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 3),
+                      Text(
+                        item.label,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: isActive ? Colors.black : const Color(0xFF888888),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

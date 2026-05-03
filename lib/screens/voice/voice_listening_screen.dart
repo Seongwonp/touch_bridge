@@ -1,15 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/tts_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
-import 'package:record/record.dart';
+import 'package:speech_to_text/speech_to_text.dart'; // Speech-to-Text 패키지 임포트
+import 'package:google_generative_ai/google_generative_ai.dart'; // Gemini API 패키지 임포트
 
 import '../../widgets/responsive_scale.dart';
 import '../safety/emergency_stop_screen.dart';
@@ -25,22 +23,70 @@ class VoiceListeningScreen extends StatefulWidget {
 }
 
 class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
-  final AudioRecorder _audioRecorder = AudioRecorder();
   final TtsService _tts = TtsService();
   final math.Random _random = math.Random();
+  final SpeechToText _speech = SpeechToText(); // SpeechToText 인스턴스
+
+  late final GenerativeModel _geminiModel; // Gemini 모델 인스턴스
+  late final String _googleAiProApiKey; // Gemini API 키
 
   bool _isRecording = false;
   bool _isProcessing = false;
   String _statusMessage = '버튼을 눌러 명령을 말씀해 주세요.';
   String _recognizedText = '아직 인식된 명령이 없어요.';
+  bool _speechEnabled = false; // SpeechToText 초기화 상태
+
+  String _lastWords = ''; // SpeechToText에서 인식된 최종 단어
 
   Timer? _waveTimer;
   List<double> _waveHeights = const [
     0.20, 0.50, 0.80, 1.00, 0.60, 0.30, 1.00, 0.50, 0.70, 0.80, 0.20,
   ];
 
-  // dotenv에서 서버 주소를 읽어옵니다.
-  final String _serverUrl = dotenv.get('VOICE_SERVER_URL', fallback: 'http://localhost:8000/voice-command');
+  Timer? _recordingTimeoutTimer;
+  final Duration _maxRecordingDuration = const Duration(seconds: 8); // 최대 녹음 시간
+
+  @override
+  void initState() {
+    super.initState();
+    _googleAiProApiKey = dotenv.get('GOOGLE_AI_PRO_API_KEY', fallback: ''); // fallback 추가
+    if (_googleAiProApiKey.isEmpty) {
+      _statusMessage = 'API 키가 설정되지 않았습니다. .env 파일을 확인해주세요.';
+      _speak(_statusMessage);
+    } else {
+      _geminiModel = GenerativeModel(model: 'gemini-pro', apiKey: _googleAiProApiKey);
+      _initSpeech();
+    }
+  }
+
+  Future<void> _initSpeech() async {
+    _speechEnabled = await _speech.initialize(
+      onStatus: (status) {
+        // SpeechToText의 상태 변화를 감지 (선택 사항)
+        // print('SpeechToText status: $status');
+      },
+      onError: (errorNotification) {
+        if (mounted) {
+          _speak('음성 인식 오류가 발생했습니다: ${errorNotification.errorMsg}');
+          setState(() {
+            _statusMessage = '음성 인식 오류: ${errorNotification.errorMsg}';
+            _isProcessing = false;
+            _isRecording = false;
+          });
+          _stopWaveAnimation();
+          _recordingTimeoutTimer?.cancel();
+        }
+      },
+    );
+    if (_speechEnabled) {
+      _speak('음성 명령을 기다리고 있습니다.');
+    } else {
+      _speak('음성 인식 기능을 사용할 수 없습니다. 마이크 권한을 확인해주세요.');
+      setState(() {
+        _statusMessage = '음성 인식 기능을 사용할 수 없습니다.';
+      });
+    }
+  }
 
   Future<void> _speak(String message) async {
     await _tts.speak(message);
@@ -70,71 +116,170 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   }
 
   Future<void> _toggleRecording() async {
+    if (!_speechEnabled) {
+      _speak('음성 인식 기능을 사용할 수 없습니다.');
+      return;
+    }
+    if (_googleAiProApiKey.isEmpty) {
+      _speak('API 키가 설정되지 않아 음성 명령을 처리할 수 없습니다.');
+      return;
+    }
+
     if (_isRecording) {
-      final path = await _audioRecorder.stop();
+      _speech.stop();
+      _recordingTimeoutTimer?.cancel();
       setState(() {
         _isRecording = false;
         _isProcessing = true;
         _statusMessage = '명령 분석 중...';
       });
       _stopWaveAnimation();
-      if (path != null) {
-        _sendAudioToServer(path);
+      _speak('녹음이 종료되었습니다. 명령을 분석 중입니다.');
+      if (_lastWords.isNotEmpty) {
+        _sendTextToGemini(_lastWords);
+      } else {
+        _speak('인식된 음성이 없습니다. 다시 말씀해 주세요.');
+        setState(() {
+          _statusMessage = '인식된 음성이 없습니다.';
+          _isProcessing = false;
+        });
       }
     } else {
-      if (await _audioRecorder.hasPermission()) {
-        final directory = await getTemporaryDirectory();
-        final path = '${directory.path}/voice_cmd.m4a';
-        
-        const config = RecordConfig(encoder: AudioEncoder.aacLc, sampleRate: 16000);
-        
-        await _audioRecorder.start(config, path: path);
+      _lastWords = ''; // 새로운 녹음 시작 시 초기화
+      bool available = await _speech.listen(
+        onResult: (result) {
+          if (mounted) {
+            setState(() {
+              _lastWords = result.recognizedWords;
+              _recognizedText = _lastWords; // 실시간 인식 결과 업데이트
+            });
+          }
+        },
+        localeId: 'ko_KR',
+        listenOptions: SpeechListenOptions(
+          listenMode: ListenMode.dictation,
+          partialResults: true, // 부분 결과도 받아서 실시간 피드백 가능
+        ),
+      );
+
+      if (available) {
         setState(() {
           _isRecording = true;
           _statusMessage = '듣고 있습니다...';
         });
         _startWaveAnimation();
         HapticFeedback.mediumImpact();
+        _speak('녹음을 시작합니다. 명령을 말씀해주세요.');
+
+        _recordingTimeoutTimer = Timer(_maxRecordingDuration, () {
+          if (_isRecording) {
+            _speak('녹음 시간이 초과되었습니다. 명령을 분석 중입니다.');
+            _toggleRecording(); // 자동으로 녹음 종료
+          }
+        });
+      } else {
+        _speak('마이크를 사용할 수 없습니다. 권한을 확인해주세요.');
+        setState(() {
+          _statusMessage = '마이크를 사용할 수 없습니다.';
+        });
       }
     }
   }
 
-  Future<void> _sendAudioToServer(String path) async {
+  Future<void> _sendTextToGemini(String text) async {
+    if (text.isEmpty) {
+      _speak('처리할 명령이 없습니다.');
+      setState(() {
+        _statusMessage = '처리할 명령이 없습니다.';
+        _isProcessing = false;
+      });
+      return;
+    }
+
     try {
-      final request = http.MultipartRequest('POST', Uri.parse(_serverUrl));
-      request.files.add(await http.MultipartFile.fromPath('file', path));
+      final content = [
+        Content.text('''
+          You are an AI assistant that controls smart home devices.
+          Analyze the user's voice command and respond in a JSON format.
+          The "action" field must be one of: EMERGENCY_STOP, NAVIGATE, MICROWAVE_CONTROL, NONE.
+          If the "action" is "NAVIGATE", include a "target" field with a value of: connection, mapping, settings.
+          If the "action" is "MICROWAVE_CONTROL", include a "commands" field as an array, with values like: "start", "stop", "set_time_30s", "set_time_1m", "set_time_2m".
+          If you cannot understand the command, set "action" to "NONE" and include a "message" field with an appropriate response for the user.
+          Your response must be a JSON object. Do not include any other explanations or text outside the JSON.
 
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
+          User's command: "$text"
+          '''),
+      ];
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        _handleCommand(data);
+      final response = await _geminiModel.generateContent(content);
+
+      if (response.text != null) {
+        String geminiOutputText = response.text!.trim();
+        // Gemini가 JSON 문자열을 마크다운 코드 블록으로 반환할 수 있으므로 파싱
+        if (geminiOutputText.startsWith('```json')) {
+          geminiOutputText = geminiOutputText.substring(7, geminiOutputText.length - 3).trim();
+        } else if (geminiOutputText.startsWith('```')) { // 일반 코드 블록도 처리
+          geminiOutputText = geminiOutputText.substring(3, geminiOutputText.length - 3).trim();
+        }
+        
+        final commandData = jsonDecode(geminiOutputText);
+        _handleCommand(commandData, recognizedText: text);
       } else {
+        _speak('AI로부터 유효한 응답을 받지 못했습니다.');
         setState(() {
-          _statusMessage = '서버 연결 오류가 발생했습니다.';
+          _statusMessage = 'AI 응답 없음';
           _isProcessing = false;
         });
       }
     } catch (e) {
+      _speak('AI 처리 중 문제가 발생했습니다: $e');
       setState(() {
-        _statusMessage = '네트워크 오류: $e';
+        _statusMessage = 'AI 처리 오류: $e';
         _isProcessing = false;
       });
     }
   }
 
-  void _handleCommand(Map<String, dynamic> data) {
+  void _handleCommand(Map<String, dynamic> data, {required String recognizedText}) {
     final action = data['action'];
-    final message = data['message'] ?? '';
-    final recognized = data['text'] ?? '';
+    final message = data['message'] ?? ''; // Gemini 응답에 message 필드가 있다면 사용
+    final String ttsMessage;
 
     setState(() {
       _isProcessing = false;
-      _recognizedText = recognized.isNotEmpty ? recognized : (action == 'NONE' ? '명령을 이해하지 못함' : '명령 수행 중');
+      _recognizedText = recognizedText; // STT로 인식된 원본 텍스트
     });
 
-    if (message.isNotEmpty) _speak(message);
+    if (message.isNotEmpty) {
+      ttsMessage = message;
+    } else {
+      switch (action) {
+        case 'EMERGENCY_STOP':
+          ttsMessage = '비상 정지 명령을 수행합니다.';
+          break;
+        case 'NAVIGATE':
+          final target = data['target'];
+          String targetName = '';
+          if (target == 'connection') targetName = '기기 연결';
+          else if (target == 'mapping') targetName = '사진 매핑';
+          else if (target == 'settings') targetName = '설정';
+          ttsMessage = '$targetName 화면으로 이동합니다.';
+          break;
+        case 'MICROWAVE_CONTROL':
+          final commands = data['commands'] as List<dynamic>?;
+          if (commands != null && commands.isNotEmpty) {
+            ttsMessage = '전자레인지 ${commands.join(" 그리고 ")} 명령을 수행합니다.';
+          } else {
+            ttsMessage = '전자레인지 제어 명령을 이해하지 못했습니다.';
+          }
+          break;
+        case 'NONE':
+        default:
+          ttsMessage = '명령을 이해하지 못했습니다. 다시 말씀해 주세요.';
+          break;
+      }
+    }
+    _speak(ttsMessage);
 
     switch (action) {
       case 'EMERGENCY_STOP':
@@ -152,6 +297,8 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         
         if (screen != null) {
           Navigator.push(context, MaterialPageRoute(builder: (_) => screen!));
+        } else {
+          _speak('요청하신 화면으로 이동할 수 없습니다.');
         }
         break;
       case 'MICROWAVE_CONTROL':
@@ -160,18 +307,17 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
           setState(() {
             _statusMessage = '명령 수행 중: ${commands.join(" → ")}';
           });
-          // 실제 환경에서는 여기서 하드웨어로 명령을 전송하거나 
-          // UI 상에서 버튼이 눌리는 애니메이션을 보여줄 수 있습니다.
           _showMicrowaveAction(commands.cast<String>());
         }
         break;
+      case 'NONE':
       default:
         setState(() => _statusMessage = '다시 말씀해 주세요.');
+        break;
     }
   }
 
   void _showMicrowaveAction(List<String> commands) {
-    // 사용자에게 시각적 피드백을 주기 위한 스낵바
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('전자레인지 조작: ${commands.join(" → ")}'),
@@ -190,7 +336,9 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   @override
   void dispose() {
     _waveTimer?.cancel();
-    _audioRecorder.dispose();
+    _recordingTimeoutTimer?.cancel();
+    _speech.stop(); // SpeechToText 리소스 해제
+    _speech.cancel();
     _tts.stop();
     super.dispose();
   }
@@ -261,27 +409,31 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
                     const SizedBox(height: 60),
                     
                     // 메인 녹음 버튼
-                    GestureDetector(
-                      onTap: _isProcessing ? null : _toggleRecording,
-                      child: Container(
-                        width: 120,
-                        height: 120,
-                        decoration: BoxDecoration(
-                          color: _isRecording ? const Color(0xFF2A2A2A) : const Color(0xFFFFEB00),
-                          shape: BoxShape.circle,
-                          border: _isRecording ? Border.all(color: const Color(0xFFFFEB00), width: 4) : null,
-                          boxShadow: [
-                            BoxShadow(
-                              color: _isRecording ? const Color(0x66FFEB00) : Colors.black45,
-                              blurRadius: 20,
-                              spreadRadius: 5,
-                            )
-                          ],
-                        ),
-                        child: Icon(
-                          _isProcessing ? Icons.sync : (_isRecording ? Icons.stop : Icons.mic),
-                          color: _isRecording ? const Color(0xFFFFEB00) : Colors.black,
-                          size: 50,
+                    Semantics(
+                      label: _isRecording ? '음성 녹음 중지 버튼' : '음성 명령 시작 버튼',
+                      button: true,
+                      child: GestureDetector(
+                        onTap: _isProcessing ? null : _toggleRecording,
+                        child: Container(
+                          width: 120,
+                          height: 120,
+                          decoration: BoxDecoration(
+                            color: _isRecording ? const Color(0xFF2A2A2A) : const Color(0xFFFFEB00),
+                            shape: BoxShape.circle,
+                            border: _isRecording ? Border.all(color: const Color(0xFFFFEB00), width: 4) : null,
+                            boxShadow: [
+                              BoxShadow(
+                                color: _isRecording ? const Color(0x66FFEB00) : Colors.black45,
+                                blurRadius: 20,
+                                spreadRadius: 5,
+                              )
+                            ],
+                          ),
+                          child: Icon(
+                            _isProcessing ? Icons.sync : (_isRecording ? Icons.stop : Icons.mic),
+                            color: _isRecording ? const Color(0xFFFFEB00) : Colors.black,
+                            size: 50,
+                          ),
                         ),
                       ),
                     ),

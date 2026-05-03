@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../services/tts_service.dart'; // TtsService 임포트
 import '../home/home_screen.dart';
 import '../voice/voice_listening_screen.dart';
 
@@ -15,6 +16,7 @@ class PhotoMappingScreen extends StatelessWidget {
         duration: const Duration(seconds: 1),
       ),
     );
+    TtsService().speak('$label 기능은 다음 단계에서 연결됩니다.'); // TTS 안내 추가
   }
 
   Widget _mappingCell({
@@ -22,56 +24,60 @@ class PhotoMappingScreen extends StatelessWidget {
     required String tag,
     required bool active,
   }) {
-    return Material(
-      color: active ? const Color(0x33FDE047) : Colors.transparent,
-      child: InkWell(
-        onTap: () => _showPlaceholder(context, '$tag 매핑'),
-        child: Center(
-          child: active
-              ? const Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.check_circle,
-                      color: Color(0xFFE2C62D),
-                      size: 22,
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'BT-01 ACTIVE',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
+    return Semantics( // 매핑 셀 Semantics 추가
+      label: active ? '$tag 활성화됨. 매핑 완료.' : '$tag 매핑. 버튼',
+      button: true,
+      child: Material(
+        color: active ? const Color(0x33FDE047) : Colors.transparent,
+        child: InkWell(
+          onTap: () => _showPlaceholder(context, '$tag 매핑'),
+          child: Center(
+            child: active
+                ? const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.check_circle,
                         color: Color(0xFFE2C62D),
-                        letterSpacing: 0.4,
+                        size: 22,
                       ),
-                    ),
-                  ],
-                )
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      tag,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFFCEC6AD),
-                        letterSpacing: 0.5,
+                      SizedBox(height: 4),
+                      Text(
+                        'BT-01 ACTIVE',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFFE2C62D),
+                          letterSpacing: 0.4,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'ASSIGN',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFFFDE047),
-                        letterSpacing: 0.4,
+                    ],
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        tag,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFFCEC6AD),
+                          letterSpacing: 0.5,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'ASSIGN',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFFFDE047),
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
         ),
       ),
     );
@@ -84,41 +90,46 @@ class PhotoMappingScreen extends StatelessWidget {
     required bool active,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(28),
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: active ? 18 : 8,
-          vertical: active ? 8 : 4,
-        ),
-        decoration: BoxDecoration(
-          color: active ? const Color(0xFFFDE047) : Colors.transparent,
-          borderRadius: BorderRadius.circular(28),
-          boxShadow: active
-              ? const [BoxShadow(color: Color(0x66FDE047), blurRadius: 14)]
-              : null,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              color: active ? const Color(0xFF726300) : const Color(0xB3D6E3FF),
-              size: 24,
-            ),
-            const SizedBox(height: 1),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: active
-                    ? const Color(0xFF726300)
-                    : const Color(0xB3D6E3FF),
+    return Semantics( // 하단 아이템 Semantics 추가
+      label: '$label 탭. ${active ? '현재 선택됨' : ''} 버튼',
+      selected: active,
+      button: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(28),
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: active ? 18 : 8,
+            vertical: active ? 8 : 4,
+          ),
+          decoration: BoxDecoration(
+            color: active ? const Color(0xFFFDE047) : Colors.transparent,
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: active
+                ? const [BoxShadow(color: Color(0x66FDE047), blurRadius: 14)]
+                : null,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                color: active ? const Color(0xFF726300) : const Color(0xB3D6E3FF),
+                size: 24,
               ),
-            ),
-          ],
+              const SizedBox(height: 1),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: active
+                      ? const Color(0xFF726300)
+                      : const Color(0xB3D6E3FF),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -130,6 +141,7 @@ class PhotoMappingScreen extends StatelessWidget {
       backgroundColor: const Color(0xFF041329),
       body: Stack(
         children: [
+          // Background Decoration (Semantics는 필요 없음)
           Container(
             decoration: const BoxDecoration(
               gradient: RadialGradient(
@@ -152,31 +164,45 @@ class PhotoMappingScreen extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
-                      IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.menu, color: Color(0xFFFDE047)),
+                      Semantics( // 메뉴 아이콘 Semantics 추가
+                        label: '메뉴 버튼',
+                        button: true,
+                        child: IconButton(
+                          onPressed: () {
+                            TtsService().speak('메뉴 화면으로 이동합니다.'); // TTS 안내 추가
+                            Navigator.of(context).pop(); // 현재는 뒤로가기 역할
+                          },
+                          icon: const Icon(Icons.menu, color: Color(0xFFFDE047)),
+                        ),
                       ),
                       const SizedBox(width: 4),
-                      const Text(
-                        'Touch Bridge',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -0.4,
-                          color: Color(0xFFFDE047),
+                      Semantics( // 앱 타이틀 Semantics 추가
+                        label: 'Touch Bridge 앱',
+                        child: const Text(
+                          'Touch Bridge',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -0.4,
+                            color: Color(0xFFFDE047),
+                          ),
                         ),
                       ),
                       const Spacer(),
-                      Container(
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Color(0x221C2A41),
-                        ),
-                        child: IconButton(
-                          onPressed: () => _showPlaceholder(context, '설정'),
-                          icon: const Icon(
-                            Icons.settings,
-                            color: Color(0xFFFDE047),
+                      Semantics( // 설정 아이콘 Semantics 추가
+                        label: '설정 버튼',
+                        button: true,
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Color(0x221C2A41),
+                          ),
+                          child: IconButton(
+                            onPressed: () => _showPlaceholder(context, '설정'),
+                            icon: const Icon(
+                              Icons.settings,
+                              color: Color(0xFFFDE047),
+                            ),
                           ),
                         ),
                       ),
@@ -189,23 +215,29 @@ class PhotoMappingScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'STEP 2: 버튼 위치 매핑',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.0,
-                            color: Color(0xFFE2C62D),
+                        Semantics( // 단계 안내 Semantics 추가
+                          label: '단계 2: 버튼 위치 매핑',
+                          child: const Text(
+                            'STEP 2: 버튼 위치 매핑',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.0,
+                              color: Color(0xFFE2C62D),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 4),
-                        const Text(
-                          '2단계: 사진 매핑 (3x3 그리드)',
-                          style: TextStyle(
-                            fontSize: 30,
-                            fontWeight: FontWeight.w900,
-                            color: Colors.white,
-                            height: 1.15,
+                        Semantics( // 상세 지시 Semantics 추가
+                          label: '2단계: 사진 매핑. 3x3 그리드입니다.',
+                          child: const Text(
+                            '2단계: 사진 매핑 (3x3 그리드)',
+                            style: TextStyle(
+                              fontSize: 30,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                              height: 1.15,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -215,18 +247,22 @@ class PhotoMappingScreen extends StatelessWidget {
                             child: Stack(
                               fit: StackFit.expand,
                               children: [
-                                Image.network(
-                                  'https://lh3.googleusercontent.com/aida-public/AB6AXuBnqtd9QhBxdz_JPVKIqregy0_eQ3-Kmm7GhJ8UoFacsWE5PEO-nYQkiuURtdw1a2Cs-HJLoqEIedm0jvg30rAPgKdOP31oZW5vxfMBJbKgF91uW3lKKboV4zYLwECV2iUnU_UEVKndaTiSpa38QlC_tjoqt7_M9_T9vRF0bU4s2DcqnJHCe6dAFIbehXzzPXMcudEPtJGpt2aY-AFAF4Mn3vw5n7xiaxpHljgqh7f0myzhl1b-copBdl6DRlJsKMDkY-1Pm1K4y8ZO',
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) =>
-                                      Container(
-                                        color: const Color(0xFF0D1C32),
-                                        child: const Icon(
-                                          Icons.image,
-                                          size: 96,
-                                          color: Color(0x55D6E3FF),
+                                Semantics( // 배경 이미지 Semantics 추가
+                                  label: '기기 버튼 매핑을 위한 배경 사진',
+                                  image: true,
+                                  child: Image.network(
+                                    'https://lh3.googleusercontent.com/aida-public/AB6AXuBnqtd9QhBxdz_JPVKIqregy0_eQ3-Kmm7GhJ8UoFacsWE5PEO-nYQkiuURtdw1a2Cs-HJLoqEIedm0jvg30rAPgKdOP31oZW5vxfMBJbKgF91uW3lKKboV4zYLwECV2iUnU_UEVKndaTiSpa38QlC_tjoqt7_M9_T9vRF0bU4s2DcqnJHCe6dAFIbehXzzPXMcudEPtJGpt2aY-AFAF4Mn3vw5n7xiaxpHljgqh7f0myzhl1b-copBdl6DRlJsKMDkY-1Pm1K4y8ZO',
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) =>
+                                        Container(
+                                          color: const Color(0xFF0D1C32),
+                                          child: const Icon(
+                                            Icons.image,
+                                            size: 96,
+                                            color: Color(0x55D6E3FF),
+                                          ),
                                         ),
-                                      ),
+                                  ),
                                 ),
                                 Container(color: const Color(0x66041329)),
                                 Container(
@@ -263,27 +299,31 @@ class PhotoMappingScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 12),
                         Center(
-                          child: TextButton.icon(
-                            onPressed: () =>
-                                _showPlaceholder(context, '사진 다시 촬영하기'),
-                            style: TextButton.styleFrom(
-                              backgroundColor: const Color(0xFF27354C),
-                              foregroundColor: const Color(0xFFE2C62D),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 18,
-                                vertical: 12,
+                          child: Semantics( // 사진 다시 촬영하기 버튼 Semantics 추가
+                            label: '사진 다시 촬영하기 버튼',
+                            button: true,
+                            child: TextButton.icon(
+                              onPressed: () =>
+                                  _showPlaceholder(context, '사진 다시 촬영하기'),
+                              style: TextButton.styleFrom(
+                                backgroundColor: const Color(0xFF27354C),
+                                foregroundColor: const Color(0xFFE2C62D),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 18,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
                               ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                              icon: const Icon(
+                                Icons.photo_camera_rounded,
+                                size: 18,
                               ),
-                            ),
-                            icon: const Icon(
-                              Icons.photo_camera_rounded,
-                              size: 18,
-                            ),
-                            label: const Text(
-                              '사진 다시 촬영하기',
-                              style: TextStyle(fontWeight: FontWeight.w700),
+                              label: const Text(
+                                '사진 다시 촬영하기',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
                             ),
                           ),
                         ),
@@ -298,25 +338,29 @@ class PhotoMappingScreen extends StatelessWidget {
           Positioned(
             right: 18,
             bottom: 104,
-            child: ElevatedButton.icon(
-              onPressed: () => _showPlaceholder(context, '매핑 완료'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFDE047),
-                foregroundColor: const Color(0xFF726300),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 18,
+            child: Semantics( // 매핑 완료 버튼 Semantics 추가
+              label: '매핑 완료 버튼',
+              button: true,
+              child: ElevatedButton.icon(
+                onPressed: () => _showPlaceholder(context, '매핑 완료'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFDE047),
+                  foregroundColor: const Color(0xFF726300),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 18,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  elevation: 12,
                 ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+                icon: const Text(
+                  '매핑 완료',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
                 ),
-                elevation: 12,
+                label: const Icon(Icons.arrow_forward_rounded),
               ),
-              icon: const Text(
-                '매핑 완료',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-              ),
-              label: const Icon(Icons.arrow_forward_rounded),
             ),
           ),
           Align(
@@ -336,29 +380,37 @@ class PhotoMappingScreen extends StatelessWidget {
                     icon: Icons.home_rounded,
                     label: '홈',
                     active: false,
-                    onTap: () => Navigator.of(context).pushReplacement(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const HomeScreen(),
-                      ),
-                    ),
+                    onTap: () {
+                      TtsService().speak('홈 화면으로 이동합니다.'); // TTS 안내 추가
+                      Navigator.of(context).pushReplacement(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const HomeScreen(),
+                        ),
+                      );
+                    },
                   ),
                   _bottomItem(
                     context: context,
                     icon: Icons.photo_camera_rounded,
                     label: '기기',
                     active: true,
-                    onTap: () {},
+                    onTap: () {
+                      TtsService().speak('현재 기기 매핑 화면입니다.'); // TTS 안내 추가
+                    },
                   ),
                   _bottomItem(
                     context: context,
                     icon: Icons.volume_up_rounded,
                     label: '음성',
                     active: false,
-                    onTap: () => Navigator.of(context).pushReplacement(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const VoiceListeningScreen(),
-                      ),
-                    ),
+                    onTap: () {
+                      TtsService().speak('음성 명령 화면으로 이동합니다.'); // TTS 안내 추가
+                      Navigator.of(context).pushReplacement(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const VoiceListeningScreen(),
+                        ),
+                      );
+                    },
                   ),
                   _bottomItem(
                     context: context,

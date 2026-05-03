@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../widgets/primary_button.dart';
+import '../../services/tts_service.dart'; // TtsService 임포트
 
 class QrScanScreen extends StatefulWidget {
   const QrScanScreen({super.key});
@@ -13,6 +14,7 @@ class QrScanScreen extends StatefulWidget {
 class _QrScanScreenState extends State<QrScanScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _scanController;
+  final TtsService _tts = TtsService(); // TtsService 인스턴스 생성
 
   @override
   void initState() {
@@ -21,11 +23,13 @@ class _QrScanScreenState extends State<QrScanScreen>
       vsync: this,
       duration: const Duration(seconds: 3),
     )..repeat(reverse: true);
+    _tts.speak('QR 코드 스캔 화면입니다. 프레임 안에 QR 코드를 맞춰주세요.'); // 화면 진입 시 TTS 안내
   }
 
   @override
   void dispose() {
     _scanController.dispose();
+    _tts.stop(); // TtsService 리소스 해제
     super.dispose();
   }
 
@@ -37,6 +41,7 @@ class _QrScanScreenState extends State<QrScanScreen>
         duration: const Duration(seconds: 1),
       ),
     );
+    _tts.speak('$label 기능은 다음 단계에서 연결됩니다.'); // TTS 안내 추가
   }
 
   Widget _corner({
@@ -63,6 +68,7 @@ class _QrScanScreenState extends State<QrScanScreen>
       backgroundColor: deepNavy,
       body: Stack(
         children: [
+          // Background Decoration (Semantics는 필요 없음)
           Container(
             decoration: const BoxDecoration(
               gradient: RadialGradient(
@@ -82,19 +88,29 @@ class _QrScanScreenState extends State<QrScanScreen>
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Row(
                       children: [
-                        IconButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          icon: const Icon(Icons.close, color: yellow),
-                          tooltip: '닫기',
+                        Semantics( // 닫기 버튼 Semantics 추가
+                          label: '닫기 버튼',
+                          button: true,
+                          child: IconButton(
+                            onPressed: () {
+                              _tts.speak('이전 화면으로 돌아갑니다.'); // TTS 안내 추가
+                              Navigator.of(context).pop();
+                            },
+                            icon: const Icon(Icons.close, color: yellow),
+                            tooltip: '닫기',
+                          ),
                         ),
-                        const Expanded(
-                          child: Text(
-                            'Scan QR Code',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: yellow,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
+                        Expanded(
+                          child: Semantics( // 화면 타이틀 Semantics 추가
+                            label: 'QR 코드 스캔 화면',
+                            child: const Text(
+                              'Scan QR Code',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: yellow,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
                           ),
                         ),
@@ -109,24 +125,30 @@ class _QrScanScreenState extends State<QrScanScreen>
                     child: Column(
                       children: [
                         const SizedBox(height: 8),
-                        const Text(
-                          '프레임 안에 QR 코드를 맞춰주세요',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 31,
-                            fontWeight: FontWeight.w900,
-                            height: 1.12,
+                        Semantics( // 지시 텍스트 Semantics 추가
+                          label: '프레임 안에 QR 코드를 맞춰주세요',
+                          child: const Text(
+                            '프레임 안에 QR 코드를 맞춰주세요',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 31,
+                              fontWeight: FontWeight.w900,
+                              height: 1.12,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 10),
-                        const Text(
-                          '노란 가이드 프레임 안에 코드를 맞추면 자동으로 인식해요',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Color(0xFFCEC6AD),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
+                        Semantics( // 보조 지시 텍스트 Semantics 추가
+                          label: '노란 가이드 프레임 안에 코드를 맞추면 자동으로 인식해요',
+                          child: const Text(
+                            '노란 가이드 프레임 안에 코드를 맞추면 자동으로 인식해요',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Color(0xFFCEC6AD),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 30),
@@ -135,6 +157,7 @@ class _QrScanScreenState extends State<QrScanScreen>
                           height: 280,
                           child: Stack(
                             children: [
+                              // QR 스캔 프레임 코너 (Semantics는 필요 없음)
                               _corner(
                                 alignment: Alignment.topLeft,
                                 borderRadius: const BorderRadius.only(
@@ -175,6 +198,7 @@ class _QrScanScreenState extends State<QrScanScreen>
                                   right: BorderSide(color: yellow, width: 5),
                                 ),
                               ),
+                              // 스캔 애니메이션 라인 (Semantics는 필요 없음)
                               AnimatedBuilder(
                                 animation: _scanController,
                                 builder: (context, _) {
@@ -204,16 +228,15 @@ class _QrScanScreenState extends State<QrScanScreen>
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            for (final item in const [
-                              (Icons.flash_on_rounded, 'FLASH'),
-                              (Icons.image_rounded, 'GALLERY'),
-                            ])
-                              Padding(
+                            Semantics( // 플래시 버튼 Semantics 추가
+                              label: '플래시 켜기/끄기 버튼',
+                              button: true,
+                              child: Padding(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 14,
                                 ),
                                 child: InkWell(
-                                  onTap: () => _showPlaceholder(item.$2),
+                                  onTap: () => _showPlaceholder('FLASH'),
                                   borderRadius: BorderRadius.circular(32),
                                   child: Column(
                                     children: [
@@ -224,12 +247,12 @@ class _QrScanScreenState extends State<QrScanScreen>
                                           color: Color(0xFF1C2A41),
                                           shape: BoxShape.circle,
                                         ),
-                                        child: Icon(item.$1, color: yellow),
+                                        child: const Icon(Icons.flash_on_rounded, color: yellow),
                                       ),
                                       const SizedBox(height: 6),
-                                      Text(
-                                        item.$2,
-                                        style: const TextStyle(
+                                      const Text(
+                                        'FLASH',
+                                        style: TextStyle(
                                           fontSize: 11,
                                           fontWeight: FontWeight.w700,
                                           color: Color(0xFFCEC6AD),
@@ -239,6 +262,42 @@ class _QrScanScreenState extends State<QrScanScreen>
                                   ),
                                 ),
                               ),
+                            ),
+                            Semantics( // 갤러리 버튼 Semantics 추가
+                              label: '갤러리에서 QR 코드 이미지 선택 버튼',
+                              button: true,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                ),
+                                child: InkWell(
+                                  onTap: () => _showPlaceholder('GALLERY'),
+                                  borderRadius: BorderRadius.circular(32),
+                                  child: Column(
+                                    children: [
+                                      Container(
+                                        width: 56,
+                                        height: 56,
+                                        decoration: const BoxDecoration(
+                                          color: Color(0xFF1C2A41),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(Icons.image_rounded, color: yellow),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      const Text(
+                                        'GALLERY',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFFCEC6AD),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                         const Spacer(),
@@ -265,7 +324,10 @@ class _QrScanScreenState extends State<QrScanScreen>
                             icon: Icons.close_rounded,
                             firstTapGuide:
                                 '취소 버튼입니다. 다시 한 번 누르면 이전 화면으로 이동합니다.',
-                            onPressed: () => Navigator.of(context).pop(),
+                            onPressed: () {
+                              _tts.speak('취소 버튼입니다. 다시 한 번 누르면 이전 화면으로 이동합니다.'); // TTS 안내 추가
+                              Navigator.of(context).pop();
+                            },
                           ),
                         ),
                         const SizedBox(height: 14),
@@ -288,32 +350,43 @@ class _QrScanScreenState extends State<QrScanScreen>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  IconButton(
-                    onPressed: () => _showPlaceholder('FLASH'),
-                    icon: const Icon(
-                      Icons.flash_on_rounded,
-                      color: Color(0xFF7A8497),
+                  Semantics( // 하단 플래시 버튼 Semantics 추가
+                    label: '플래시 켜기/끄기 버튼',
+                    button: true,
+                    child: IconButton(
+                      onPressed: () => _showPlaceholder('FLASH'),
+                      icon: const Icon(
+                        Icons.flash_on_rounded,
+                        color: Color(0xFF7A8497),
+                      ),
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: yellow.withValues(alpha: 0.22),
-                      boxShadow: const [
-                        BoxShadow(color: Color(0x66FDE047), blurRadius: 16),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.qr_code_scanner_rounded,
-                      color: yellow,
+                  Semantics( // 하단 QR 스캐너 아이콘 (현재 활성화된 기능) Semantics 추가
+                    label: 'QR 코드 스캐너 활성화됨',
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: yellow.withOpacity(0.22), // withValues 대신 withOpacity 사용
+                        boxShadow: const [
+                          BoxShadow(color: Color(0x66FDE047), blurRadius: 16),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.qr_code_scanner_rounded,
+                        color: yellow,
+                      ),
                     ),
                   ),
-                  IconButton(
-                    onPressed: () => _showPlaceholder('HISTORY'),
-                    icon: const Icon(
-                      Icons.history_rounded,
-                      color: Color(0xFF7A8497),
+                  Semantics( // 하단 히스토리 버튼 Semantics 추가
+                    label: '스캔 기록 보기 버튼',
+                    button: true,
+                    child: IconButton(
+                      onPressed: () => _showPlaceholder('HISTORY'),
+                      icon: const Icon(
+                        Icons.history_rounded,
+                        color: Color(0xFF7A8497),
+                      ),
                     ),
                   ),
                 ],

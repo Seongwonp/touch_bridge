@@ -33,7 +33,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _announceScreen() async {
-    await _tts.speak('홈 화면입니다. 기기를 선택하여 제어하세요.');
+    // 초기 화면 진입 시 첫 번째 기기 정보와 함께 화면 안내
+    await _tts.speak('홈 화면입니다. 현재 ${_devices[_currentDeviceIndex].name}, 상태: ${_devices[_currentDeviceIndex].status}. 좌우로 밀어서 기기를 전환하고, 기기를 눌러 제어하세요.');
   }
 
   @override
@@ -126,23 +127,27 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 16),
                     // 페이지 인디케이터
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(_devices.length, (index) {
-                        final bool active = index == _currentDeviceIndex;
-                        return AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
-                          margin: const EdgeInsets.symmetric(horizontal: 4),
-                          width: active ? 32 : 8,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: active
-                                ? const Color(0xFFFFEB00)
-                                : const Color(0xFF333333),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        );
-                      }),
+                    Semantics( // 페이지 인디케이터 Semantics 추가
+                      label: '현재 ${_currentDeviceIndex + 1}번째 기기, 총 ${_devices.length}개 기기',
+                      liveRegion: true, // 내용 변경 시 스크린 리더가 자동으로 읽도록 설정
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(_devices.length, (index) {
+                          final bool active = index == _currentDeviceIndex;
+                          return AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            margin: const EdgeInsets.symmetric(horizontal: 4),
+                            width: active ? 32 : 8,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: active
+                                  ? const Color(0xFFFFEB00)
+                                  : const Color(0xFF333333),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          );
+                        }),
+                      ),
                     ),
                     const SizedBox(height: 16),
                     Expanded(
@@ -153,95 +158,99 @@ class _HomeScreenState extends State<HomeScreen> {
                             _currentDeviceIndex = index;
                           });
                           HapticFeedback.selectionClick();
-                          _tts.speak(_devices[index].name);
+                          _tts.speak('${_devices[index].name}, 상태: ${_devices[index].status}'); // 기기 전환 시 상세 안내
                         },
                         itemCount: _devices.length,
                         itemBuilder: (context, index) {
                           final device = _devices[index];
                           return Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 4),
-                            child: GestureDetector(
-                              onTap: () => _openDeviceControl(index),
-                              child: Container(
-                                padding: const EdgeInsets.all(28),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF111111),
-                                  borderRadius: BorderRadius.circular(24),
-                                  border: Border.all(color: const Color(0xFF2A2A2A)),
-                                ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Container(
-                                      width: 120,
-                                      height: 120,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF1A1A1A),
-                                        borderRadius: BorderRadius.circular(24),
-                                        border: Border.all(color: const Color(0xFF333333)),
-                                      ),
-                                      child: Center(
-                                        child: Icon(
-                                          device.icon,
-                                          color: const Color(0xFFFFEB00),
-                                          size: 56,
+                            child: Semantics( // 기기 카드 Semantics 추가
+                              label: '${device.name}, 상태: ${device.status}. 눌러서 제어 모드 선택.',
+                              button: true,
+                              child: GestureDetector(
+                                onTap: () => _openDeviceControl(index),
+                                child: Container(
+                                  padding: const EdgeInsets.all(28),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF111111),
+                                    borderRadius: BorderRadius.circular(24),
+                                    border: Border.all(color: const Color(0xFF2A2A2A)),
+                                  ),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Container(
+                                        width: 120,
+                                        height: 120,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF1A1A1A),
+                                          borderRadius: BorderRadius.circular(24),
+                                          border: Border.all(color: const Color(0xFF333333)),
                                         ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 24),
-                                    Text(
-                                      device.name,
-                                      style: const TextStyle(
-                                        fontSize: 26,
-                                        fontWeight: FontWeight.w800,
-                                        color: Colors.white,
-                                        height: 1.2,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                    const SizedBox(height: 10),
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Container(
-                                          width: 8,
-                                          height: 8,
-                                          decoration: const BoxDecoration(
-                                            color: Color(0xFF00FF88),
-                                            shape: BoxShape.circle,
+                                        child: Center(
+                                          child: Icon(
+                                            device.icon,
+                                            color: const Color(0xFFFFEB00),
+                                            size: 56,
                                           ),
                                         ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          device.status,
-                                          style: const TextStyle(
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w600,
-                                            color: Color(0xFFAAAAAA),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 28),
-                                    Container(
-                                      width: double.infinity,
-                                      padding: const EdgeInsets.symmetric(vertical: 14),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFFFEB00),
-                                        borderRadius: BorderRadius.circular(12),
                                       ),
-                                      child: const Text(
-                                        '눌러서 제어하기',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          fontSize: 15,
+                                      const SizedBox(height: 24),
+                                      Text(
+                                        device.name,
+                                        style: const TextStyle(
+                                          fontSize: 26,
                                           fontWeight: FontWeight.w800,
-                                          letterSpacing: 0.5,
-                                          color: Colors.black,
+                                          color: Colors.white,
+                                          height: 1.2,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                      const SizedBox(height: 10),
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Container(
+                                            width: 8,
+                                            height: 8,
+                                            decoration: const BoxDecoration(
+                                              color: Color(0xFF00FF88),
+                                              shape: BoxShape.circle,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            device.status,
+                                            style: const TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFFAAAAAA),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 28),
+                                      Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.symmetric(vertical: 14),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFFFEB00),
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: const Text(
+                                          '눌러서 제어하기',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 0.5,
+                                            color: Colors.black,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
@@ -255,19 +264,24 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          IconButton(
-                            onPressed: () {
-                              _pageController.previousPage(
-                                duration: const Duration(milliseconds: 220),
-                                curve: Curves.easeOut,
-                              );
-                            },
-                            icon: const Icon(
-                              Icons.chevron_left_rounded,
-                              color: Color(0xFF555555),
-                              size: 28,
+                          Semantics( // 이전 기기 버튼 Semantics 추가
+                            label: '이전 기기',
+                            button: true,
+                            child: IconButton(
+                              onPressed: () {
+                                _pageController.previousPage(
+                                  duration: const Duration(milliseconds: 220),
+                                  curve: Curves.easeOut,
+                                );
+                              },
+                              icon: const Icon(
+                                Icons.chevron_left_rounded,
+                                color: Color(0xFF555555),
+                                size: 28,
+                              ),
                             ),
                           ),
+                          const SizedBox(width: 8), // 아이콘 버튼 사이 간격 조정
                           const Text(
                             '좌우로 밀어서 기기 전환',
                             style: TextStyle(
@@ -277,17 +291,22 @@ class _HomeScreenState extends State<HomeScreen> {
                               color: Color(0xFF555555),
                             ),
                           ),
-                          IconButton(
-                            onPressed: () {
-                              _pageController.nextPage(
-                                duration: const Duration(milliseconds: 220),
-                                curve: Curves.easeOut,
-                              );
-                            },
-                            icon: const Icon(
-                              Icons.chevron_right_rounded,
-                              color: Color(0xFF555555),
-                              size: 28,
+                          const SizedBox(width: 8), // 아이콘 버튼 사이 간격 조정
+                          Semantics( // 다음 기기 버튼 Semantics 추가
+                            label: '다음 기기',
+                            button: true,
+                            child: IconButton(
+                              onPressed: () {
+                                _pageController.nextPage(
+                                  duration: const Duration(milliseconds: 220),
+                                  curve: Curves.easeOut,
+                                );
+                              },
+                              icon: const Icon(
+                                Icons.chevron_right_rounded,
+                                color: Color(0xFF555555),
+                                size: 28,
+                              ),
                             ),
                           ),
                         ],
@@ -338,48 +357,57 @@ class _ControlModeSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(deviceIcon, color: const Color(0xFFFFEB00), size: 32),
-              const SizedBox(width: 12),
-              Text(
-                deviceName,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
+          Semantics( // 기기 이름 및 제어 방식 선택 안내 Semantics 추가
+            label: '$deviceName 제어 방식을 선택하세요.',
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(deviceIcon, color: const Color(0xFFFFEB00), size: 32),
+                const SizedBox(width: 12),
+                Text(
+                  deviceName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            '제어 방식을 선택하세요',
-            style: TextStyle(
-              color: Color(0xFF888888),
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
+          const ExcludeSemantics( // 상위 Semantics에서 이미 안내하므로 중복 방지
+            child: Text(
+              '제어 방식을 선택하세요',
+              style: TextStyle(
+                color: Color(0xFF888888),
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
           const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
             height: 72,
-            child: ElevatedButton.icon(
-              onPressed: onVoice,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFFEB00),
-                foregroundColor: Colors.black,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+            child: Semantics( // 음성으로 제어 버튼 Semantics 추가
+              label: '$deviceName을 음성으로 제어',
+              button: true,
+              child: ElevatedButton.icon(
+                onPressed: onVoice,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFFEB00),
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 0,
                 ),
-                elevation: 0,
-              ),
-              icon: const Icon(Icons.mic_rounded, size: 28),
-              label: const Text(
-                '음성으로 제어',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                icon: const Icon(Icons.mic_rounded, size: 28),
+                label: const Text(
+                  '음성으로 제어',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                ),
               ),
             ),
           ),
@@ -387,21 +415,25 @@ class _ControlModeSheet extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             height: 72,
-            child: ElevatedButton.icon(
-              onPressed: onManual,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.transparent,
-                foregroundColor: const Color(0xFFFFEB00),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: const BorderSide(color: Color(0xFFFFEB00), width: 2),
+            child: Semantics( // 수동으로 조작 버튼 Semantics 추가
+              label: '$deviceName을 수동으로 조작',
+              button: true,
+              child: ElevatedButton.icon(
+                onPressed: onManual,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  foregroundColor: const Color(0xFFFFEB00),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: const BorderSide(color: Color(0xFFFFEB00), width: 2),
+                  ),
+                  elevation: 0,
                 ),
-                elevation: 0,
-              ),
-              icon: const Icon(Icons.touch_app_rounded, size: 28),
-              label: const Text(
-                '수동으로 조작',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                icon: const Icon(Icons.touch_app_rounded, size: 28),
+                label: const Text(
+                  '수동으로 조작',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                ),
               ),
             ),
           ),

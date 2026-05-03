@@ -10,8 +10,8 @@ class AppColors {
   static const Color textSecondary = Color(0xFFD1D5DB);
   static const Color outline = Color(0xFF8A8A8A);
 
-  // Primary color communicates clarity and trust.
-  static const Color primary = Color(0xFF00B8FF);
+  // Primary color communicates clarity and trust. (Updated to yellow for consistency)
+  static const Color primary = Color(0xFFFFEB00); // 변경됨
 
   // Red is reserved for emergency-related actions only.
   static const Color emergency = Color(0xFFFF3B30);

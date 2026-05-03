@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/app_colors.dart';
+import '../../services/tts_service.dart'; // TtsService 임포트
 import 'qr_scan_screen.dart';
 
 class DeviceConnectScreen extends StatelessWidget {
@@ -15,53 +16,57 @@ class DeviceConnectScreen extends StatelessWidget {
         duration: const Duration(seconds: 1),
       ),
     );
+    TtsService().speak('$label 기능은 다음 단계에서 연결됩니다.'); // TTS 안내 추가
   }
 
   Widget _statusCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF111111),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF2A2A2A)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 10,
-            height: 10,
-            decoration: const BoxDecoration(
-              color: Color(0xFF00FF88),
-              shape: BoxShape.circle,
+    return Semantics( // 상태 카드 Semantics 추가
+      label: 'ESP32 Smart Hub, 연결 가능한 기기 감지됨',
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF111111),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFF2A2A2A)),
+        ),
+        child: const Row( // const 추가
+          children: [
+            Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                color: Color(0xFF00FF88),
+                shape: BoxShape.circle,
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'ESP32 Smart Hub',
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
+            SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'ESP32 Smart Hub',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
                   ),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  '연결 가능한 기기 감지됨',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF00FF88),
+                  SizedBox(height: 2),
+                  Text(
+                    '연결 가능한 기기 감지됨',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF00FF88),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -74,74 +79,78 @@ class DeviceConnectScreen extends StatelessWidget {
     required VoidCallback onTap,
     required bool highlighted,
   }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-          decoration: BoxDecoration(
-            color: highlighted ? const Color(0xFFFFEB00) : const Color(0xFF111111),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: highlighted ? Colors.transparent : const Color(0xFF2A2A2A),
+    return Semantics( // 옵션 카드 Semantics 추가
+      label: '$title. $subtitle. 버튼',
+      button: true,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            decoration: BoxDecoration(
+              color: highlighted ? const Color(0xFFFFEB00) : const Color(0xFF111111),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: highlighted ? Colors.transparent : const Color(0xFF2A2A2A),
+              ),
             ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: highlighted
+                        ? Colors.black.withOpacity(0.15) // withValues 대신 withOpacity 사용
+                        : const Color(0xFF1A1A1A),
+                    borderRadius: BorderRadius.circular(12),
+                    border: highlighted
+                        ? null
+                        : Border.all(color: const Color(0xFF333333)),
+                  ),
+                  child: Icon(
+                    icon,
+                    color: highlighted ? Colors.black : const Color(0xFFFFEB00),
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: highlighted ? Colors.black : Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: highlighted
+                              ? Colors.black.withOpacity(0.6) // withValues 대신 withOpacity 사용
+                              : const Color(0xFF888888),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
                   color: highlighted
-                      ? Colors.black.withValues(alpha: 0.15)
-                      : const Color(0xFF1A1A1A),
-                  borderRadius: BorderRadius.circular(12),
-                  border: highlighted
-                      ? null
-                      : Border.all(color: const Color(0xFF333333)),
+                      ? Colors.black.withOpacity(0.5) // withValues 대신 withOpacity 사용
+                      : const Color(0xFF555555),
                 ),
-                child: Icon(
-                  icon,
-                  color: highlighted ? Colors.black : const Color(0xFFFFEB00),
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: highlighted ? Colors.black : Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: highlighted
-                            ? Colors.black.withValues(alpha: 0.6)
-                            : const Color(0xFF888888),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: highlighted
-                    ? Colors.black.withValues(alpha: 0.5)
-                    : const Color(0xFF555555),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -155,32 +164,36 @@ class DeviceConnectScreen extends StatelessWidget {
     required VoidCallback onTap,
   }) {
     return Expanded(
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            decoration: BoxDecoration(
-              color: const Color(0xFF111111),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFF2A2A2A)),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, color: const Color(0xFF888888), size: 22),
-                const SizedBox(height: 6),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
+      child: Semantics( // 작은 액션 Semantics 추가
+        label: '$title 버튼',
+        button: true,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(14),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF111111),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFF2A2A2A)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, color: const Color(0xFF888888), size: 22),
+                  const SizedBox(height: 6),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -202,18 +215,21 @@ class DeviceConnectScreen extends StatelessWidget {
               decoration: const BoxDecoration(
                 border: Border(bottom: BorderSide(color: Color(0xFF2A2A2A))),
               ),
-              child: const Row(
-                children: [
-                  Text(
-                    'Touch Bridge',
-                    style: TextStyle(
-                      color: Color(0xFFFFEB00),
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0.5,
+              child: Semantics( // 앱 타이틀 Semantics 추가
+                label: 'Touch Bridge 앱',
+                child: const Row(
+                  children: [
+                    Text(
+                      'Touch Bridge',
+                      style: TextStyle(
+                        color: Color(0xFFFFEB00),
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.5,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             Expanded(
@@ -248,6 +264,7 @@ class DeviceConnectScreen extends StatelessWidget {
                       subtitle: '허브의 QR을 촬영하여 즉시 연결',
                       highlighted: true,
                       onTap: () {
+                        TtsService().speak('QR 코드 스캔 화면으로 이동합니다.'); // TTS 안내 추가
                         Navigator.of(context).push(
                           MaterialPageRoute<void>(
                             builder: (_) => const QrScanScreen(),
@@ -283,12 +300,16 @@ class DeviceConnectScreen extends StatelessWidget {
                       ],
                     ),
                     const Spacer(),
-                    Center(
-                      child: Text(
-                        '연결에 문제가 있나요? 도움말 보기',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary.withValues(alpha: 0.7),
+                    Semantics( // 도움말 텍스트 Semantics 추가
+                      label: '연결에 문제가 있나요? 도움말 보기 버튼',
+                      button: true,
+                      child: Center(
+                        child: Text(
+                          '연결에 문제가 있나요? 도움말 보기',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary.withOpacity(0.7), // withValues 대신 withOpacity 사용
+                          ),
                         ),
                       ),
                     ),
