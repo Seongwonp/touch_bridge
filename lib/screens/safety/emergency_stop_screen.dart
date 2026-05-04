@@ -30,6 +30,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   bool _isHolding = false;
   bool _isListening = false;
   bool _speechEnabled = false;
+  bool _isStartingListening = false;
 
   @override
   void initState() {
@@ -82,23 +83,32 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   }
 
   void _startListening() async {
-    if (!_speechEnabled || _speech.isListening) return;
+    if (!_speechEnabled || _speech.isListening || _isStartingListening) return;
 
-    setState(() => _isListening = true);
-    await _speech.listen(
-      onResult: (result) {
-        final words = result.recognizedWords.toLowerCase();
-        if (words.contains('멈춰') ||
-            words.contains('정지') ||
-            words.contains('그만') ||
-            words.contains('중단') ||
-            words.contains('stop')) {
-          _onHoldCompleted();
-        }
-      },
-      localeId: 'ko_KR',
-      listenOptions: SpeechListenOptions(listenMode: ListenMode.deviceDefault),
-    );
+    _isStartingListening = true;
+    try {
+      setState(() => _isListening = true);
+      await _speech.listen(
+        onResult: (result) {
+          final words = result.recognizedWords.toLowerCase();
+          if (words.contains('멈춰') ||
+              words.contains('정지') ||
+              words.contains('그만') ||
+              words.contains('중단') ||
+              words.contains('stop')) {
+            _onHoldCompleted();
+          }
+        },
+        localeId: 'ko_KR',
+        listenOptions: SpeechListenOptions(listenMode: ListenMode.deviceDefault),
+      );
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isListening = false);
+      }
+    } finally {
+      _isStartingListening = false;
+    }
   }
 
   void _startCountdown() {
@@ -562,7 +572,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                                         decoration: BoxDecoration(
                                           borderRadius: BorderRadius.circular(32),
                                           border: Border.all(
-                                            color: Colors.white.withOpacity(0.1), // withValues 대신 withOpacity 사용
+                                            color: Colors.white.withValues(alpha: 0.1),
                                             width: 16,
                                           ),
                                         ),
@@ -600,7 +610,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                                       if (_isHolding)
                                         Container(
                                           decoration: BoxDecoration(
-                                            color: Colors.white.withOpacity(0.1), // withValues 대신 withOpacity 사용
+                                            color: Colors.white.withValues(alpha: 0.1),
                                             borderRadius:
                                                 BorderRadius.circular(40),
                                           ),

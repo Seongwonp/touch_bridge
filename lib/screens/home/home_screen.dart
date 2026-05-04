@@ -104,7 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -125,7 +125,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         color: Color(0xFF888888),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
                     // 페이지 인디케이터
                     Semantics( // 페이지 인디케이터 Semantics 추가
                       label: '현재 ${_currentDeviceIndex + 1}번째 기기, 총 ${_devices.length}개 기기',
@@ -177,79 +177,88 @@ class _HomeScreenState extends State<HomeScreen> {
                                     borderRadius: BorderRadius.circular(24),
                                     border: Border.all(color: const Color(0xFF2A2A2A)),
                                   ),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Container(
-                                        width: 120,
-                                        height: 120,
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF1A1A1A),
-                                          borderRadius: BorderRadius.circular(24),
-                                          border: Border.all(color: const Color(0xFF333333)),
-                                        ),
-                                        child: Center(
-                                          child: Icon(
-                                            device.icon,
-                                            color: const Color(0xFFFFEB00),
-                                            size: 56,
+                                  child: LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      return SingleChildScrollView(
+                                        child: ConstrainedBox(
+                                          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                                          child: Column(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Container(
+                                                width: 120,
+                                                height: 120,
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFF1A1A1A),
+                                                  borderRadius: BorderRadius.circular(24),
+                                                  border: Border.all(color: const Color(0xFF333333)),
+                                                ),
+                                                child: Center(
+                                                  child: Icon(
+                                                    device.icon,
+                                                    color: const Color(0xFFFFEB00),
+                                                    size: 56,
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(height: 24),
+                                              Text(
+                                                device.name,
+                                                style: const TextStyle(
+                                                  fontSize: 26,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: Colors.white,
+                                                  height: 1.2,
+                                                ),
+                                                textAlign: TextAlign.center,
+                                              ),
+                                              const SizedBox(height: 10),
+                                              Row(
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                children: [
+                                                  Container(
+                                                    width: 8,
+                                                    height: 8,
+                                                    decoration: const BoxDecoration(
+                                                      color: Color(0xFF00FF88),
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  Text(
+                                                    device.status,
+                                                    style: const TextStyle(
+                                                      fontSize: 15,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: Color(0xFFAAAAAA),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 28),
+                                              Container(
+                                                width: double.infinity,
+                                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFFFFEB00),
+                                                  borderRadius: BorderRadius.circular(12),
+                                                ),
+                                                child: const Text(
+                                                  '눌러서 제어하기',
+                                                  textAlign: TextAlign.center,
+                                                  style: TextStyle(
+                                                    fontSize: 15,
+                                                    fontWeight: FontWeight.w800,
+                                                    letterSpacing: 0.5,
+                                                    color: Colors.black,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
-                                      ),
-                                      const SizedBox(height: 24),
-                                      Text(
-                                        device.name,
-                                        style: const TextStyle(
-                                          fontSize: 26,
-                                          fontWeight: FontWeight.w800,
-                                          color: Colors.white,
-                                          height: 1.2,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                      const SizedBox(height: 10),
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          Container(
-                                            width: 8,
-                                            height: 8,
-                                            decoration: const BoxDecoration(
-                                              color: Color(0xFF00FF88),
-                                              shape: BoxShape.circle,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            device.status,
-                                            style: const TextStyle(
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.w600,
-                                              color: Color(0xFFAAAAAA),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 28),
-                                      Container(
-                                        width: double.infinity,
-                                        padding: const EdgeInsets.symmetric(vertical: 14),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFFFEB00),
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: const Text(
-                                          '눌러서 제어하기',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: 0.5,
-                                            color: Colors.black,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
+                                      );
+                                    },
                                   ),
                                 ),
                               ),
@@ -323,7 +332,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class _ControlModeSheet extends StatelessWidget {
+class _ControlModeSheet extends StatefulWidget {
   const _ControlModeSheet({
     required this.deviceName,
     required this.deviceIcon,
@@ -335,6 +344,57 @@ class _ControlModeSheet extends StatelessWidget {
   final IconData deviceIcon;
   final VoidCallback onVoice;
   final VoidCallback onManual;
+
+  @override
+  State<_ControlModeSheet> createState() => _ControlModeSheetState();
+}
+
+class _ControlModeSheetState extends State<_ControlModeSheet> {
+  final TtsService _tts = TtsService();
+  Timer? _actionResetTimer;
+  String? _armedAction;
+
+  @override
+  void initState() {
+    super.initState();
+    _tts.speak('${widget.deviceName} 제어 방식 선택 화면입니다. 원하는 버튼을 한 번 누르면 선택되고, 한 번 더 누르면 실행됩니다.');
+  }
+
+  @override
+  void dispose() {
+    _actionResetTimer?.cancel();
+    _tts.stop();
+    super.dispose();
+  }
+
+  void _armAndRun({
+    required String id,
+    required String guide,
+    required VoidCallback onConfirmed,
+  }) {
+    if (_armedAction != id) {
+      setState(() {
+        _armedAction = id;
+      });
+      HapticFeedback.mediumImpact();
+      _actionResetTimer?.cancel();
+      _actionResetTimer = Timer(const Duration(seconds: 4), () {
+        if (mounted) {
+          setState(() {
+            _armedAction = null;
+          });
+        }
+      });
+      _tts.speak(guide);
+      return;
+    }
+
+    _actionResetTimer?.cancel();
+    setState(() {
+      _armedAction = null;
+    });
+    onConfirmed();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -358,14 +418,14 @@ class _ControlModeSheet extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           Semantics( // 기기 이름 및 제어 방식 선택 안내 Semantics 추가
-            label: '$deviceName 제어 방식을 선택하세요.',
+            label: '${widget.deviceName} 제어 방식을 선택하세요.',
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(deviceIcon, color: const Color(0xFFFFEB00), size: 32),
+                Icon(widget.deviceIcon, color: const Color(0xFFFFEB00), size: 32),
                 const SizedBox(width: 12),
                 Text(
-                  deviceName,
+                  widget.deviceName,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 22,
@@ -391,15 +451,25 @@ class _ControlModeSheet extends StatelessWidget {
             width: double.infinity,
             height: 72,
             child: Semantics( // 음성으로 제어 버튼 Semantics 추가
-              label: '$deviceName을 음성으로 제어',
+              label: '${widget.deviceName}을 음성으로 제어. ${_armedAction == 'voice' ? '선택됨. 한 번 더 탭하면 실행됩니다.' : ''}',
               button: true,
               child: ElevatedButton.icon(
-                onPressed: onVoice,
+                onPressed: () {
+                  _armAndRun(
+                    id: 'voice',
+                    guide: '음성으로 제어 버튼입니다. 한 번 더 누르면 음성 인식 화면으로 이동합니다.',
+                    onConfirmed: widget.onVoice,
+                  );
+                },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFFFEB00),
                   foregroundColor: Colors.black,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(
+                      color: _armedAction == 'voice' ? Colors.white : Colors.transparent,
+                      width: _armedAction == 'voice' ? 2.5 : 0,
+                    ),
                   ),
                   elevation: 0,
                 ),
@@ -416,16 +486,25 @@ class _ControlModeSheet extends StatelessWidget {
             width: double.infinity,
             height: 72,
             child: Semantics( // 수동으로 조작 버튼 Semantics 추가
-              label: '$deviceName을 수동으로 조작',
+              label: '${widget.deviceName}을 수동으로 조작. ${_armedAction == 'manual' ? '선택됨. 한 번 더 탭하면 실행됩니다.' : ''}',
               button: true,
               child: ElevatedButton.icon(
-                onPressed: onManual,
+                onPressed: () {
+                  _armAndRun(
+                    id: 'manual',
+                    guide: '수동으로 조작 버튼입니다. 한 번 더 누르면 수동 조작 화면으로 이동합니다.',
+                    onConfirmed: widget.onManual,
+                  );
+                },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.transparent,
                   foregroundColor: const Color(0xFFFFEB00),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
-                    side: const BorderSide(color: Color(0xFFFFEB00), width: 2),
+                    side: BorderSide(
+                      color: _armedAction == 'manual' ? Colors.white : const Color(0xFFFFEB00),
+                      width: _armedAction == 'manual' ? 3 : 2,
+                    ),
                   ),
                   elevation: 0,
                 ),

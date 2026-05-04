@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../../services/tts_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -29,6 +30,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
   late final GenerativeModel _geminiModel; // Gemini 모델 인스턴스
   late final String _googleAiProApiKey; // Gemini API 키
+  late final String _geminiModelName; // Gemini 모델명
 
   bool _isRecording = false;
   bool _isProcessing = false;
@@ -44,22 +46,34 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   ];
 
   Timer? _recordingTimeoutTimer;
+  Timer? _actionResetTimer;
+  bool _micArmed = false;
   final Duration _maxRecordingDuration = const Duration(seconds: 8); // 최대 녹음 시간
 
   @override
   void initState() {
     super.initState();
     _googleAiProApiKey = dotenv.get('GOOGLE_AI_PRO_API_KEY', fallback: ''); // fallback 추가
+    _geminiModelName = dotenv.get('GEMINI_MODEL', fallback: 'gemini-2.5-flash');
     if (_googleAiProApiKey.isEmpty) {
       _statusMessage = 'API 키가 설정되지 않았습니다. .env 파일을 확인해주세요.';
       _speak(_statusMessage);
     } else {
-      _geminiModel = GenerativeModel(model: 'gemini-pro', apiKey: _googleAiProApiKey);
+      _geminiModel = GenerativeModel(model: _geminiModelName, apiKey: _googleAiProApiKey);
       _initSpeech();
     }
   }
 
   Future<void> _initSpeech() async {
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      setState(() {
+        _speechEnabled = false;
+        _statusMessage = 'macOS에서는 음성 인식 기능이 현재 비활성화되어 있습니다.';
+      });
+      _speak(_statusMessage);
+      return;
+    }
+
     _speechEnabled = await _speech.initialize(
       onStatus: (status) {
         // SpeechToText의 상태 변화를 감지 (선택 사항)
@@ -79,7 +93,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       },
     );
     if (_speechEnabled) {
-      _speak('음성 명령을 기다리고 있습니다.');
+      _speak('음성 명령 화면입니다. 마이크 버튼을 한 번 누르면 선택되고, 한 번 더 누르면 녹음이 시작됩니다. 이전 화면으로 돌아가려면 화면을 왼쪽에서 오른쪽으로 쓸어주세요.');
     } else {
       _speak('음성 인식 기능을 사용할 수 없습니다. 마이크 권한을 확인해주세요.');
       setState(() {
@@ -90,6 +104,35 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
   Future<void> _speak(String message) async {
     await _tts.speak(message);
+  }
+
+  Future<void> _goBackWithSwipe() async {
+    final navigator = Navigator.of(context);
+
+    if (_isRecording) {
+      await _speech.stop();
+      _recordingTimeoutTimer?.cancel();
+      _stopWaveAnimation();
+      if (mounted) {
+        setState(() {
+          _isRecording = false;
+          _isProcessing = false;
+        });
+      }
+    }
+    if (navigator.canPop()) {
+      await _tts.speak('이전 화면으로 돌아갑니다.');
+      if (mounted) {
+        navigator.pop();
+      }
+    }
+  }
+
+  void _onHorizontalDragEnd(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+    if (velocity > 450) {
+      _goBackWithSwipe();
+    }
   }
 
   void _startWaveAnimation() {
@@ -186,6 +229,37 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     }
   }
 
+  void _handleMicTap() {
+    if (_isProcessing) {
+      return;
+    }
+
+    if (!_micArmed) {
+      setState(() {
+        _micArmed = true;
+      });
+      HapticFeedback.mediumImpact();
+      _actionResetTimer?.cancel();
+      _actionResetTimer = Timer(const Duration(seconds: 4), () {
+        if (mounted) {
+          setState(() {
+            _micArmed = false;
+          });
+        }
+      });
+      _speak(_isRecording
+          ? '녹음 중지 버튼입니다. 한 번 더 누르면 녹음을 중지합니다.'
+          : '녹음 시작 버튼입니다. 한 번 더 누르면 녹음을 시작합니다.');
+      return;
+    }
+
+    _actionResetTimer?.cancel();
+    setState(() {
+      _micArmed = false;
+    });
+    _toggleRecording();
+  }
+
   Future<void> _sendTextToGemini(String text) async {
     if (text.isEmpty) {
       _speak('처리할 명령이 없습니다.');
@@ -260,9 +334,13 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         case 'NAVIGATE':
           final target = data['target'];
           String targetName = '';
-          if (target == 'connection') targetName = '기기 연결';
-          else if (target == 'mapping') targetName = '사진 매핑';
-          else if (target == 'settings') targetName = '설정';
+          if (target == 'connection') {
+            targetName = '기기 연결';
+          } else if (target == 'mapping') {
+            targetName = '사진 매핑';
+          } else if (target == 'settings') {
+            targetName = '설정';
+          }
           ttsMessage = '$targetName 화면으로 이동합니다.';
           break;
         case 'MICROWAVE_CONTROL':
@@ -337,6 +415,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   void dispose() {
     _waveTimer?.cancel();
     _recordingTimeoutTimer?.cancel();
+    _actionResetTimer?.cancel();
     _speech.stop(); // SpeechToText 리소스 해제
     _speech.cancel();
     _tts.stop();
@@ -349,8 +428,11 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Column(
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragEnd: _onHorizontalDragEnd,
+        child: SafeArea(
+          child: Column(
           children: [
             Container(
               height: 64,
@@ -410,17 +492,21 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
                     
                     // 메인 녹음 버튼
                     Semantics(
-                      label: _isRecording ? '음성 녹음 중지 버튼' : '음성 명령 시작 버튼',
+                      label: _isRecording
+                          ? (_micArmed ? '음성 녹음 중지 버튼 선택됨. 한 번 더 탭하면 중지됩니다.' : '음성 녹음 중지 버튼')
+                          : (_micArmed ? '음성 명령 시작 버튼 선택됨. 한 번 더 탭하면 녹음이 시작됩니다.' : '음성 명령 시작 버튼'),
                       button: true,
                       child: GestureDetector(
-                        onTap: _isProcessing ? null : _toggleRecording,
+                        onTap: _isProcessing ? null : _handleMicTap,
                         child: Container(
                           width: 120,
                           height: 120,
                           decoration: BoxDecoration(
                             color: _isRecording ? const Color(0xFF2A2A2A) : const Color(0xFFFFEB00),
                             shape: BoxShape.circle,
-                            border: _isRecording ? Border.all(color: const Color(0xFFFFEB00), width: 4) : null,
+                            border: _isRecording
+                                ? Border.all(color: _micArmed ? Colors.white : const Color(0xFFFFEB00), width: _micArmed ? 5 : 4)
+                                : (_micArmed ? Border.all(color: Colors.white, width: 4) : null),
                             boxShadow: [
                               BoxShadow(
                                 color: _isRecording ? const Color(0x66FFEB00) : Colors.black45,
@@ -472,7 +558,8 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
                 ),
               ),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );

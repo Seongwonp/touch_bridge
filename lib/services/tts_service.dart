@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'accessibility_settings.dart';
 
 class TtsService {
   factory TtsService() => _instance;
@@ -16,12 +18,23 @@ class TtsService {
   }
 
   Future<void> speak(String text) async {
-    await _tts.stop();
-    await _tts.speak(text);
+    if (!AccessibilitySettings.instance.voiceGuidanceEnabled) {
+      return;
+    }
+    try {
+      await _tts.stop();
+      await _tts.speak(text);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('TTS speak skipped: $e');
+      }
+    }
   }
 
   Future<void> stop() async {
-    await _tts.stop();
+    try {
+      await _tts.stop();
+    } catch (_) {}
   }
 
   Future<void> setLanguage(String languageCode) async {

@@ -30,12 +30,12 @@ class DeviceConnectScreen extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: const Color(0xFF2A2A2A)),
         ),
-        child: const Row( // const 추가
+        child: Row(
           children: [
             Container(
               width: 10,
               height: 10,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: Color(0xFF00FF88),
                 shape: BoxShape.circle,
               ),
@@ -103,7 +103,7 @@ class DeviceConnectScreen extends StatelessWidget {
                   height: 48,
                   decoration: BoxDecoration(
                     color: highlighted
-                        ? Colors.black.withOpacity(0.15) // withValues 대신 withOpacity 사용
+                        ? Colors.black.withValues(alpha: 0.15)
                         : const Color(0xFF1A1A1A),
                     borderRadius: BorderRadius.circular(12),
                     border: highlighted
@@ -136,7 +136,7 @@ class DeviceConnectScreen extends StatelessWidget {
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
                           color: highlighted
-                              ? Colors.black.withOpacity(0.6) // withValues 대신 withOpacity 사용
+                              ? Colors.black.withValues(alpha: 0.6)
                               : const Color(0xFF888888),
                         ),
                       ),
@@ -146,7 +146,7 @@ class DeviceConnectScreen extends StatelessWidget {
                 Icon(
                   Icons.chevron_right_rounded,
                   color: highlighted
-                      ? Colors.black.withOpacity(0.5) // withValues 대신 withOpacity 사용
+                      ? Colors.black.withValues(alpha: 0.5)
                       : const Color(0xFF555555),
                 ),
               ],
@@ -308,7 +308,7 @@ class DeviceConnectScreen extends StatelessWidget {
                           '연결에 문제가 있나요? 도움말 보기',
                           style: TextStyle(
                             fontSize: 12,
-                            color: AppColors.textSecondary.withOpacity(0.7), // withValues 대신 withOpacity 사용
+                            color: AppColors.textSecondary.withValues(alpha: 0.7),
                           ),
                         ),
                       ),

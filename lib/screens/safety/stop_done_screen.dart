@@ -23,6 +23,7 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
 
   void _goHome() async {
     await _tts.speak('홈 화면으로 돌아갑니다.'); // 홈 이동 전 TTS 안내
+    if (!mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 

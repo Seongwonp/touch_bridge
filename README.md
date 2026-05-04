@@ -36,9 +36,15 @@ Google AI Pro (Gemini) API 키를 `.env` 파일에 설정해야 합니다. 프�
 
 ```dotenv
 GOOGLE_AI_PRO_API_KEY=YOUR_GOOGLE_AI_PRO_API_KEY
+GEMINI_MODEL=gemini-2.5-flash
 ```
 
 `YOUR_GOOGLE_AI_PRO_API_KEY`를 Google Cloud Console에서 발급받은 실제 API 키로 대체하세요.
+`GEMINI_MODEL`은 필요 시 `gemini-2.5-pro` 등으로 바꿔 사용할 수 있습니다.
+
+## 접근성 개선 문서
+
+- `docs/accessibility-improvements-2026-05-04.md`
 
 ### 2. 플랫폼별 권한 설정
 

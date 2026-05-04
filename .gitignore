@@ -58,3 +58,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+
+touch-bridge-495300-e3f42de71ebd.json

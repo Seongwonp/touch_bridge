@@ -367,7 +367,7 @@ class _QrScanScreenState extends State<QrScanScreen>
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: yellow.withOpacity(0.22), // withValues 대신 withOpacity 사용
+                        color: yellow.withValues(alpha: 0.22),
                         boxShadow: const [
                           BoxShadow(color: Color(0x66FDE047), blurRadius: 16),
                         ],

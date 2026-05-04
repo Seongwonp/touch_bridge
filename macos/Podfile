@@ -38,5 +38,13 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_macos_build_settings(target)
+
+    # macOS TCC can enforce usage descriptions on the calling framework bundle.
+    if target.name == 'speech_to_text'
+      target.build_configurations.each do |config|
+        config.build_settings['INFOPLIST_KEY_NSMicrophoneUsageDescription'] = '음성 명령을 듣기 위해 마이크 접근이 필요합니다.'
+        config.build_settings['INFOPLIST_KEY_NSSpeechRecognitionUsageDescription'] = '음성 명령을 텍스트로 인식하기 위해 권한이 필요합니다.'
+      end
+    end
   end
 end

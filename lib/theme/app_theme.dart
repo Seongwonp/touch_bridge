@@ -56,6 +56,8 @@ class AppTheme {
           TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
         ),
       ),
+      materialTapTargetSize: MaterialTapTargetSize.padded,
+      visualDensity: VisualDensity.standard,
     );
   }
 }

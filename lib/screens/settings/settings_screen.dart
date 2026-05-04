@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_tts/flutter_tts.dart';
+import '../../services/accessibility_settings.dart';
+import '../../services/tts_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -10,22 +11,25 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final FlutterTts _tts = FlutterTts();
+  final TtsService _tts = TtsService();
   double _speed = 1.2;
   double _volume = 85;
   bool _guardianMode = true;
+  late bool _voiceGuidanceEnabled;
+  late bool _largeTextEnabled;
+  late bool _highContrastEnabled;
 
   @override
   void initState() {
     super.initState();
+    final settings = AccessibilitySettings.instance;
+    _voiceGuidanceEnabled = settings.voiceGuidanceEnabled;
+    _largeTextEnabled = settings.largeTextEnabled;
+    _highContrastEnabled = settings.highContrastEnabled;
     _announce('설정 화면입니다. 음성 안내 속도, 음량, 가디언 모드 및 비상 연락처를 설정할 수 있습니다.');
   }
 
   Future<void> _announce(String message) async {
-    await _tts.setLanguage('ko-KR');
-    await _tts.setSpeechRate(0.45);
-    await _tts.setPitch(1.0);
-    await _tts.stop();
     await _tts.speak(message);
   }
 
@@ -113,6 +117,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         onChanged: (v) {
                           setState(() => _volume = v);
                           _announce('음성 안내 음량 ${_volume.round()}%');
+                        },
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  _SectionLabel(
+                    icon: Icons.accessibility_new_rounded,
+                    label: '접근성',
+                  ),
+                  const SizedBox(height: 10),
+                  _SettingsCard(
+                    children: [
+                      _SwitchRow(
+                        title: '음성 안내',
+                        subtitle: '화면 이동/상태 변화를 음성으로 안내',
+                        value: _voiceGuidanceEnabled,
+                        onChanged: (v) {
+                          setState(() => _voiceGuidanceEnabled = v);
+                          AccessibilitySettings.instance.setVoiceGuidanceEnabled(v);
+                          _announce('음성 안내 ${v ? '켜짐' : '꺼짐'}');
+                        },
+                      ),
+                      const _Divider(),
+                      _SwitchRow(
+                        title: '큰 글씨',
+                        subtitle: '텍스트를 크게 표시하여 가독성 향상',
+                        value: _largeTextEnabled,
+                        onChanged: (v) {
+                          setState(() => _largeTextEnabled = v);
+                          AccessibilitySettings.instance.setLargeTextEnabled(v);
+                          _announce('큰 글씨 ${v ? '켜짐' : '꺼짐'}');
+                        },
+                      ),
+                      const _Divider(),
+                      _SwitchRow(
+                        title: '고대비 모드',
+                        subtitle: '텍스트 대비를 높여 인지성 향상',
+                        value: _highContrastEnabled,
+                        onChanged: (v) {
+                          setState(() => _highContrastEnabled = v);
+                          AccessibilitySettings.instance.setHighContrastEnabled(v);
+                          _announce('고대비 모드 ${v ? '켜짐' : '꺼짐'}');
                         },
                       ),
                     ],
@@ -250,10 +298,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     width: 48,
                                     height: 48,
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFFF3B30).withOpacity(0.15), // withValues 대신 withOpacity 사용
+                                      color: const Color(0xFFFF3B30).withValues(alpha: 0.15),
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(
-                                        color: const Color(0xFFFF3B30).withOpacity(0.4), // withValues 대신 withOpacity 사용
+                                        color: const Color(0xFFFF3B30).withValues(alpha: 0.4),
                                       ),
                                     ),
                                     child: const Icon(
@@ -416,6 +464,62 @@ class _SliderRow extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _SwitchRow extends StatelessWidget {
+  const _SwitchRow({
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    color: Color(0xFF888888),
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: value,
+            onChanged: onChanged,
+            activeThumbColor: Colors.black,
+            activeTrackColor: const Color(0xFFFFEB00),
+            inactiveThumbColor: const Color(0xFF555555),
+            inactiveTrackColor: const Color(0xFF2A2A2A),
+          ),
+        ],
       ),
     );
   }

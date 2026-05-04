@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_tts/flutter_tts.dart';
+import '../../services/tts_service.dart';
 
 import '../../widgets/responsive_scale.dart';
 import '../safety/emergency_stop_screen.dart';
@@ -15,7 +15,7 @@ class RemoteControlScreen extends StatefulWidget {
 }
 
 class _RemoteControlScreenState extends State<RemoteControlScreen> {
-  final FlutterTts _tts = FlutterTts();
+  final TtsService _tts = TtsService();
 
   Timer? _actionResetTimer;
   String? _armedActionId;
@@ -28,15 +28,19 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   @override
   void initState() {
     super.initState();
-    _speak('기기 제어 화면입니다. 타이머를 설정하고 시작하세요.');
+    _speak('기기 제어 화면입니다. 숫자 버튼은 한 번 누르면 선택되고 한 번 더 누르면 입력됩니다. 이전 화면으로 돌아가려면 화면을 왼쪽에서 오른쪽으로 쓸어주세요.');
   }
 
   Future<void> _speak(String message) async {
-    await _tts.setLanguage('ko-KR');
-    await _tts.setSpeechRate(0.45);
-    await _tts.setPitch(1.0);
-    await _tts.stop();
     await _tts.speak(message);
+  }
+
+  void _onHorizontalDragEnd(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+    if (velocity > 450 && Navigator.of(context).canPop()) {
+      _tts.speak('이전 화면으로 돌아갑니다.');
+      Navigator.of(context).pop();
+    }
   }
 
   Future<void> _armAndRun({
@@ -252,8 +256,11 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Column(
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragEnd: _onHorizontalDragEnd,
+        child: SafeArea(
+          child: Column(
           children: [
             // 상단 바 - 뒤로가기 버튼 포함
             Container(
@@ -334,13 +341,13 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: const Color(0xFF2A2A2A)),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Container(
                               width: 7,
                               height: 7,
-                              decoration: BoxDecoration(
+                              decoration: const BoxDecoration(
                                 color: Color(0xFF00FF88),
                                 shape: BoxShape.circle,
                               ),
@@ -461,7 +468,8 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                 ),
               ),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );
