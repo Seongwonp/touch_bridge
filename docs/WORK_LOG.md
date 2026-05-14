@@ -119,11 +119,75 @@ GEMINI_MODEL=gemini-2.5-flash   # 또는 gemini-2.5-pro
 
 ---
 
+---
+
+## 2026-05-14 (세션 2)
+
+### 버그 수정
+
+#### macOS 엔타이틀먼트 — network.client 누락
+- **파일**: `macos/Runner/DebugProfile.entitlements`, `Release.entitlements`
+- **원인**: macOS 샌드박스에서 외부 HTTPS 요청(Gemini API) 차단
+- **수정**: `com.apple.security.network.client` 엔타이틀먼트 추가
+
+#### macOS 26 (Tahoe) TCC 크래시 — TTS / STT
+- **파일**: `lib/services/tts_service.dart`, `lib/screens/voice/voice_listening_screen.dart`, `lib/screens/safety/emergency_stop_screen.dart`
+- **원인**: macOS 26 beta에서 `AVSpeechSynthesisVoice`, `SFSpeechRecognizer` 초기화 시 TCC(프라이버시 프레임워크)가 다이얼로그 대신 `SIGABRT` abort 발생. Info.plist + 엔타이틀먼트 모두 정상인데도 발생하는 OS 버그
+- **수정**: `!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS` 조건으로 TTS speak(), STT initialize() 스킵
+- **비고**: Android/iOS/Chrome 웹은 정상 작동. macOS 26 정식 출시 시 재확인 필요
+
+#### flutter_tts getVoices API 오류
+- **파일**: `lib/services/tts_service.dart`
+- **원인**: `_tts.getVoices()`로 호출했으나 getter라 `()` 없이 `_tts.getVoices`로 접근해야 함
+- **수정**: `await _tts.getVoices;`로 수정
+
+---
+
+### 기능 추가
+
+#### 웹(Chrome) 플랫폼 지원
+- **배경**: macOS 26 TCC 버그로 네이티브 앱 실행 불가 → Chrome에서 개발·테스트
+- **변경**: `kIsWeb` 체크로 macOS 가드를 네이티브 앱에만 적용, 웹에는 TTS/STT 모두 활성화
+- **Chrome TTS**: 앱 로드 시 자동 발화는 Chrome 자동재생 정책으로 차단됨 — 첫 사용자 상호작용 이후 정상 작동
+- **Chrome STT**: 브라우저 권한 다이얼로그로 처리 (macOS TCC 완전 우회)
+- **웹 음성 로드**: Chrome에서 음성이 비동기 로드됨 → `await Future.delayed(500ms)` + `await _tts.getVoices;` 후 `setLanguage('ko-KR')`
+
+#### 음성 화면 침묵 감지 (5초 타임아웃)
+- **파일**: `lib/screens/voice/voice_listening_screen.dart`
+- **기능**:
+  - 녹음 시작 시 5초 침묵 타이머(`_silenceTimer`) 시작
+  - 부분 결과(`partialResults`) 수신마다 타이머 리셋
+  - 5초 경과 + 말이 없으면: "아무 말씀도 인식되지 않았습니다. 버튼을 눌러 다시 시도해주세요."
+  - 5초 경과 + 말이 있으면: 자동으로 Gemini 분석 시작
+- **Chrome 자연 종료 처리**: `onStatus: 'done'` / `'notListening'` 감지 → `_onSttNaturalEnd()` 호출로 처리
+- **동작 흐름**:
+
+  | 상황 | 결과 |
+  |------|------|
+  | 5초간 침묵 (말 없음) | 재시도 안내 |
+  | 말하는 중 → 5초 침묵 | 자동 Gemini 분석 |
+  | Chrome이 STT 자동 종료 | 즉시 분석 or 재시도 |
+  | 최대 8초 경과 | 강제 종료 후 분석 |
+
+---
+
+## 플랫폼별 지원 현황
+
+| 기능 | Android | iOS | macOS 앱 | Chrome (웹) |
+|------|---------|-----|----------|------------|
+| TTS 음성 안내 | ✅ | ✅ | ❌ (OS 버그) | ✅ |
+| STT 음성 명령 | ✅ | ✅ | ❌ (OS 버그) | ✅ |
+| Gemini AI | ✅ | ✅ | ✅ | ✅ |
+| 사진 매핑 | ✅ | ✅ | ✅ (갤러리만) | ✅ |
+| 설정 영속화 | ✅ | ✅ | ✅ | ✅ |
+
+---
+
 ## 남은 작업
 
 - [ ] BLE 실제 연동 (하드웨어 완성 후)
 - [ ] QR 스캔 구현 (`mobile_scanner` 패키지 필요)
 - [ ] 버튼 매핑 데이터 영속화 (SharedPreferences or sqflite)
-- [ ] 기기 연결 상태 실시간 표시
-- [ ] 가디언 알림 (Firebase 또는 서버 연동, 추후)
 - [ ] 기기 목록 동적 관리 (하드코딩 3개 → 사용자 추가/삭제)
+- [ ] macOS TTS/STT — macOS 26 정식 출시 후 TCC 동작 재확인
+- [ ] 가디언 알림 (Firebase 또는 서버 연동, 추후)
