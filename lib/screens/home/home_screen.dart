@@ -1,11 +1,31 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/tts_service.dart';
 
 import '../control/remote_control_screen.dart';
 import '../voice/voice_listening_screen.dart';
+
+class DeviceInfo {
+  DeviceInfo({required this.name, this.status = '작동 대기 중', required this.iconCodePoint});
+
+  final String name;
+  final String status;
+  final int iconCodePoint;
+
+  IconData get icon => IconData(iconCodePoint, fontFamily: 'MaterialIcons');
+
+  Map<String, dynamic> toJson() => {'name': name, 'status': status, 'iconCodePoint': iconCodePoint};
+
+  factory DeviceInfo.fromJson(Map<String, dynamic> j) => DeviceInfo(
+        name: j['name'] as String,
+        status: j['status'] as String? ?? '작동 대기 중',
+        iconCodePoint: j['iconCodePoint'] as int,
+      );
+}
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,25 +39,58 @@ class _HomeScreenState extends State<HomeScreen> {
   final PageController _pageController = PageController(viewportFraction: 0.92);
 
   int _currentDeviceIndex = 0;
+  List<DeviceInfo> _devices = [];
 
-  // TODO(hardware): BleService 연결 후 실제 기기 목록으로 교체
-  // TODO(hardware): 기기 상태(status)는 BLE Notification으로 실시간 업데이트
-  // TODO(hardware): 기기 추가/삭제 → SharedPreferences에 저장
-  final List<({String name, String status, IconData icon})> _devices = const [
-    (name: '스마트 전자레인지', status: '작동 대기 중', icon: Icons.microwave_rounded),
-    (name: '스마트 공기청정기', status: '공기 질 분석 중', icon: Icons.air_rounded),
-    (name: '스마트 전등 허브', status: '원격 제어 가능', icon: Icons.light_mode_rounded),
+  static const _prefKeyDevices = 'home_devices';
+
+  static final _defaultDevices = [
+    DeviceInfo(name: '스마트 전자레인지', status: '작동 대기 중', iconCodePoint: Icons.microwave_rounded.codePoint),
+    DeviceInfo(name: '스마트 공기청정기', status: '공기 질 분석 중', iconCodePoint: Icons.air_rounded.codePoint),
+    DeviceInfo(name: '스마트 전등 허브', status: '원격 제어 가능', iconCodePoint: Icons.light_mode_rounded.codePoint),
+  ];
+
+  static final _kIconOptions = [
+    (label: '전자레인지', icon: Icons.microwave_rounded),
+    (label: '세탁기', icon: Icons.local_laundry_service_rounded),
+    (label: '공기청정기', icon: Icons.air_rounded),
+    (label: '에어컨', icon: Icons.ac_unit_rounded),
+    (label: '전등', icon: Icons.light_mode_rounded),
+    (label: 'TV', icon: Icons.tv_rounded),
+    (label: '냉장고', icon: Icons.kitchen_rounded),
+    (label: '기타', icon: Icons.devices_rounded),
   ];
 
   @override
   void initState() {
     super.initState();
+    _loadDevices();
+  }
+
+  Future<void> _loadDevices() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonStr = prefs.getString(_prefKeyDevices);
+    if (jsonStr != null) {
+      final list = (jsonDecode(jsonStr) as List)
+          .map((e) => DeviceInfo.fromJson(e as Map<String, dynamic>))
+          .toList();
+      if (mounted) setState(() => _devices = list);
+    } else {
+      if (mounted) setState(() => _devices = List.from(_defaultDevices));
+    }
     _announceScreen();
   }
 
+  Future<void> _saveDevices() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefKeyDevices, jsonEncode(_devices.map((d) => d.toJson()).toList()));
+  }
+
   Future<void> _announceScreen() async {
-    // 초기 화면 진입 시 첫 번째 기기 정보와 함께 화면 안내
-    await _tts.speak('홈 화면입니다. 현재 ${_devices[_currentDeviceIndex].name}, 상태: ${_devices[_currentDeviceIndex].status}. 좌우로 밀어서 기기를 전환하고, 기기를 눌러 제어하세요.');
+    if (_devices.isEmpty) {
+      await _tts.speak('홈 화면입니다. 기기가 없습니다. 상단 추가 버튼을 눌러 기기를 등록하세요.');
+    } else {
+      await _tts.speak('홈 화면입니다. 현재 ${_devices[_currentDeviceIndex].name}, 상태: ${_devices[_currentDeviceIndex].status}. 좌우로 밀어서 기기를 전환하고, 기기를 눌러 제어하세요.');
+    }
   }
 
   @override
@@ -45,6 +98,163 @@ class _HomeScreenState extends State<HomeScreen> {
     _tts.stop();
     _pageController.dispose();
     super.dispose();
+  }
+
+  void _showAddDeviceDialog() {
+    final nameCtrl = TextEditingController();
+    int selectedIconIndex = 0;
+    _tts.speak('기기 추가 화면입니다. 기기 이름을 입력하고 종류를 선택하세요.');
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A2E),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('기기 추가', style: TextStyle(color: Color(0xFFFFEB00), fontWeight: FontWeight.w800)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('기기 이름', style: TextStyle(color: Color(0xFF888888), fontSize: 12)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: nameCtrl,
+                  autofocus: true,
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                  decoration: InputDecoration(
+                    hintText: '예: 우리집 전자레인지',
+                    hintStyle: const TextStyle(color: Color(0xFF555577)),
+                    filled: true,
+                    fillColor: const Color(0xFF0D1C32),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFF333355)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFFFFEB00), width: 2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text('기기 종류', style: TextStyle(color: Color(0xFF888888), fontSize: 12)),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: List.generate(_kIconOptions.length, (i) {
+                    final opt = _kIconOptions[i];
+                    final selected = i == selectedIconIndex;
+                    return GestureDetector(
+                      onTap: () => setDialogState(() => selectedIconIndex = i),
+                      child: Container(
+                        width: 68,
+                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                        decoration: BoxDecoration(
+                          color: selected ? const Color(0x33FFEB00) : const Color(0xFF0D1C32),
+                          border: Border.all(
+                            color: selected ? const Color(0xFFFFEB00) : const Color(0xFF333355),
+                            width: selected ? 2 : 1,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(opt.icon, color: selected ? const Color(0xFFFFEB00) : const Color(0xFF888888), size: 24),
+                            const SizedBox(height: 4),
+                            Text(
+                              opt.label,
+                              style: TextStyle(
+                                color: selected ? const Color(0xFFFFEB00) : const Color(0xFF888888),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('취소', style: TextStyle(color: Color(0xFF888888))),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final name = nameCtrl.text.trim();
+                if (name.isEmpty) return;
+                final opt = _kIconOptions[selectedIconIndex];
+                Navigator.of(ctx).pop();
+                final device = DeviceInfo(name: name, iconCodePoint: opt.icon.codePoint);
+                setState(() => _devices.add(device));
+                await _saveDevices();
+                if (_pageController.hasClients) {
+                  _pageController.animateToPage(
+                    _devices.length - 1,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOut,
+                  );
+                }
+                _tts.speak('$name 기기가 추가되었습니다.');
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFFEB00),
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('추가', style: TextStyle(fontWeight: FontWeight.w800)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showDeleteDialog(int index) {
+    final device = _devices[index];
+    _tts.speak('${device.name} 기기를 삭제하려면 삭제 버튼을 누르세요.');
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('기기 삭제', style: TextStyle(color: Color(0xFFFF3B30), fontWeight: FontWeight.w800)),
+        content: Text('${device.name}을(를) 삭제하시겠어요?', style: const TextStyle(color: Colors.white)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('취소', style: TextStyle(color: Color(0xFF888888))),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              setState(() {
+                _devices.removeAt(index);
+                if (_currentDeviceIndex >= _devices.length && _currentDeviceIndex > 0) {
+                  _currentDeviceIndex = _devices.length - 1;
+                }
+              });
+              await _saveDevices();
+              _tts.speak('${device.name} 기기가 삭제되었습니다.');
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF3B30),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('삭제', style: TextStyle(fontWeight: FontWeight.w800)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _openDeviceControl(int index) {
@@ -91,15 +301,24 @@ class _HomeScreenState extends State<HomeScreen> {
               decoration: const BoxDecoration(
                 border: Border(bottom: BorderSide(color: Color(0xFF2A2A2A))),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Text(
+                  const Text(
                     'Touch Bridge',
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 0.5,
                       color: Color(0xFFFFEB00),
+                    ),
+                  ),
+                  const Spacer(),
+                  Semantics(
+                    label: '기기 추가',
+                    button: true,
+                    child: IconButton(
+                      onPressed: _showAddDeviceDialog,
+                      icon: const Icon(Icons.add_rounded, color: Color(0xFFFFEB00), size: 28),
                     ),
                   ),
                 ],
@@ -153,6 +372,34 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
+                    if (_devices.isEmpty)
+                      Expanded(
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.add_circle_outline_rounded, color: Color(0xFF333333), size: 80),
+                              const SizedBox(height: 16),
+                              const Text('기기가 없습니다', style: TextStyle(color: Color(0xFF555555), fontSize: 18, fontWeight: FontWeight.w700)),
+                              const SizedBox(height: 8),
+                              const Text('상단 + 버튼을 눌러 기기를 추가하세요', style: TextStyle(color: Color(0xFF444444), fontSize: 13)),
+                              const SizedBox(height: 24),
+                              ElevatedButton.icon(
+                                onPressed: _showAddDeviceDialog,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFFFEB00),
+                                  foregroundColor: Colors.black,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                                ),
+                                icon: const Icon(Icons.add_rounded),
+                                label: const Text('기기 추가', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else
                     Expanded(
                       child: PageView.builder(
                         controller: _pageController,
@@ -169,10 +416,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           return Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 4),
                             child: Semantics( // 기기 카드 Semantics 추가
-                              label: '${device.name}, 상태: ${device.status}. 눌러서 제어 모드 선택.',
+                              label: '${device.name}, 상태: ${device.status}. 눌러서 제어 모드 선택. 길게 눌러서 삭제.',
                               button: true,
                               child: GestureDetector(
                                 onTap: () => _openDeviceControl(index),
+                                onLongPress: () => _showDeleteDialog(index),
                                 child: Container(
                                   padding: const EdgeInsets.all(28),
                                   decoration: BoxDecoration(
