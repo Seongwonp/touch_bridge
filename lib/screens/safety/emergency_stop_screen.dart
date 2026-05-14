@@ -57,7 +57,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
 
   Future<void> _initSpeech() async {
     // macOS 26 beta: SFSpeechRecognizer triggers TCC abort (OS bug)
-    if (defaultTargetPlatform == TargetPlatform.macOS) return;
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) return;
     try {
       _speechEnabled = await _speech.initialize(
         onStatus: (status) {
