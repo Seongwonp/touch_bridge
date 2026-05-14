@@ -66,8 +66,9 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
   Future<void> _initSpeech() async {
     // macOS 26 beta: SFSpeechRecognizer triggers TCC abort (OS bug)
-    if (defaultTargetPlatform == TargetPlatform.macOS) {
-      if (mounted) setState(() => _statusMessage = 'macOS에서는 음성 인식이 지원되지 않습니다.');
+    // kIsWeb: browser STT works fine even on Mac host
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) {
+      if (mounted) setState(() => _statusMessage = 'macOS 앱에서는 음성 인식이 지원되지 않습니다.');
       return;
     }
     _speechEnabled = await _speech.initialize(
