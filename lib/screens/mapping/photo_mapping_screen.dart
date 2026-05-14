@@ -565,6 +565,9 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
                             ),
                             const SizedBox(width: 10),
                             // 매핑 완료 버튼
+                            // TODO(hardware): 매핑 완료 시 _buttonLabels 데이터를
+                            //   BleService.instance.sendMappingData(deviceId, _buttonLabels) 로 전송
+                            //   또는 SharedPreferences에 저장하여 재연결 시 복원
                             Expanded(
                               child: Semantics(
                                 label: '매핑 완료 버튼. 현재 $assignedCount개 버튼 설정됨.',
