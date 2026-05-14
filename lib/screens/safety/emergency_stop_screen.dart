@@ -56,11 +56,6 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   }
 
   Future<void> _initSpeech() async {
-    // macOS에서는 speech_to_text가 불안정하므로 건너뜀
-    if (defaultTargetPlatform == TargetPlatform.macOS) {
-      setState(() => _speechEnabled = false);
-      return;
-    }
     try {
       _speechEnabled = await _speech.initialize(
         onStatus: (status) {
