@@ -17,10 +17,18 @@ class TtsService {
   Future<void> _initTts() async {
     try {
       final settings = AccessibilitySettings.instance;
-      await _tts.setLanguage('ko-KR');
       await _tts.setSpeechRate((settings.ttsSpeed / 2.0).clamp(0.1, 1.0));
       await _tts.setVolume(settings.ttsVolume.clamp(0.0, 1.0));
       await _tts.setPitch(1.0);
+
+      if (kIsWeb) {
+        // Chrome loads voices asynchronously; delay then trigger load
+        await Future.delayed(const Duration(milliseconds: 500));
+        await _tts.getVoices();
+        await _tts.setLanguage('ko-KR');
+      } else {
+        await _tts.setLanguage('ko-KR');
+      }
     } catch (e) {
       if (kDebugMode) debugPrint('TTS init error: $e');
     }
