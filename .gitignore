@@ -1,3 +1,9 @@
+# Claude AI
+.claude/
+
+# Jupyter
+.ipynb_checkpoints/
+
 # Miscellaneous
 *.class
 *.log
