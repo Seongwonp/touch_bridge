@@ -11,6 +11,8 @@ void main() async {
   } catch (_) {
     // .env 파일이 없거나 로드 실패해도 앱 실행 (API 기능은 제한됨)
   }
+  // 저장된 설정 먼저 불러오기 — TtsService 초기화 전에 완료해야 함
+  await AccessibilitySettings.instance.load();
   runApp(const TouchBridgeApp());
 }
 

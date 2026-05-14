@@ -16,9 +16,10 @@ class TtsService {
 
   Future<void> _initTts() async {
     try {
+      final settings = AccessibilitySettings.instance;
       await _tts.setLanguage('ko-KR');
-      await _tts.setSpeechRate(0.5); // UI 기본값 1.0x와 일치 (1.0 / 2.0 = 0.5)
-      await _tts.setVolume(1.0);
+      await _tts.setSpeechRate((settings.ttsSpeed / 2.0).clamp(0.1, 1.0));
+      await _tts.setVolume(settings.ttsVolume.clamp(0.0, 1.0));
       await _tts.setPitch(1.0);
     } catch (e) {
       if (kDebugMode) debugPrint('TTS init error: $e');
