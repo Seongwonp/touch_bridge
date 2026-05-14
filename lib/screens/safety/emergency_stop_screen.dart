@@ -50,12 +50,16 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   }
 
   Future<void> _initSpeech() async {
+    // macOS에서는 speech_to_text가 불안정하므로 건너뜀
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      setState(() => _speechEnabled = false);
+      return;
+    }
     try {
       _speechEnabled = await _speech.initialize(
         onStatus: (status) {
           if (status == 'notListening' || status == 'done') {
             if (mounted && _secondsLeft > 0) {
-              // Keep listening as long as the timer is running
               _startListening();
             }
           }
@@ -63,22 +67,18 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
         onError: (errorNotification) {
           if (mounted) {
             _speak('음성 인식 오류가 발생했습니다: ${errorNotification.errorMsg}');
-            setState(() {
-              _speechEnabled = false; // 오류 발생 시 음성 인식 비활성화
-            });
+            setState(() => _speechEnabled = false);
           }
         },
       );
       if (_speechEnabled) {
         _startListening();
       } else {
-        _speak('음성 인식 기능을 사용할 수 없습니다. 마이크 권한을 확인해주세요.');
+        _speak('음성 인식을 사용할 수 없습니다. 버튼을 길게 눌러 중단하세요.');
       }
     } catch (e) {
-      _speak('음성 인식 초기화 중 오류가 발생했습니다: $e');
-      setState(() {
-        _speechEnabled = false;
-      });
+      if (kDebugMode) debugPrint('EmergencyStop speech init error: $e');
+      if (mounted) setState(() => _speechEnabled = false);
     }
   }
 

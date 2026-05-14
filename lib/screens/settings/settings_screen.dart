@@ -12,8 +12,8 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final TtsService _tts = TtsService();
-  double _speed = 1.2;
-  double _volume = 85;
+  double _speed = 1.0;
+  double _volume = 1.0;
   bool _guardianMode = true;
   late bool _voiceGuidanceEnabled;
   late bool _largeTextEnabled;
@@ -104,19 +104,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         display: '${_speed.toStringAsFixed(1)}x',
                         onChanged: (v) {
                           setState(() => _speed = v);
-                          _announce('음성 안내 속도 ${_speed.toStringAsFixed(1)}배속');
+                          TtsService().setSpeechRate(v);
+                          _announce('음성 안내 속도 ${v.toStringAsFixed(1)}배속');
                         },
                       ),
                       const _Divider(),
                       _SliderRow(
                         label: '음량',
                         value: _volume,
-                        min: 0,
-                        max: 100,
-                        display: '${_volume.round()}%',
+                        min: 0.0,
+                        max: 1.0,
+                        display: '${(_volume * 100).round()}%',
                         onChanged: (v) {
                           setState(() => _volume = v);
-                          _announce('음성 안내 음량 ${_volume.round()}%');
+                          TtsService().setVolume(v);
+                          _announce('음성 안내 음량 ${(v * 100).round()}퍼센트');
                         },
                       ),
                     ],
@@ -484,42 +486,48 @@ class _SwitchRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
+    return Semantics(
+      label: '$title. $subtitle. 현재 ${value ? "켜짐" : "꺼짐"}.',
+      button: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    color: Color(0xFF888888),
-                    fontSize: 13,
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      color: Color(0xFF888888),
+                      fontSize: 13,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          Switch(
-            value: value,
-            onChanged: onChanged,
-            activeThumbColor: Colors.black,
-            activeTrackColor: const Color(0xFFFFEB00),
-            inactiveThumbColor: const Color(0xFF555555),
-            inactiveTrackColor: const Color(0xFF2A2A2A),
-          ),
-        ],
+            ExcludeSemantics(
+              child: Switch(
+                value: value,
+                onChanged: onChanged,
+                activeThumbColor: Colors.black,
+                activeTrackColor: const Color(0xFFFFEB00),
+                inactiveThumbColor: const Color(0xFF555555),
+                inactiveTrackColor: const Color(0xFF2A2A2A),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
