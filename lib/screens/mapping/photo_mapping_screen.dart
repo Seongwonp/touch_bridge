@@ -12,7 +12,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/tts_service.dart';
 
 class PhotoMappingScreen extends StatefulWidget {
-  const PhotoMappingScreen({super.key});
+  const PhotoMappingScreen({super.key, this.deviceId, this.deviceName});
+
+  final String? deviceId;
+  final String? deviceName;
 
   @override
   State<PhotoMappingScreen> createState() => _PhotoMappingScreenState();
@@ -29,8 +32,8 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
   bool _isAnalyzing = false;
   String _statusMessage = '카메라 버튼을 눌러 기기를 촬영하세요.';
 
-  static const _prefKeyGrid = 'mapping_grid';
-  static const _prefKeyDevice = 'mapping_device_type';
+  String get _prefKeyGrid => 'mapping_grid_${widget.deviceId ?? 'global'}';
+  String get _prefKeyDevice => 'mapping_device_type_${widget.deviceId ?? 'global'}';
 
   @override
   void initState() {
@@ -54,10 +57,12 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
               ? '저장된 $deviceType 매핑을 불러왔습니다.'
               : '저장된 매핑을 불러왔습니다.';
         });
-        _tts.speak('버튼 매핑 화면입니다. ${deviceType.isNotEmpty ? '저장된 $deviceType 매핑이 있습니다.' : '카메라 버튼을 눌러 가전기기를 촬영하면 AI가 버튼을 자동으로 인식합니다.'}');
+        final prefix = widget.deviceName != null ? '${widget.deviceName} ' : '';
+        _tts.speak('${prefix}버튼 매핑 화면입니다. ${deviceType.isNotEmpty ? '저장된 $deviceType 매핑이 있습니다.' : '카메라 버튼을 눌러 가전기기를 촬영하면 AI가 버튼을 자동으로 인식합니다.'}');
       }
     } else {
-      _tts.speak('버튼 매핑 화면입니다. 카메라 버튼을 눌러 가전기기를 촬영하면 AI가 버튼을 자동으로 인식합니다.');
+      final prefix = widget.deviceName != null ? '${widget.deviceName} ' : '';
+      _tts.speak('${prefix}버튼 매핑 화면입니다. 카메라 버튼을 눌러 가전기기를 촬영하면 AI가 버튼을 자동으로 인식합니다.');
     }
   }
 
