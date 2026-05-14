@@ -1,147 +1,212 @@
 # Touch Bridge
 
-"Touch Bridge"는 저시력자 및 시각 장애인을 위해 스마트 기기를 음성으로 제어하고, 물리적 버튼을 대신 눌러주는 하드웨어 기기와 연동되는 Flutter 기반의 모바일 애플리케이션입니다. 이 앱은 Google Speech-to-Text (STT)와 Google AI Pro (Gemini API)를 활용하여 사용자의 음성 명령을 정확하게 인식하고 해석하며, 높은 접근성을 제공하도록 설계되었습니다.
+**시각장애인을 위한 가전 터치패드 자동 입력 시스템**
+
+> 2026 한이음 드림업 공모전 — 3팀 멜론머스크 (차아미 · 박성원 · 서예솔)  
+> 앱 담당: 박성원 | 기간: 2026.04 ~ 2026.10
+
+---
+
+## 프로젝트 개요
+
+전자레인지·세탁기·키오스크 등 터치패널 기반 가전이 시각장애인에게 접근하기 어렵다는 문제를 해결합니다.  
+가전 터치패드 위에 부착하는 **IoT 하드웨어 장치**가 스마트폰 앱·음성 명령을 받아 **물리적으로 버튼을 대신 눌러주는** 시스템입니다.
+
+---
 
 ## 주요 기능
 
-*   **음성 명령 제어:** Google STT를 통해 사용자의 음성을 텍스트로 변환하고, Google AI Pro (Gemini)를 통해 명령의 의도를 파악하여 스마트 기기를 제어합니다.
-*   **시각 장애인 접근성 최적화:**
-    *   **TTS (Text-to-Speech):** 모든 주요 상호작용, 상태 변경, 오류 발생 시 명확하고 상세한 음성 피드백을 제공합니다.
-    *   **Semantics (시맨틱 라벨):** 스크린 리더(TalkBack, VoiceOver) 사용자를 위해 모든 UI 요소에 의미 있는 설명을 추가했습니다.
-    *   **높은 대비 디자인:** 어두운 테마와 밝은 강조 색상(노란색)을 사용하여 시인성을 극대화했습니다.
-    *   **햅틱 피드백:** 중요한 상호작용에 햅틱 피드백을 제공하여 비시각적 피드백을 강화합니다.
-*   **스마트 기기 관리:** 등록된 스마트 기기 목록을 확인하고, 각 기기의 상태를 모니터링합니다.
-*   **수동 제어:** 키패드 인터페이스를 통해 기기를 수동으로 조작할 수 있습니다.
-*   **비상 정지 시스템:** 음성 명령 또는 길게 누르기 제스처를 통해 작동 중인 기기를 즉시 안전하게 중단시킬 수 있습니다.
-*   **기기 연결:** QR 코드 스캔 등 다양한 방법을 통해 새로운 스마트 기기를 앱에 연결합니다.
-*   **사진 매핑:** 기기의 물리적 버튼 위치를 사진 기반의 3x3 그리드 인터페이스를 통해 매핑합니다.
-*   **설정:** 음성 안내 속도 및 음량 조절, 가디언 모드(보호자 알림) 설정, 비상 연락처 관리 등 앱의 동작을 사용자 맞춤형으로 설정합니다.
+### 음성 명령 (STT + Gemini AI)
+- `speech_to_text`로 음성 수집 → Gemini 2.5 Flash로 의도 파싱
+- 지원 명령: 기기 작동(초 단위), 비상 정지, 화면 이동
+- 5초 침묵 감지 자동 타임아웃 + 재시도 안내
+
+### TTS 음성 안내
+- 모든 화면 진입·버튼 탭·완료 시 한국어 음성 피드백
+- 속도·음량 설정 저장 (SharedPreferences)
+
+### 비상 정지
+- 버튼 3초 홀드 또는 음성 "멈춰"/"정지"/"그만"
+- 카운트다운 중 5초 이하 → 매초 음성 안내
+- 완료 시 기기명 포함 TTS
+
+### 이중 탭 확인 패턴
+- 중요한 액션은 탭 → 안내 → 4초 내 재탭으로 실행 (오작동 방지)
+
+### Gemini Vision 버튼 자동 매핑
+- 가전기기 사진 촬영 → Gemini Vision API로 버튼 위치 인식
+- 3×3 그리드 자동 채움 → 수동 편집 가능
+
+### 설정 영속화
+- TTS 속도·음량, 접근성 옵션, 비상 연락처 → 앱 재시작 후에도 유지
+
+---
 
 ## 기술 스택
 
-*   **프레임워크:** Flutter
-*   **언어:** Dart
-*   **음성 인식 (STT):** `speech_to_text` 패키지 (Google Speech-to-Text 기반)
-*   **자연어 이해 (NLU):** `google_generative_ai` 패키지 (Google AI Pro / Gemini API)
-*   **텍스트 음성 변환 (TTS):** `flutter_tts` 패키지
-*   **환경 변수 관리:** `flutter_dotenv`
-*   **오디오 녹음 (레거시):** `record` 패키지 (현재는 `speech_to_text`로 대체됨)
-*   **HTTP 통신:** `http` 패키지
+| 분류 | 패키지 | 버전 |
+|------|--------|------|
+| 프레임워크 | Flutter / Dart | 3.x / 3.x |
+| 음성 인식 | `speech_to_text` | ^7.3.0 |
+| TTS | `flutter_tts` | ^4.2.5 |
+| AI (NLU + Vision) | `google_generative_ai` | ^0.2.3 |
+| 사진 선택 | `image_picker` | ^1.1.2 |
+| 설정 저장 | `shared_preferences` | ^2.3.2 |
+| 환경 변수 | `flutter_dotenv` | ^5.2.1 |
 
-## 프로젝트 설정 및 실행
+---
 
-### 1. 환경 변수 설정
+## 플랫폼 지원
 
-Google AI Pro (Gemini) API 키를 `.env` 파일에 설정해야 합니다. 프로젝트 루트 디렉토리에 `.env` 파일을 생성하고 다음 내용을 추가합니다.
+| 기능 | Android | iOS | macOS 앱 | Chrome (웹) |
+|------|:-------:|:---:|:--------:|:-----------:|
+| TTS 음성 안내 | ✅ | ✅ | ❌ * | ✅ |
+| STT 음성 명령 | ✅ | ✅ | ❌ * | ✅ |
+| Gemini AI | ✅ | ✅ | ✅ | ✅ |
+| 사진 매핑 | ✅ | ✅ | ✅ (갤러리) | ✅ |
+| 설정 영속화 | ✅ | ✅ | ✅ | ✅ |
 
-```dotenv
-GOOGLE_AI_PRO_API_KEY=YOUR_GOOGLE_AI_PRO_API_KEY
+> \* macOS 26 (Tahoe) beta OS 버그로 TTS/STT 비활성화. 정식 출시 후 재확인 예정.
+
+---
+
+## 환경 설정
+
+프로젝트 루트에 `.env` 파일 생성 (git 제외):
+
+```env
+GOOGLE_AI_PRO_API_KEY=여기에_실제_키_입력
 GEMINI_MODEL=gemini-2.5-flash
 ```
 
-`YOUR_GOOGLE_AI_PRO_API_KEY`를 Google Cloud Console에서 발급받은 실제 API 키로 대체하세요.
-`GEMINI_MODEL`은 필요 시 `gemini-2.5-pro` 등으로 바꿔 사용할 수 있습니다.
+- API 키는 [Google AI Studio](https://aistudio.google.com/)에서 발급
+- Vision 기능(사진 매핑)도 동일 키 사용 (별도 키 불필요)
+- 고품질 분석이 필요하면 `GEMINI_MODEL=gemini-2.5-pro`
 
-## 접근성 개선 문서
+---
 
-- `docs/accessibility-improvements-2026-05-04.md`
+## 실행 방법
 
-### 2. 플랫폼별 권한 설정
+```bash
+# 의존성 설치
+flutter pub get
 
-#### Android
+# Chrome에서 실행 (개발·테스트 권장)
+flutter run -d chrome
 
-`android/app/src/main/AndroidManifest.xml` 파일을 열고, `<manifest>` 태그 바로 아래에 다음 권한이 포함되어 있는지 확인합니다.
+# Android
+flutter run -d android
 
+# iOS
+flutter run -d ios
+```
+
+> Chrome 첫 실행 시 마이크 권한 팝업이 뜹니다. 허용해야 음성 명령이 동작합니다.  
+> TTS는 첫 사용자 탭 이후부터 작동합니다 (Chrome 자동재생 정책).
+
+---
+
+## 플랫폼별 권한 설정
+
+### Android (`android/app/src/main/AndroidManifest.xml`)
 ```xml
 <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 <uses-permission android:name="android.permission.INTERNET"/>
+<uses-permission android:name="android.permission.CAMERA"/>
+<uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
 ```
 
-#### iOS
-
-`ios/Runner/Info.plist` 파일을 열고, `<dict>` 태그 안에 다음 키-값 쌍이 포함되어 있는지 확인합니다.
-
+### iOS (`ios/Runner/Info.plist`)
 ```xml
 <key>NSMicrophoneUsageDescription</key>
 <string>음성 명령을 듣기 위해 마이크 접근이 필요합니다.</string>
 <key>NSSpeechRecognitionUsageDescription</key>
 <string>음성 명령을 텍스트로 인식하기 위해 권한이 필요합니다.</string>
+<key>NSCameraUsageDescription</key>
+<string>가전기기 버튼을 AI로 인식하기 위해 카메라 접근이 필요합니다.</string>
+<key>NSPhotoLibraryUsageDescription</key>
+<string>기기 사진을 선택하여 버튼을 매핑하기 위해 사진 라이브러리 접근이 필요합니다.</string>
 ```
 
-### 3. 종속성 설치
-
-프로젝트 루트 디렉토리에서 다음 명령어를 실행하여 필요한 모든 Flutter 패키지를 설치합니다.
-
-```bash
-flutter pub get
-```
-
-### 4. 앱 실행
-
-다음 명령어를 사용하여 앱을 실행합니다.
-
-```bash
-flutter run
-```
-
-## 접근성 가이드라인 (시각 장애인 사용자용)
-
-이 애플리케이션은 시각 장애인 사용자를 위해 특별히 설계되었습니다. 다음 기능을 활용하여 앱을 더욱 효과적으로 사용할 수 있습니다.
-
-*   **스크린 리더 사용:** Android의 TalkBack 또는 iOS의 VoiceOver를 활성화하여 앱의 모든 요소에 대한 음성 설명을 들을 수 있습니다.
-*   **음성 피드백:** 앱은 중요한 동작, 상태 변경 및 오류에 대해 음성으로 안내합니다.
-*   **두 번 탭 상호작용:** 일부 내비게이션 및 제어 요소는 의도치 않은 활성화를 방지하기 위해 두 번 탭하여 활성화해야 합니다. 첫 번째 탭 시 음성 안내가 제공됩니다.
-*   **높은 대비:** 앱의 어두운 테마와 밝은 노란색 강조 색상은 시인성을 높여줍니다.
-
-## 개발 가이드
-
-### 코드 구조
-
-프로젝트는 다음과 같은 논리적 구조를 따릅니다.
-
-*   `lib/main.dart`: 앱의 진입점 및 초기 설정.
-*   `lib/screens/`: 각 화면별 UI 및 로직.
-    *   `home/`: 메인 기기 목록 및 제어 모드 선택.
-    *   `connection/`: 기기 연결 방법 (QR 스캔 등).
-    *   `control/`: 수동 기기 제어 (키패드, 타이머).
-    *   `safety/`: 비상 정지 및 완료 화면.
-    *   `voice/`: 음성 명령 처리 (STT, Gemini 연동).
-    *   `mapping/`: 사진 기반 버튼 매핑.
-    *   `settings/`: 앱 설정.
-*   `lib/services/`: TTS, 타이머 등 앱 전반에 사용되는 서비스 로직.
-*   `lib/theme/`: 앱의 디자인 테마 (색상, 텍스트 스타일).
-*   `lib/widgets/`: 재사용 가능한 UI 위젯.
-
-### Google AI Pro (Gemini) 프롬프트
-
-`VoiceListeningScreen`에서 Gemini API를 호출할 때 사용되는 프롬프트는 사용자의 음성 명령을 JSON 형식으로 구조화된 명령으로 변환하도록 지시합니다. 새로운 명령이나 기기 제어 로직을 추가하려면 이 프롬프트를 업데이트해야 합니다.
-
-```
-You are an AI assistant that controls smart home devices.
-Analyze the user's voice command and respond in a JSON format.
-The "action" field must be one of: EMERGENCY_STOP, NAVIGATE, MICROWAVE_CONTROL, NONE.
-If the "action" is "NAVIGATE", include a "target" field with a value of: connection, mapping, settings.
-If the "action" is "MICROWAVE_CONTROL", include a "commands" field as an array, with values like: "start", "stop", "set_time_30s", "set_time_1m", "set_time_2m".
-If you cannot understand the command, set "action" to "NONE" and include a "message" field with an appropriate response for the user.
-Your response must be a JSON object. Do not include any other explanations or text outside the JSON.
-
-User's command: "$text"
-```
-
-### 기여
-
-이 프로젝트에 기여하고 싶다면, 언제든지 이슈를 제기하거나 Pull Request를 생성해주세요.
-
-## 라이선스
-
-[프로젝트 라이선스 정보]
+### macOS (`macos/Runner/Info.plist` + entitlements)
+- Info.plist: NSMicrophoneUsageDescription, NSSpeechRecognitionUsageDescription, NSCameraUsageDescription, NSPhotoLibraryUsageDescription
+- Entitlements: audio-input, speech-recognition, photos-library, camera, network.client
 
 ---
 
-**개발자 참고 사항:**
+## 프로젝트 구조
 
-*   **테스트:** 실제 기기에서 TalkBack/VoiceOver를 활성화하여 모든 접근성 기능이 올바르게 작동하는지 철저히 테스트하는 것이 중요합니다.
-*   **Gemini API 응답:** Gemini API의 응답 형식은 프롬프트에 따라 달라질 수 있으므로, `_sendTextToGemini` 및 `_handleCommand` 함수 내의 JSON 파싱 로직이 실제 Gemini 응답과 일치하는지 확인해야 합니다.
-*   **하드웨어 연동:** 현재는 디자인 및 음성 인식까지만 구현되었으며, 하드웨어 기기와의 실제 연동 API는 추후 개발될 예정입니다.
-*   **`TtsService`:** `TtsService`는 `flutter_tts`를 래핑한 서비스로, 앱 전반에 걸쳐 일관된 TTS 기능을 제공합니다.
-*   **`ResponsiveScale`:** `ResponsiveScale` 위젯은 다양한 화면 크기에 대응하기 위한 유틸리티입니다.
+```
+lib/
+├── main.dart                              # 앱 진입점, dotenv·설정 로드
+├── screens/
+│   ├── main_navigation_screen.dart        # 4탭 하단 내비게이션
+│   ├── home/home_screen.dart              # 기기 카드 스와이프 (PageView)
+│   ├── control/remote_control_screen.dart # 타이머 제어 키패드
+│   ├── voice/voice_listening_screen.dart  # STT + Gemini AI 음성 명령
+│   ├── safety/
+│   │   ├── emergency_stop_screen.dart     # 비상 정지 (3초 홀드 / 음성)
+│   │   └── stop_done_screen.dart          # 정지 완료 확인
+│   ├── settings/settings_screen.dart      # 접근성·연락처 설정
+│   ├── connection/
+│   │   ├── device_connect_screen.dart     # 기기 연결 (QR/BLE/NFC)
+│   │   └── qr_scan_screen.dart            # QR 스캔
+│   └── mapping/photo_mapping_screen.dart  # Gemini Vision 버튼 매핑
+├── services/
+│   ├── tts_service.dart                   # TTS Singleton
+│   ├── accessibility_settings.dart        # 설정 Singleton + SharedPreferences
+│   └── timer_service.dart                 # 카운트다운 타이머
+├── theme/                                 # 고대비 다크 테마
+└── widgets/                               # 재사용 위젯
+```
+
+---
+
+## Gemini AI 명령 형식
+
+```json
+{
+  "action": "MICROWAVE_CONTROL | EMERGENCY_STOP | NAVIGATE | NONE",
+  "device": "전자레인지",
+  "seconds": 30,
+  "commands": ["start"],
+  "target": "connection | mapping | settings",
+  "message": "알겠어요. 전자레인지 30초 돌릴게요."
+}
+```
+
+---
+
+## 하드웨어 연동 (예정)
+
+```
+ESP32 BLE GATT Server
+Service UUID : 0000FFE0-0000-1000-8000-00805F9B34FB
+Characteristic: 0000FFE1-...
+
+명령 포맷:
+{ "action": "press", "x": 0, "y": 1, "deviceId": "microwave_1" }
+```
+
+---
+
+## 개발 현황
+
+- [x] 4탭 내비게이션 + 이중 탭 확인 패턴
+- [x] TTS Singleton (설정 영속화)
+- [x] STT + Gemini AI 음성 명령 (침묵 감지 포함)
+- [x] 비상 정지 (홀드 / 음성 / 카운트다운)
+- [x] Gemini Vision 버튼 자동 매핑
+- [x] SharedPreferences 설정 저장
+- [x] 웹(Chrome) 지원
+- [x] Android·iOS·macOS 권한 설정
+- [ ] BLE 실제 연동 (하드웨어 완성 후)
+- [ ] QR 스캔 (`mobile_scanner` 패키지 필요)
+- [ ] 버튼 매핑 데이터 영속화
+- [ ] 기기 목록 동적 관리
+
+---
+
+## 작업 로그
+
+자세한 변경 이력은 [`docs/WORK_LOG.md`](docs/WORK_LOG.md)를 참고하세요.
