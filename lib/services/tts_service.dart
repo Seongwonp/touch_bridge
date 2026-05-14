@@ -24,7 +24,7 @@ class TtsService {
       if (kIsWeb) {
         // Chrome loads voices asynchronously; delay then trigger load
         await Future.delayed(const Duration(milliseconds: 500));
-        await _tts.getVoices();
+        await _tts.getVoices;
         await _tts.setLanguage('ko-KR');
       } else {
         await _tts.setLanguage('ko-KR');
