@@ -46,9 +46,11 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   ];
 
   Timer? _recordingTimeoutTimer;
+  Timer? _silenceTimer;
   Timer? _actionResetTimer;
   bool _micArmed = false;
-  final Duration _maxRecordingDuration = const Duration(seconds: 8); // 최대 녹음 시간
+  final Duration _maxRecordingDuration = const Duration(seconds: 8);
+  static const _silenceTimeout = Duration(seconds: 5);
 
   @override
   void initState() {
@@ -72,7 +74,13 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       return;
     }
     _speechEnabled = await _speech.initialize(
-      onStatus: (status) {},
+      onStatus: (status) {
+        if (!mounted) return;
+        // Chrome Web Speech API calls 'done' when it stops naturally (silence)
+        if ((status == 'done' || status == 'notListening') && _isRecording) {
+          _onSttNaturalEnd();
+        }
+      },
       onError: (errorNotification) {
         if (mounted) {
           _speak('음성 인식 오류가 발생했습니다: ${errorNotification.errorMsg}');
@@ -98,6 +106,45 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
   Future<void> _speak(String message) async {
     await _tts.speak(message);
+  }
+
+  void _resetSilenceTimer() {
+    _silenceTimer?.cancel();
+    _silenceTimer = Timer(_silenceTimeout, () {
+      if (!mounted || !_isRecording) return;
+      if (_lastWords.isEmpty) {
+        _speech.stop();
+        _recordingTimeoutTimer?.cancel();
+        _stopWaveAnimation();
+        setState(() {
+          _isRecording = false;
+          _isProcessing = false;
+          _statusMessage = '아무 말씀도 인식되지 않았습니다.';
+        });
+        _speak('아무 말씀도 인식되지 않았습니다. 버튼을 눌러 다시 시도해주세요.');
+      } else {
+        // 말이 있으면 바로 처리
+        _toggleRecording();
+      }
+    });
+  }
+
+  void _onSttNaturalEnd() {
+    if (!_isRecording) return;
+    _silenceTimer?.cancel();
+    _recordingTimeoutTimer?.cancel();
+    _stopWaveAnimation();
+    setState(() {
+      _isRecording = false;
+      _isProcessing = _lastWords.isNotEmpty;
+      _statusMessage = _lastWords.isNotEmpty ? '명령 분석 중...' : '아무 말씀도 인식되지 않았습니다.';
+    });
+    if (_lastWords.isNotEmpty) {
+      _speak('녹음이 완료되었습니다. 명령을 분석 중입니다.');
+      _sendTextToGemini(_lastWords);
+    } else {
+      _speak('아무 말씀도 인식되지 않았습니다. 버튼을 눌러 다시 시도해주세요.');
+    }
   }
 
   Future<void> _goBackWithSwipe() async {
@@ -182,20 +229,21 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         });
       }
     } else {
-      _lastWords = ''; // 새로운 녹음 시작 시 초기화
+      _lastWords = '';
       await _speech.listen(
         onResult: (result) {
           if (mounted) {
             setState(() {
               _lastWords = result.recognizedWords;
-              _recognizedText = _lastWords; // 실시간 인식 결과 업데이트
+              _recognizedText = _lastWords;
             });
+            if (_lastWords.isNotEmpty) _resetSilenceTimer();
           }
         },
         localeId: 'ko_KR',
         listenOptions: SpeechListenOptions(
           listenMode: ListenMode.dictation,
-          partialResults: true, // 부분 결과도 받아서 실시간 피드백 가능
+          partialResults: true,
         ),
       );
 
@@ -207,11 +255,12 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         _startWaveAnimation();
         HapticFeedback.mediumImpact();
         _speak('녹음을 시작합니다. 명령을 말씀해주세요.');
+        _resetSilenceTimer(); // 5초 침묵 감지 시작
 
         _recordingTimeoutTimer = Timer(_maxRecordingDuration, () {
           if (_isRecording) {
             _speak('녹음 시간이 초과되었습니다. 명령을 분석 중입니다.');
-            _toggleRecording(); // 자동으로 녹음 종료
+            _toggleRecording();
           }
         });
       } else {
@@ -439,6 +488,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   void dispose() {
     _waveTimer?.cancel();
     _recordingTimeoutTimer?.cancel();
+    _silenceTimer?.cancel();
     _actionResetTimer?.cancel();
     _speech.stop(); // SpeechToText 리소스 해제
     _speech.cancel();
