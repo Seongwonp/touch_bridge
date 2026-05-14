@@ -65,15 +65,6 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   }
 
   Future<void> _initSpeech() async {
-    if (defaultTargetPlatform == TargetPlatform.macOS) {
-      setState(() {
-        _speechEnabled = false;
-        _statusMessage = 'macOS에서는 음성 인식 기능이 현재 비활성화되어 있습니다.';
-      });
-      _speak(_statusMessage);
-      return;
-    }
-
     _speechEnabled = await _speech.initialize(
       onStatus: (status) {
         // SpeechToText의 상태 변화를 감지 (선택 사항)
