@@ -65,11 +65,13 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   }
 
   Future<void> _initSpeech() async {
+    // macOS 26 beta: SFSpeechRecognizer triggers TCC abort (OS bug)
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      if (mounted) setState(() => _statusMessage = 'macOS에서는 음성 인식이 지원되지 않습니다.');
+      return;
+    }
     _speechEnabled = await _speech.initialize(
-      onStatus: (status) {
-        // SpeechToText의 상태 변화를 감지 (선택 사항)
-        // print('SpeechToText status: $status');
-      },
+      onStatus: (status) {},
       onError: (errorNotification) {
         if (mounted) {
           _speak('음성 인식 오류가 발생했습니다: ${errorNotification.errorMsg}');
