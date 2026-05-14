@@ -28,8 +28,10 @@ class TtsService {
 
   Future<void> speak(String text) async {
     if (!AccessibilitySettings.instance.voiceGuidanceEnabled) return;
+    // macOS 26 beta: AVSpeechSynthesisVoice triggers TCC abort (OS bug)
+    if (defaultTargetPlatform == TargetPlatform.macOS) return;
     try {
-      await _init; // 초기화 완료 대기
+      await _init;
       await _tts.stop();
       await _tts.speak(text);
     } catch (e) {
