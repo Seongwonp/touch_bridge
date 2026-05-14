@@ -247,21 +247,30 @@ class PhotoMappingScreen extends StatelessWidget {
                             child: Stack(
                               fit: StackFit.expand,
                               children: [
-                                Semantics( // 배경 이미지 Semantics 추가
-                                  label: '기기 버튼 매핑을 위한 배경 사진',
+                                Semantics(
+                                  label: '기기 버튼 매핑을 위한 배경 사진 (카메라로 촬영 필요)',
                                   image: true,
-                                  child: Image.network(
-                                    'https://lh3.googleusercontent.com/aida-public/AB6AXuBnqtd9QhBxdz_JPVKIqregy0_eQ3-Kmm7GhJ8UoFacsWE5PEO-nYQkiuURtdw1a2Cs-HJLoqEIedm0jvg30rAPgKdOP31oZW5vxfMBJbKgF91uW3lKKboV4zYLwECV2iUnU_UEVKndaTiSpa38QlC_tjoqt7_M9_T9vRF0bU4s2DcqnJHCe6dAFIbehXzzPXMcudEPtJGpt2aY-AFAF4Mn3vw5n7xiaxpHljgqh7f0myzhl1b-copBdl6DRlJsKMDkY-1Pm1K4y8ZO',
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) =>
-                                        Container(
-                                          color: const Color(0xFF0D1C32),
-                                          child: const Icon(
-                                            Icons.image,
-                                            size: 96,
-                                            color: Color(0x55D6E3FF),
+                                  child: Container(
+                                    color: const Color(0xFF0D1C32),
+                                    child: const Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.photo_camera_rounded,
+                                          size: 64,
+                                          color: Color(0x66FDE047),
+                                        ),
+                                        SizedBox(height: 12),
+                                        Text(
+                                          '카메라로 기기를 촬영하세요',
+                                          style: TextStyle(
+                                            color: Color(0x99FDE047),
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
                                           ),
                                         ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                                 Container(color: const Color(0x66041329)),
