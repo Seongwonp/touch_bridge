@@ -8,7 +8,9 @@ import '../../widgets/responsive_scale.dart';
 import '../safety/emergency_stop_screen.dart';
 
 class RemoteControlScreen extends StatefulWidget {
-  const RemoteControlScreen({super.key});
+  const RemoteControlScreen({super.key, this.deviceName = '스마트 기기'});
+
+  final String deviceName;
 
   @override
   State<RemoteControlScreen> createState() => _RemoteControlScreenState();
@@ -28,7 +30,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   @override
   void initState() {
     super.initState();
-    _speak('기기 제어 화면입니다. 숫자 버튼은 한 번 누르면 선택되고 한 번 더 누르면 입력됩니다. 이전 화면으로 돌아가려면 화면을 왼쪽에서 오른쪽으로 쓸어주세요.');
+    _speak('${widget.deviceName} 제어 화면입니다. 숫자 버튼은 한 번 누르면 선택되고 한 번 더 누르면 입력됩니다. 이전 화면으로 돌아가려면 화면을 왼쪽에서 오른쪽으로 쓸어주세요.');
   }
 
   Future<void> _speak(String message) async {
@@ -329,13 +331,10 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                       ),
                     ),
                     SizedBox(height: ResponsiveScale.v(context, 8)),
-                    Semantics( // 연결 상태 Semantics 추가
-                      label: '스마트 전자레인지 연결됨',
+                    Semantics(
+                      label: '${widget.deviceName} 연결됨',
                       child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 5,
-                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                         decoration: BoxDecoration(
                           color: const Color(0xFF111111),
                           borderRadius: BorderRadius.circular(8),
@@ -347,19 +346,12 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                             Container(
                               width: 7,
                               height: 7,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF00FF88),
-                                shape: BoxShape.circle,
-                              ),
+                              decoration: const BoxDecoration(color: Color(0xFF00FF88), shape: BoxShape.circle),
                             ),
-                            SizedBox(width: 7),
+                            const SizedBox(width: 7),
                             Text(
-                              '스마트 전자레인지 연결됨',
-                              style: TextStyle(
-                                color: Color(0xFF00FF88),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
+                              '${widget.deviceName} 연결됨',
+                              style: const TextStyle(color: Color(0xFF00FF88), fontSize: 12, fontWeight: FontWeight.w700),
                             ),
                           ],
                         ),
