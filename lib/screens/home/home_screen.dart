@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/tts_service.dart';
 
 import '../control/remote_control_screen.dart';
+import '../mapping/photo_mapping_screen.dart';
 import '../voice/voice_listening_screen.dart';
 
 class DeviceInfo {
@@ -218,6 +219,99 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _showDeviceOptions(int index) {
+    final device = _devices[index];
+    _tts.speak('${device.name} 기기 옵션입니다. 수정 또는 삭제를 선택하세요.');
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF111111),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border(top: BorderSide(color: Color(0xFF2A2A2A))),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: const Color(0xFF444444), borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 20),
+            Text(device.name, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 20),
+            ListTile(
+              leading: const Icon(Icons.edit_rounded, color: Color(0xFFFFEB00)),
+              title: const Text('이름 수정', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _showEditNameDialog(index);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.grid_view_rounded, color: Color(0xFFFFEB00)),
+              title: const Text('버튼 매핑', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+              subtitle: const Text('AI로 버튼 위치 설정', style: TextStyle(color: Color(0xFF888888), fontSize: 12)),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (_) => PhotoMappingScreen(deviceId: device.name, deviceName: device.name),
+                ));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_rounded, color: Color(0xFFFF3B30)),
+              title: const Text('기기 삭제', style: TextStyle(color: Color(0xFFFF3B30), fontWeight: FontWeight.w700)),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _showDeleteDialog(index);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditNameDialog(int index) {
+    final device = _devices[index];
+    final ctrl = TextEditingController(text: device.name);
+    _tts.speak('이름 수정 화면입니다. 새 이름을 입력하세요.');
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('이름 수정', style: TextStyle(color: Color(0xFFFFEB00), fontWeight: FontWeight.w800)),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          style: const TextStyle(color: Colors.white, fontSize: 16),
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: const Color(0xFF0D1C32),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF333355))),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFFEB00), width: 2)),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('취소', style: TextStyle(color: Color(0xFF888888)))),
+          ElevatedButton(
+            onPressed: () async {
+              final name = ctrl.text.trim();
+              if (name.isEmpty) return;
+              Navigator.of(ctx).pop();
+              setState(() => _devices[index] = DeviceInfo(name: name, status: device.status, iconCodePoint: device.iconCodePoint));
+              await _saveDevices();
+              _tts.speak('$name 으로 이름이 변경되었습니다.');
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFEB00), foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+            child: const Text('저장', style: TextStyle(fontWeight: FontWeight.w800)),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showDeleteDialog(int index) {
     final device = _devices[index];
     _tts.speak('${device.name} 기기를 삭제하려면 삭제 버튼을 누르세요.');
@@ -229,10 +323,7 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('기기 삭제', style: TextStyle(color: Color(0xFFFF3B30), fontWeight: FontWeight.w800)),
         content: Text('${device.name}을(를) 삭제하시겠어요?', style: const TextStyle(color: Colors.white)),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('취소', style: TextStyle(color: Color(0xFF888888))),
-          ),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('취소', style: TextStyle(color: Color(0xFF888888)))),
           ElevatedButton(
             onPressed: () async {
               Navigator.of(ctx).pop();
@@ -245,11 +336,7 @@ class _HomeScreenState extends State<HomeScreen> {
               await _saveDevices();
               _tts.speak('${device.name} 기기가 삭제되었습니다.');
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF3B30),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF3B30), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
             child: const Text('삭제', style: TextStyle(fontWeight: FontWeight.w800)),
           ),
         ],
@@ -279,7 +366,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Navigator.of(ctx).pop();
           Navigator.of(context).push(
             MaterialPageRoute<void>(
-              builder: (_) => const RemoteControlScreen(),
+              builder: (_) => RemoteControlScreen(deviceName: device.name),
             ),
           );
         },
@@ -420,7 +507,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               button: true,
                               child: GestureDetector(
                                 onTap: () => _openDeviceControl(index),
-                                onLongPress: () => _showDeleteDialog(index),
+                                onLongPress: () => _showDeviceOptions(index),
                                 child: Container(
                                   padding: const EdgeInsets.all(28),
                                   decoration: BoxDecoration(
