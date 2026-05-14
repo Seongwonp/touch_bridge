@@ -199,7 +199,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
           }
         },
         localeId: 'ko_KR',
-        listenOptions: const SpeechListenOptions(
+        listenOptions: SpeechListenOptions(
           listenMode: ListenMode.dictation,
           partialResults: true, // 부분 결과도 받아서 실시간 피드백 가능
         ),
