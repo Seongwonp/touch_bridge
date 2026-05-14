@@ -189,7 +189,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       }
     } else {
       _lastWords = ''; // 새로운 녹음 시작 시 초기화
-      bool available = await _speech.listen(
+      await _speech.listen(
         onResult: (result) {
           if (mounted) {
             setState(() {
@@ -199,13 +199,13 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
           }
         },
         localeId: 'ko_KR',
-        listenOptions: SpeechListenOptions(
+        listenOptions: const SpeechListenOptions(
           listenMode: ListenMode.dictation,
           partialResults: true, // 부분 결과도 받아서 실시간 피드백 가능
         ),
       );
 
-      if (available) {
+      if (_speech.isListening) {
         setState(() {
           _isRecording = true;
           _statusMessage = '듣고 있습니다...';

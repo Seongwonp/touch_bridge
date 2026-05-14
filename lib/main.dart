@@ -6,7 +6,11 @@ import 'theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: ".env");
+  try {
+    await dotenv.load(fileName: ".env");
+  } catch (_) {
+    // .env 파일이 없거나 로드 실패해도 앱 실행 (API 기능은 제한됨)
+  }
   runApp(const TouchBridgeApp());
 }
 
