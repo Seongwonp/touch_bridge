@@ -1,8 +1,14 @@
+// TODO(hardware): BleService.scan() 결과로 _statusCard() 상태 동적 업데이트
+// TODO(hardware): 블루투스 연결 버튼 → BleService.connect() 호출
+// TODO(hardware): NFC 태그 → NFC 패키지로 ESP32 디바이스 ID 읽기
+// TODO(hardware): 수동 입력 → IP/MAC 주소 입력 다이얼로그 → BleService.connect()
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/app_colors.dart';
-import '../../services/tts_service.dart'; // TtsService 임포트
+import '../../services/tts_service.dart';
+import '../../services/ble_service.dart'; // TODO(hardware): BLE 연동 시 활성화
 import 'qr_scan_screen.dart';
 
 class DeviceConnectScreen extends StatelessWidget {
@@ -279,7 +285,11 @@ class DeviceConnectScreen extends StatelessWidget {
                       title: '블루투스 연결',
                       subtitle: '주변 기기 자동 검색 및 페어링',
                       highlighted: false,
-                      onTap: () => _showPlaceholder(context, '블루투스 연결'),
+                      onTap: () {
+        // TODO(hardware): BleService.instance.scan() 호출 → 결과 목록 BottomSheet 표시
+        // TODO(hardware): 선택 시 BleService.instance.connect(deviceId)
+        _showPlaceholder(context, '블루투스 연결');
+      },
                     ),
                     const SizedBox(height: 10),
                     Row(

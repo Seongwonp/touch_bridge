@@ -20,6 +20,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   int _currentDeviceIndex = 0;
 
+  // TODO(hardware): BleService 연결 후 실제 기기 목록으로 교체
+  // TODO(hardware): 기기 상태(status)는 BLE Notification으로 실시간 업데이트
+  // TODO(hardware): 기기 추가/삭제 → SharedPreferences에 저장
   final List<({String name, String status, IconData icon})> _devices = const [
     (name: '스마트 전자레인지', status: '작동 대기 중', icon: Icons.microwave_rounded),
     (name: '스마트 공기청정기', status: '공기 질 분석 중', icon: Icons.air_rounded),
