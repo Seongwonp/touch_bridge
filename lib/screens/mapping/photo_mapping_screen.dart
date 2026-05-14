@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/tts_service.dart';
 
@@ -28,10 +29,43 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
   bool _isAnalyzing = false;
   String _statusMessage = '카메라 버튼을 눌러 기기를 촬영하세요.';
 
+  static const _prefKeyGrid = 'mapping_grid';
+  static const _prefKeyDevice = 'mapping_device_type';
+
   @override
   void initState() {
     super.initState();
-    _tts.speak('버튼 매핑 화면입니다. 카메라 버튼을 눌러 가전기기를 촬영하면 AI가 버튼을 자동으로 인식합니다.');
+    _loadMapping();
+  }
+
+  Future<void> _loadMapping() async {
+    final prefs = await SharedPreferences.getInstance();
+    final gridJson = prefs.getString(_prefKeyGrid);
+    final deviceType = prefs.getString(_prefKeyDevice) ?? '';
+
+    if (gridJson != null) {
+      final flat = (jsonDecode(gridJson) as List).cast<String?>();
+      final loaded = List.generate(3, (r) => List.generate(3, (c) => flat[r * 3 + c]));
+      if (mounted) {
+        setState(() {
+          _grid = loaded;
+          _deviceType = deviceType;
+          _statusMessage = deviceType.isNotEmpty
+              ? '저장된 $deviceType 매핑을 불러왔습니다.'
+              : '저장된 매핑을 불러왔습니다.';
+        });
+        _tts.speak('버튼 매핑 화면입니다. ${deviceType.isNotEmpty ? '저장된 $deviceType 매핑이 있습니다.' : '카메라 버튼을 눌러 가전기기를 촬영하면 AI가 버튼을 자동으로 인식합니다.'}');
+      }
+    } else {
+      _tts.speak('버튼 매핑 화면입니다. 카메라 버튼을 눌러 가전기기를 촬영하면 AI가 버튼을 자동으로 인식합니다.');
+    }
+  }
+
+  Future<void> _saveMapping() async {
+    final prefs = await SharedPreferences.getInstance();
+    final flat = [for (final row in _grid) ...row];
+    await prefs.setString(_prefKeyGrid, jsonEncode(flat));
+    await prefs.setString(_prefKeyDevice, _deviceType);
   }
 
   @override
@@ -575,19 +609,22 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
                                 child: ElevatedButton.icon(
                                   onPressed: assignedCount == 0
                                       ? null
-                                      : () {
+                                      : () async {
+                                          await _saveMapping();
                                           _tts.speak(
-                                            '$assignedCount개 버튼 매핑이 완료되었습니다. 하드웨어 연결 후 적용됩니다.',
+                                            '$assignedCount개 버튼 매핑이 저장되었습니다. 하드웨어 연결 후 적용됩니다.',
                                           );
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(
-                                              content: Text(
-                                                '$assignedCount개 버튼 매핑 완료! (BLE 연결 후 적용)',
+                                          if (context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text(
+                                                  '$assignedCount개 버튼 매핑 저장 완료! (BLE 연결 후 적용)',
+                                                ),
+                                                backgroundColor: const Color(0xFFFDE047),
+                                                behavior: SnackBarBehavior.floating,
                                               ),
-                                              backgroundColor: const Color(0xFFFDE047),
-                                              behavior: SnackBarBehavior.floating,
-                                            ),
-                                          );
+                                            );
+                                          }
                                         },
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: assignedCount > 0
