@@ -57,6 +57,12 @@
 	<string>음성 명령을 듣기 위해 마이크 접근이 필요합니다.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>음성 명령을 텍스트로 인식하기 위해 권한이 필요합니다.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>가전기기 버튼을 AI로 인식하기 위해 카메라 접근이 필요합니다.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>기기 사진을 선택하여 버튼을 매핑하기 위해 사진 라이브러리 접근이 필요합니다.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>촬영한 사진을 저장하기 위해 사진 라이브러리 접근이 필요합니다.</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
