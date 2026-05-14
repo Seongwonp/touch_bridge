@@ -273,16 +273,28 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     try {
       final content = [
         Content.text('''
-          You are an AI assistant that controls smart home devices.
-          Analyze the user's voice command and respond in a JSON format.
-          The "action" field must be one of: EMERGENCY_STOP, NAVIGATE, MICROWAVE_CONTROL, NONE.
-          If the "action" is "NAVIGATE", include a "target" field with a value of: connection, mapping, settings.
-          If the "action" is "MICROWAVE_CONTROL", include a "commands" field as an array, with values like: "start", "stop", "set_time_30s", "set_time_1m", "set_time_2m".
-          If you cannot understand the command, set "action" to "NONE" and include a "message" field with an appropriate response for the user.
-          Your response must be a JSON object. Do not include any other explanations or text outside the JSON.
+당신은 스마트 가전기기 제어 AI입니다.
+사용자의 한국어 음성 명령을 분석하여 반드시 아래 JSON 형식으로만 응답하세요.
 
-          User's command: "$text"
-          '''),
+{
+  "action": "EMERGENCY_STOP | NAVIGATE | MICROWAVE_CONTROL | NONE",
+  "device": "기기명 (예: 전자레인지, 세탁기, 공기청정기)",
+  "target": "connection | mapping | settings",
+  "seconds": 30,
+  "commands": ["start"],
+  "message": "사용자에게 전달할 자연스러운 한국어 답변"
+}
+
+규칙:
+- MICROWAVE_CONTROL: seconds에 초 단위 시간, commands에 ["start"] 또는 ["stop"] 포함
+  - "5초" → seconds: 5 / "1분" → seconds: 60 / "2분 30초" → seconds: 150
+  - 시간 없이 "시작해" → seconds: 0, commands: ["start"]
+- NAVIGATE: target 필드 필수 (connection, mapping, settings 중 하나)
+- message는 항상 친근한 한국어 (예: "알겠어요. 전자레인지 30초 돌릴게요.")
+- JSON 외 다른 텍스트 절대 금지
+
+사용자 명령: "$text"
+'''),
       ];
 
       final response = await _geminiModel.generateContent(content);
@@ -380,12 +392,30 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         }
         break;
       case 'MICROWAVE_CONTROL':
-        final commands = data['commands'] as List<dynamic>?;
-        if (commands != null && commands.isNotEmpty) {
-          setState(() {
-            _statusMessage = '명령 수행 중: ${commands.join(" → ")}';
+        final commands = data['commands'] as List<dynamic>? ?? [];
+        final seconds = (data['seconds'] as num?)?.toInt() ?? 0;
+        final device = data['device'] as String? ?? '기기';
+        if (commands.contains('start') && seconds > 0) {
+          setState(() => _statusMessage = '$device ${seconds}초 동작 시작');
+          // TTS 완료 후 이동 (음성이 끊기지 않도록)
+          _speak(ttsMessage).then((_) {
+            if (mounted) {
+              Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => EmergencyStopScreen(
+                    initialSeconds: seconds,
+                    deviceName: device,
+                  ),
+                ),
+              );
+            }
           });
-          _showMicrowaveAction(commands.cast<String>());
+          return; // TTS + 네비게이션은 위에서 처리
+        } else if (commands.contains('stop')) {
+          setState(() => _statusMessage = '$device 작동 중지');
+        } else {
+          setState(() => _statusMessage = '시간을 말씀해 주세요. 예: 30초 돌려줘');
         }
         break;
       case 'NONE':
