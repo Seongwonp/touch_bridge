@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 import 'services/accessibility_settings.dart';
 import 'screens/main_navigation_screen.dart';
 import 'theme/app_theme.dart';
@@ -8,11 +10,15 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
     await dotenv.load(fileName: ".env");
-  } catch (_) {
-    // .env 파일이 없거나 로드 실패해도 앱 실행 (API 기능은 제한됨)
-  }
-  // 저장된 설정 먼저 불러오기 — TtsService 초기화 전에 완료해야 함
+  } catch (_) {}
   await AccessibilitySettings.instance.load();
+
+  // macOS 26+에서 AVSpeechSynthesisVoice가 speech recognition TCC를 먼저 요구함.
+  // TTS 초기화 전에 권한 다이얼로그를 띄워 유저 승인을 받아야 크래시가 없음.
+  if (defaultTargetPlatform == TargetPlatform.macOS) {
+    await SpeechToText().initialize(debugLogging: false);
+  }
+
   runApp(const TouchBridgeApp());
 }
 
