@@ -269,13 +269,21 @@ class DeviceConnectScreen extends StatelessWidget {
                       title: 'QR 코드 스캔',
                       subtitle: '허브의 QR을 촬영하여 즉시 연결',
                       highlighted: true,
-                      onTap: () {
-                        TtsService().speak('QR 코드 스캔 화면으로 이동합니다.'); // TTS 안내 추가
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const QrScanScreen(),
-                          ),
+                      onTap: () async {
+                        TtsService().speak('QR 코드 스캔 화면으로 이동합니다.');
+                        final result = await Navigator.of(context).push<Map<String, String>>(
+                          MaterialPageRoute(builder: (_) => const QrScanScreen()),
                         );
+                        if (result != null && context.mounted) {
+                          final name = result['name'] ?? '알 수 없는 기기';
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('$name 기기가 인식되었습니다. 홈에서 기기를 추가하세요.'),
+                              backgroundColor: const Color(0xFF00FF88),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
                       },
                     ),
                     const SizedBox(height: 10),
