@@ -11,9 +11,14 @@ import '../../widgets/responsive_scale.dart';
 import 'stop_done_screen.dart';
 
 class EmergencyStopScreen extends StatefulWidget {
-  const EmergencyStopScreen({super.key, this.initialSeconds = 150});
+  const EmergencyStopScreen({
+    super.key,
+    this.initialSeconds = 150,
+    this.deviceName = '기기',
+  });
 
   final int initialSeconds;
+  final String deviceName;
 
   @override
   State<EmergencyStopScreen> createState() => _EmergencyStopScreenState();
@@ -47,7 +52,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
 
     _startCountdown();
     _initSpeech();
-    _speak('비상 정지 화면입니다. 현재 남은 시간은 ${_formatMMSS(_secondsLeft).replaceAll(':', '분 ')}초 입니다. 중단하려면 버튼을 길게 누르거나 "멈춰"라고 말하세요.');
+    _speak('${widget.deviceName} 작동 중입니다. 남은 시간 ${_formatTime(_secondsLeft)}. 중단하려면 버튼을 길게 누르거나 "멈춰"라고 말하세요.');
   }
 
   Future<void> _initSpeech() async {
@@ -117,22 +122,22 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
       _secondsLeft,
       onTick: (seconds) {
         if (mounted) {
-          setState(() {
-            _secondsLeft = seconds;
-          });
-          // 매 초마다 TTS로 시간을 읽어주는 것은 너무 번거로울 수 있으므로,
-          // 중요한 시점(예: 10초 미만, 30초 단위 등)에만 읽어주도록 로직 추가 고려
-          if (seconds > 0 && seconds <= 10 && seconds % 5 == 0) { // 마지막 10초는 5초 단위로
+          setState(() => _secondsLeft = seconds);
+          // 짧은 타이머: 5초 이하 매초 카운트다운
+          if (seconds > 0 && seconds <= 5) {
+            _tts.speak('$seconds');
+          } else if (seconds > 5 && seconds <= 10 && seconds % 5 == 0) {
             _tts.speak('$seconds초 남았습니다.');
-          } else if (seconds > 10 && seconds % 30 == 0) { // 30초 단위로
-            _tts.speak('${seconds ~/ 60}분 ${seconds % 60}초 남았습니다.');
+          } else if (seconds > 10 && seconds % 30 == 0) {
+            final m = seconds ~/ 60;
+            final s = seconds % 60;
+            _tts.speak(m > 0 ? '$m분 ${s > 0 ? "$s초 " : ""}남았습니다.' : '$s초 남았습니다.');
           }
         }
       },
       onFinished: () {
         if (mounted) {
-          _tts.speak('타이머가 종료되었습니다.');
-          // 타이머 종료 후 StopDoneScreen으로 이동하거나 다른 처리
+          _tts.speak('${widget.deviceName} 작동이 끝났습니다.');
           Navigator.of(context).pushReplacement(
             MaterialPageRoute<void>(builder: (_) => const StopDoneScreen()),
           );
@@ -142,9 +147,17 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   }
 
   String _formatMMSS(int totalSeconds) {
-    final minutes = totalSeconds ~/ 60;
-    final seconds = totalSeconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    final m = totalSeconds ~/ 60;
+    final s = totalSeconds % 60;
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+
+  String _formatTime(int totalSeconds) {
+    final m = totalSeconds ~/ 60;
+    final s = totalSeconds % 60;
+    if (m > 0 && s > 0) return '$m분 $s초';
+    if (m > 0) return '$m분';
+    return '$s초';
   }
 
   Future<void> _speak(String message) async {
@@ -374,8 +387,8 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                       children: [
                         SizedBox(height: ResponsiveScale.v(context, 32)),
                         // Status Card
-                        Semantics( // 상태 카드 Semantics 추가
-                          label: '현재 전자레인지 30초 작동 중',
+                        Semantics(
+                          label: '${widget.deviceName} 작동 중',
                           liveRegion: true,
                           child: Container(
                             padding: const EdgeInsets.symmetric(
@@ -397,18 +410,18 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                                 ),
                               ],
                             ),
-                            child: const Row(
+                            child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(
-                                  Icons.microwave,
+                                const Icon(
+                                  Icons.settings_remote_rounded,
                                   color: Color(0xFFFDE047),
                                   size: 28,
                                 ),
-                                SizedBox(width: 10),
+                                const SizedBox(width: 10),
                                 Text(
-                                  '전자레인지 30초 작동 중',
-                                  style: TextStyle(
+                                  '${widget.deviceName} 작동 중',
+                                  style: const TextStyle(
                                     color: Color(0xFFFDE047),
                                     fontSize: 20,
                                     fontWeight: FontWeight.w900,
