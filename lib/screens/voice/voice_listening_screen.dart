@@ -425,6 +425,12 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   @override
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
+    final screenH = MediaQuery.sizeOf(context).height;
+
+    // 화면 높이 기준으로 파형·버튼 크기 결정 (macOS/태블릿/폰 모두 대응)
+    final waveH = (screenH * 0.11).clamp(48.0, 100.0);
+    final btnSize = (screenH * 0.15).clamp(80.0, 130.0);
+    final btnIconSize = btnSize * 0.42;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -433,131 +439,181 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         onHorizontalDragEnd: _onHorizontalDragEnd,
         child: SafeArea(
           child: Column(
-          children: [
-            Container(
-              height: 64,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: Color(0xFF2A2A2A))),
-              ),
-              child: const Row(
-                children: [
-                  Text(
+            children: [
+              // 상단 앱바
+              Container(
+                height: 56,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                decoration: const BoxDecoration(
+                  border: Border(bottom: BorderSide(color: Color(0xFF2A2A2A))),
+                ),
+                child: const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
                     'Touch Bridge AI',
                     style: TextStyle(
                       color: Color(0xFFFFEB00),
-                      fontSize: 22,
+                      fontSize: 20,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      _statusMessage,
-                      style: TextStyle(
-                        color: _isRecording ? const Color(0xFFFFEB00) : Colors.white,
-                        fontSize: 24 * rs,
-                        fontWeight: FontWeight.w800,
+
+              // 콘텐츠 영역 — Spacer로 여백 분배해 오버플로우 방지
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      const Spacer(flex: 2),
+
+                      // 상태 메시지
+                      Text(
+                        _statusMessage,
+                        style: TextStyle(
+                          color: _isRecording
+                              ? const Color(0xFFFFEB00)
+                              : Colors.white,
+                          fontSize: 20 * rs,
+                          fontWeight: FontWeight.w800,
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 40),
-                    
-                    // 음성 파형 애니메이션
-                    SizedBox(
-                      height: 100,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: _waveHeights.map((h) => AnimatedContainer(
-                          duration: const Duration(milliseconds: 150),
-                          width: 8,
-                          height: 100 * h,
-                          margin: const EdgeInsets.symmetric(horizontal: 4),
-                          decoration: BoxDecoration(
-                            color: _isRecording ? const Color(0xFFFFEB00) : const Color(0xFF333333),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        )).toList(),
-                      ),
-                    ),
-                    
-                    const SizedBox(height: 60),
-                    
-                    // 메인 녹음 버튼
-                    Semantics(
-                      label: _isRecording
-                          ? (_micArmed ? '음성 녹음 중지 버튼 선택됨. 한 번 더 탭하면 중지됩니다.' : '음성 녹음 중지 버튼')
-                          : (_micArmed ? '음성 명령 시작 버튼 선택됨. 한 번 더 탭하면 녹음이 시작됩니다.' : '음성 명령 시작 버튼'),
-                      button: true,
-                      child: GestureDetector(
-                        onTap: _isProcessing ? null : _handleMicTap,
-                        child: Container(
-                          width: 120,
-                          height: 120,
-                          decoration: BoxDecoration(
-                            color: _isRecording ? const Color(0xFF2A2A2A) : const Color(0xFFFFEB00),
-                            shape: BoxShape.circle,
-                            border: _isRecording
-                                ? Border.all(color: _micArmed ? Colors.white : const Color(0xFFFFEB00), width: _micArmed ? 5 : 4)
-                                : (_micArmed ? Border.all(color: Colors.white, width: 4) : null),
-                            boxShadow: [
-                              BoxShadow(
-                                color: _isRecording ? const Color(0x66FFEB00) : Colors.black45,
-                                blurRadius: 20,
-                                spreadRadius: 5,
+
+                      const Spacer(flex: 2),
+
+                      // 음성 파형 애니메이션
+                      SizedBox(
+                        height: waveH,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: _waveHeights
+                              .map(
+                                (h) => AnimatedContainer(
+                                  duration: const Duration(milliseconds: 150),
+                                  width: 7,
+                                  height: waveH * h,
+                                  margin: const EdgeInsets.symmetric(
+                                    horizontal: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _isRecording
+                                        ? const Color(0xFFFFEB00)
+                                        : const Color(0xFF333333),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                ),
                               )
-                            ],
-                          ),
-                          child: Icon(
-                            _isProcessing ? Icons.sync : (_isRecording ? Icons.stop : Icons.mic),
-                            color: _isRecording ? const Color(0xFFFFEB00) : Colors.black,
-                            size: 50,
+                              .toList(),
+                        ),
+                      ),
+
+                      const Spacer(flex: 2),
+
+                      // 메인 녹음 버튼
+                      Semantics(
+                        label: _isRecording
+                            ? (_micArmed
+                                ? '음성 녹음 중지 버튼 선택됨. 한 번 더 탭하면 중지됩니다.'
+                                : '음성 녹음 중지 버튼')
+                            : (_micArmed
+                                ? '음성 명령 시작 버튼 선택됨. 한 번 더 탭하면 녹음이 시작됩니다.'
+                                : '음성 명령 시작 버튼'),
+                        button: true,
+                        child: GestureDetector(
+                          onTap: _isProcessing ? null : _handleMicTap,
+                          child: Container(
+                            width: btnSize,
+                            height: btnSize,
+                            decoration: BoxDecoration(
+                              color: _isRecording
+                                  ? const Color(0xFF2A2A2A)
+                                  : const Color(0xFFFFEB00),
+                              shape: BoxShape.circle,
+                              border: _isRecording
+                                  ? Border.all(
+                                      color: _micArmed
+                                          ? Colors.white
+                                          : const Color(0xFFFFEB00),
+                                      width: _micArmed ? 5 : 4,
+                                    )
+                                  : (_micArmed
+                                      ? Border.all(
+                                          color: Colors.white,
+                                          width: 4,
+                                        )
+                                      : null),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: _isRecording
+                                      ? const Color(0x66FFEB00)
+                                      : Colors.black45,
+                                  blurRadius: 20,
+                                  spreadRadius: 5,
+                                ),
+                              ],
+                            ),
+                            child: Icon(
+                              _isProcessing
+                                  ? Icons.sync
+                                  : (_isRecording ? Icons.stop : Icons.mic),
+                              color: _isRecording
+                                  ? const Color(0xFFFFEB00)
+                                  : Colors.black,
+                              size: btnIconSize,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    
-                    const SizedBox(height: 40),
-                    
-                    // 인식된 결과 텍스트 박스
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF111111),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFF2A2A2A)),
-                      ),
-                      child: Column(
-                        children: [
-                          const Text(
-                            '인식 결과',
-                            style: TextStyle(color: Color(0xFF888888), fontSize: 14),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _recognizedText,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18 * rs,
-                              fontWeight: FontWeight.w600,
+
+                      const Spacer(flex: 2),
+
+                      // 인식된 결과 텍스트 박스
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 14,
+                        ),
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF111111),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: const Color(0xFF2A2A2A)),
+                        ),
+                        child: Column(
+                          children: [
+                            const Text(
+                              '인식 결과',
+                              style: TextStyle(
+                                color: Color(0xFF888888),
+                                fontSize: 13,
+                              ),
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 6),
+                            Text(
+                              _recognizedText,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16 * rs,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+
+                      const Spacer(flex: 1),
+                    ],
+                  ),
                 ),
               ),
-            ),
             ],
           ),
         ),
