@@ -57,6 +57,7 @@ class _QrScanScreenState extends State<QrScanScreen> {
 
     final name = data?['name'] as String? ?? raw;
     final deviceId = data?['deviceId'] as String? ?? name;
+    final type = data?['type'] as String? ?? '';
 
     _tts.speak('$name 기기를 인식했습니다. 추가하려면 확인을 누르세요.');
     _scanController.stop();
@@ -104,7 +105,7 @@ class _QrScanScreenState extends State<QrScanScreen> {
       ),
     ).then((confirmed) {
       if (confirmed == true && mounted) {
-        Navigator.of(context).pop({'name': name, 'deviceId': deviceId});
+        Navigator.of(context).pop({'name': name, 'deviceId': deviceId, 'type': type});
         _tts.speak('$name 기기가 추가되었습니다.');
       }
     });

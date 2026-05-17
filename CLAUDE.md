@@ -121,17 +121,37 @@ TTS: "이전 화면으로 돌아갑니다."
 
 ## 음성 명령 (Gemini AI)
 
-`VoiceListeningScreen`에서 STT로 음성을 받아 Gemini API로 파싱:
+`VoiceListeningScreen`에서 STT로 음성을 받아 처리:
+
+**1단계 — 간단한 규칙 체크 (`_checkSimpleRules`)**
+"30초 시작", "1분 시작", "취소/정지/그만" 등 자주 쓰는 명령은 Gemini 호출 없이 즉시 처리.
+
+**2단계 — Gemini API 파싱 (버튼 ID 시퀀스 방식)**
 ```json
 {
   "action": "EMERGENCY_STOP | NAVIGATE | MICROWAVE_CONTROL | NONE",
-  "target": "connection | mapping | settings",
-  "seconds": 30,
-  "device": "전자레인지",
-  "commands": ["start"],
+  "commands": ["BT-02", "BT-05"],
+  "target": "connection | mapping | settings | null",
   "message": "사용자에게 전달할 메시지"
 }
 ```
+
+**전자레인지 버튼 규격 (3x3 그리드)**
+| 버튼 | 동작 | 시간(초) |
+|------|------|----------|
+| BT-01 | 10초 추가 | 10 |
+| BT-02 | 30초 추가 | 30 |
+| BT-03 | 1분 추가 | 60 |
+| BT-04 | 5분 추가 | 300 |
+| BT-05 | 시작 | — |
+| BT-06 | 취소/정지 | — |
+| BT-07 | 해동 | — |
+| BT-08 | 우유 | — |
+| BT-09 | 자동조리 | — |
+
+`_calculateSeconds(commands)` — 버튼 시퀀스에서 총 초를 계산해 `EmergencyStopScreen`에 전달.
+나중에 BLE 연동 시 각 버튼 ID → 그리드 좌표로 변환해 `BleService.sendPress()` 호출.
+
 - 5초 침묵 감지: 말 없음 → 재시도 안내 / 말 있었음 → 자동 분석
 - Chrome `onStatus: 'done'` 처리 포함
 
