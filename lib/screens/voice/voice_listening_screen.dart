@@ -303,6 +303,55 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     _toggleRecording();
   }
 
+  // 버튼 ID → 초 단위 시간
+  static const _buttonSeconds = {
+    'BT-01': 10,
+    'BT-02': 30,
+    'BT-03': 60,
+    'BT-04': 300,
+  };
+
+  // 버튼 ID → 라벨
+  static const _buttonLabel = {
+    'BT-01': '10초',
+    'BT-02': '30초',
+    'BT-03': '1분',
+    'BT-04': '5분',
+    'BT-05': '시작',
+    'BT-06': '취소/정지',
+    'BT-07': '해동',
+    'BT-08': '우유',
+    'BT-09': '자동조리',
+  };
+
+  int _calculateSeconds(List<dynamic> commands) {
+    int total = 0;
+    for (final btn in commands) {
+      total += _buttonSeconds[btn as String] ?? 0;
+    }
+    return total;
+  }
+
+  String _buildCommandsLabel(List<dynamic> commands) {
+    final labels = commands.map((b) => _buttonLabel[b as String] ?? b).toList();
+    return labels.join(' → ');
+  }
+
+  // 자주 쓰는 간단한 명령은 AI 없이 즉시 처리 (백엔드 check_simple_rules 이식)
+  Map<String, dynamic>? _checkSimpleRules(String text) {
+    final t = text.replaceAll(' ', '');
+    if (t.contains('30초시작') || t.contains('삼십초시작')) {
+      return {'action': 'MICROWAVE_CONTROL', 'commands': ['BT-02', 'BT-05'], 'message': '30초 조리를 시작합니다.'};
+    }
+    if (t.contains('1분시작') || t.contains('일분시작')) {
+      return {'action': 'MICROWAVE_CONTROL', 'commands': ['BT-03', 'BT-05'], 'message': '1분 조리를 시작합니다.'};
+    }
+    if (t.contains('취소') || t.contains('정지') || t.contains('그만') || t.contains('중단') || t.contains('stop')) {
+      return {'action': 'MICROWAVE_CONTROL', 'commands': ['BT-06'], 'message': '조리를 중단합니다.'};
+    }
+    return null;
+  }
+
   Future<void> _sendTextToGemini(String text) async {
     if (text.isEmpty) {
       _speak('처리할 명령이 없습니다.');
@@ -310,6 +359,13 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         _statusMessage = '처리할 명령이 없습니다.';
         _isProcessing = false;
       });
+      return;
+    }
+
+    // 간단한 명령은 AI 호출 없이 즉시 처리
+    final ruleResult = _checkSimpleRules(text);
+    if (ruleResult != null) {
+      _handleCommand(ruleResult, recognizedText: text);
       return;
     }
 
@@ -321,19 +377,32 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
 {
   "action": "EMERGENCY_STOP | NAVIGATE | MICROWAVE_CONTROL | NONE",
-  "device": "기기명 (예: 전자레인지, 세탁기, 공기청정기)",
-  "target": "connection | mapping | settings",
-  "seconds": 30,
-  "commands": ["start"],
+  "commands": ["BT-xx", ...],
+  "target": "connection | mapping | settings | null",
   "message": "사용자에게 전달할 자연스러운 한국어 답변"
 }
 
+[전자레인지 버튼 규격 (3x3 그리드)]
+- BT-01: 10초 추가
+- BT-02: 30초 추가
+- BT-03: 1분 추가
+- BT-04: 5분 추가
+- BT-05: 시작
+- BT-06: 취소/정지
+- BT-07: 해동 모드
+- BT-08: 우유/데우기
+- BT-09: 자동조리
+
 규칙:
-- MICROWAVE_CONTROL: seconds에 초 단위 시간, commands에 ["start"] 또는 ["stop"] 포함
-  - "5초" → seconds: 5 / "1분" → seconds: 60 / "2분 30초" → seconds: 150
-  - 시간 없이 "시작해" → seconds: 0, commands: ["start"]
+- MICROWAVE_CONTROL: commands에 버튼 ID 시퀀스, 마지막은 BT-05(시작) 또는 BT-06(취소)
+  - "30초 돌려줘" → ["BT-02", "BT-05"]
+  - "1분 조리해줘" → ["BT-03", "BT-05"]
+  - "2분" → ["BT-03", "BT-03", "BT-05"]
+  - "2분 30초" → ["BT-03", "BT-03", "BT-02", "BT-05"]
+  - "취소해줘" → ["BT-06"]
 - NAVIGATE: target 필드 필수 (connection, mapping, settings 중 하나)
-- message는 항상 친근한 한국어 (예: "알겠어요. 전자레인지 30초 돌릴게요.")
+- EMERGENCY_STOP / NONE: commands는 null
+- message는 항상 친근한 한국어 (예: "알겠어요. 30초 두 번 조리할게요.")
 - JSON 외 다른 텍스트 절대 금지
 
 사용자 명령: "$text"
@@ -370,119 +439,99 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   }
 
   void _handleCommand(Map<String, dynamic> data, {required String recognizedText}) {
-    final action = data['action'];
-    final message = data['message'] ?? ''; // Gemini 응답에 message 필드가 있다면 사용
-    final String ttsMessage;
+    final action = data['action'] as String? ?? 'NONE';
+    final message = (data['message'] as String? ?? '').trim();
+    final commands = (data['commands'] as List<dynamic>?) ?? [];
 
     setState(() {
       _isProcessing = false;
-      _recognizedText = recognizedText; // STT로 인식된 원본 텍스트
+      _recognizedText = recognizedText;
     });
-
-    if (message.isNotEmpty) {
-      ttsMessage = message;
-    } else {
-      switch (action) {
-        case 'EMERGENCY_STOP':
-          ttsMessage = '비상 정지 명령을 수행합니다.';
-          break;
-        case 'NAVIGATE':
-          final target = data['target'];
-          String targetName = '';
-          if (target == 'connection') {
-            targetName = '기기 연결';
-          } else if (target == 'mapping') {
-            targetName = '사진 매핑';
-          } else if (target == 'settings') {
-            targetName = '설정';
-          }
-          ttsMessage = '$targetName 화면으로 이동합니다.';
-          break;
-        case 'MICROWAVE_CONTROL':
-          final commands = data['commands'] as List<dynamic>?;
-          if (commands != null && commands.isNotEmpty) {
-            ttsMessage = '전자레인지 ${commands.join(" 그리고 ")} 명령을 수행합니다.';
-          } else {
-            ttsMessage = '전자레인지 제어 명령을 이해하지 못했습니다.';
-          }
-          break;
-        case 'NONE':
-        default:
-          ttsMessage = '명령을 이해하지 못했습니다. 다시 말씀해 주세요.';
-          break;
-      }
-    }
-    _speak(ttsMessage);
 
     switch (action) {
       case 'EMERGENCY_STOP':
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const EmergencyStopScreen()),
-        );
-        break;
+        final tts = message.isNotEmpty ? message : '비상 정지 명령을 수행합니다.';
+        _speak(tts);
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const EmergencyStopScreen()));
+
       case 'NAVIGATE':
-        final target = data['target'];
-        Widget? screen;
-        if (target == 'connection') screen = const DeviceConnectScreen();
-        if (target == 'mapping') screen = const PhotoMappingScreen();
-        if (target == 'settings') screen = const SettingsScreen();
-        
+        final target = data['target'] as String?;
+        final targetName = switch (target) {
+          'connection' => '기기 연결',
+          'mapping'    => '버튼 매핑',
+          'settings'   => '설정',
+          _            => null,
+        };
+        if (targetName == null) {
+          _speak('이동할 화면을 이해하지 못했습니다.');
+          setState(() => _statusMessage = '이동할 화면을 이해하지 못했습니다.');
+          return;
+        }
+        final tts = message.isNotEmpty ? message : '$targetName 화면으로 이동합니다.';
+        _speak(tts);
+        final Widget? screen = switch (target) {
+          'connection' => const DeviceConnectScreen(),
+          'mapping'    => const PhotoMappingScreen(),
+          'settings'   => const SettingsScreen(),
+          _            => null,
+        };
         if (screen != null) {
           Navigator.push(context, MaterialPageRoute(builder: (_) => screen!));
-        } else {
-          _speak('요청하신 화면으로 이동할 수 없습니다.');
         }
-        break;
+
       case 'MICROWAVE_CONTROL':
-        final commands = data['commands'] as List<dynamic>? ?? [];
-        final seconds = (data['seconds'] as num?)?.toInt() ?? 0;
-        final device = data['device'] as String? ?? '기기';
-        if (commands.contains('start') && seconds > 0) {
-          setState(() => _statusMessage = '$device ${seconds}초 동작 시작');
-          // TTS 완료 후 이동 (음성이 끊기지 않도록)
-          _speak(ttsMessage).then((_) {
+        if (commands.isEmpty) {
+          _speak(message.isNotEmpty ? message : '시간을 말씀해 주세요. 예: 30초 돌려줘');
+          setState(() => _statusMessage = '시간을 말씀해 주세요.');
+          return;
+        }
+
+        // 취소/정지 명령
+        if (commands.length == 1 && commands.first == 'BT-06') {
+          _speak(message.isNotEmpty ? message : '조리를 중단합니다.');
+          setState(() => _statusMessage = '조리 중단');
+          // TODO(hardware): BleService.instance.sendEmergencyStop(deviceId)
+          return;
+        }
+
+        final seconds = _calculateSeconds(commands);
+        final cmdLabel = _buildCommandsLabel(commands);
+        final tts = message.isNotEmpty ? message : '$cmdLabel. 조리를 시작합니다.';
+
+        setState(() => _statusMessage = cmdLabel);
+
+        // TODO(hardware): commands에서 BT-05(시작) 이전까지 BleService.sendPress() 순서대로 호출
+        // for (final btn in commands.where((b) => b != 'BT-05')) {
+        //   final pos = _btnToGrid(btn);
+        //   await BleService.instance.sendPress(x: pos.col, y: pos.row, deviceId: ...);
+        // }
+
+        if (seconds > 0) {
+          _speak(tts).then((_) {
             if (mounted) {
               Navigator.push(
                 context,
                 MaterialPageRoute<void>(
                   builder: (_) => EmergencyStopScreen(
                     initialSeconds: seconds,
-                    deviceName: device,
+                    deviceName: '전자레인지',
                   ),
                 ),
               );
             }
           });
-          return; // TTS + 네비게이션은 위에서 처리
-        } else if (commands.contains('stop')) {
-          setState(() => _statusMessage = '$device 작동 중지');
         } else {
-          setState(() => _statusMessage = '시간을 말씀해 주세요. 예: 30초 돌려줘');
+          _speak(tts);
         }
-        break;
+
       case 'NONE':
       default:
+        final tts = message.isNotEmpty ? message : '명령을 이해하지 못했습니다. 다시 말씀해 주세요.';
+        _speak(tts);
         setState(() => _statusMessage = '다시 말씀해 주세요.');
-        break;
     }
   }
 
-  void _showMicrowaveAction(List<String> commands) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('전자레인지 조작: ${commands.join(" → ")}'),
-        backgroundColor: const Color(0xFFFFEB00),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
-        action: SnackBarAction(
-          label: '확인',
-          textColor: Colors.black,
-          onPressed: () {},
-        ),
-      ),
-    );
-  }
 
   @override
   void dispose() {
@@ -496,15 +545,21 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     super.dispose();
   }
 
+  static const _exampleCommands = [
+    '30초 돌려줘',
+    '1분 조리해줘',
+    '2분 30초',
+    '해동해줘',
+    '취소해줘',
+  ];
+
   @override
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
     final screenH = MediaQuery.sizeOf(context).height;
+    final waveH = (screenH * 0.12).clamp(48.0, 100.0);
 
-    // 화면 높이 기준으로 파형·버튼 크기 결정 (macOS/태블릿/폰 모두 대응)
-    final waveH = (screenH * 0.11).clamp(48.0, 100.0);
-    final btnSize = (screenH * 0.15).clamp(80.0, 130.0);
-    final btnIconSize = btnSize * 0.42;
+    final bool isIdle = !_isRecording && !_isProcessing;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -534,28 +589,44 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
                 ),
               ),
 
-              // 콘텐츠 영역 — Spacer로 여백 분배해 오버플로우 방지
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.start,
                     children: [
                       const Spacer(flex: 2),
 
-                      // 상태 메시지
+                      // 큰 타이틀 (Listening... / 분석 중... / 말씀해 주세요.)
                       Text(
-                        _statusMessage,
+                        _isProcessing
+                            ? '분석 중...'
+                            : (_isRecording ? 'Listening...' : '말씀해 주세요.'),
                         style: TextStyle(
-                          color: _isRecording
+                          color: (_isRecording || _isProcessing)
                               ? const Color(0xFFFFEB00)
                               : Colors.white,
-                          fontSize: 20 * rs,
-                          fontWeight: FontWeight.w800,
+                          fontSize: 36 * rs,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.5,
                         ),
                         textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      // 부제목
+                      Text(
+                        _isProcessing
+                            ? _statusMessage
+                            : (_isRecording
+                                ? '듣고 있습니다.'
+                                : '버튼을 눌러 명령을 말씀해 주세요.'),
+                        style: TextStyle(
+                          color: const Color(0xFFD1D5DB),
+                          fontSize: 16 * rs,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
 
                       const Spacer(flex: 2),
@@ -571,9 +642,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
                                   duration: const Duration(milliseconds: 150),
                                   width: 7,
                                   height: waveH * h,
-                                  margin: const EdgeInsets.symmetric(
-                                    horizontal: 3,
-                                  ),
+                                  margin: const EdgeInsets.symmetric(horizontal: 3),
                                   decoration: BoxDecoration(
                                     color: _isRecording
                                         ? const Color(0xFFFFEB00)
@@ -586,102 +655,241 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
                         ),
                       ),
 
-                      const Spacer(flex: 2),
-
-                      // 메인 녹음 버튼
-                      Semantics(
-                        label: _isRecording
-                            ? (_micArmed
-                                ? '음성 녹음 중지 버튼 선택됨. 한 번 더 탭하면 중지됩니다.'
-                                : '음성 녹음 중지 버튼')
-                            : (_micArmed
-                                ? '음성 명령 시작 버튼 선택됨. 한 번 더 탭하면 녹음이 시작됩니다.'
-                                : '음성 명령 시작 버튼'),
-                        button: true,
-                        child: GestureDetector(
-                          onTap: _isProcessing ? null : _handleMicTap,
-                          child: Container(
-                            width: btnSize,
-                            height: btnSize,
-                            decoration: BoxDecoration(
-                              color: _isRecording
-                                  ? const Color(0xFF2A2A2A)
-                                  : const Color(0xFFFFEB00),
-                              shape: BoxShape.circle,
-                              border: _isRecording
-                                  ? Border.all(
-                                      color: _micArmed
-                                          ? Colors.white
-                                          : const Color(0xFFFFEB00),
-                                      width: _micArmed ? 5 : 4,
-                                    )
-                                  : (_micArmed
-                                      ? Border.all(
-                                          color: Colors.white,
-                                          width: 4,
-                                        )
-                                      : null),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: _isRecording
-                                      ? const Color(0x66FFEB00)
-                                      : Colors.black45,
-                                  blurRadius: 20,
-                                  spreadRadius: 5,
-                                ),
-                              ],
-                            ),
-                            child: Icon(
-                              _isProcessing
-                                  ? Icons.sync
-                                  : (_isRecording ? Icons.stop : Icons.mic),
-                              color: _isRecording
-                                  ? const Color(0xFFFFEB00)
-                                  : Colors.black,
-                              size: btnIconSize,
-                            ),
+                      // 인식 중 텍스트 (녹음 중에만 표시)
+                      if (_isRecording && _recognizedText.isNotEmpty &&
+                          _recognizedText != '아직 인식된 명령이 없어요.') ...[
+                        const SizedBox(height: 16),
+                        Text(
+                          '"$_recognizedText"',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 15 * rs,
+                            fontStyle: FontStyle.italic,
                           ),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
+                      ],
 
                       const Spacer(flex: 2),
 
-                      // 인식된 결과 텍스트 박스
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 14,
-                        ),
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF111111),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: const Color(0xFF2A2A2A)),
-                        ),
-                        child: Column(
+                      // 버튼 영역: 듣기 멈추기 + 취소 (녹음 중) / 시작 (대기 중)
+                      if (_isRecording) ...[
+                        // 녹음 중 — 듣기 멈추기(노랑) + 취소(어두운) 2버튼
+                        Row(
                           children: [
-                            const Text(
-                              '인식 결과',
-                              style: TextStyle(
-                                color: Color(0xFF888888),
-                                fontSize: 13,
+                            Expanded(
+                              flex: 3,
+                              child: Semantics(
+                                label: _micArmed
+                                    ? '듣기 멈추기 버튼 선택됨. 한 번 더 탭하면 녹음을 중지합니다.'
+                                    : '듣기 멈추기 버튼',
+                                button: true,
+                                child: GestureDetector(
+                                  onTap: _handleMicTap,
+                                  child: Container(
+                                    height: 64,
+                                    decoration: BoxDecoration(
+                                      color: _micArmed
+                                          ? const Color(0xFFFFD700)
+                                          : const Color(0xFFFFEB00),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: _micArmed
+                                          ? Border.all(color: Colors.white, width: 3)
+                                          : null,
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(Icons.stop_circle_outlined,
+                                            color: Colors.black, size: 24),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          '듣기 멈추기',
+                                          style: TextStyle(
+                                            color: Colors.black,
+                                            fontSize: 17 * rs,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
-                            const SizedBox(height: 6),
-                            Text(
-                              _recognizedText,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16 * rs,
-                                fontWeight: FontWeight.w600,
+                            const SizedBox(width: 12),
+                            Expanded(
+                              flex: 2,
+                              child: Semantics(
+                                label: '취소 버튼',
+                                button: true,
+                                child: GestureDetector(
+                                  onTap: () {
+                                    _speech.stop();
+                                    _recordingTimeoutTimer?.cancel();
+                                    _silenceTimer?.cancel();
+                                    _actionResetTimer?.cancel();
+                                    _stopWaveAnimation();
+                                    setState(() {
+                                      _isRecording = false;
+                                      _isProcessing = false;
+                                      _micArmed = false;
+                                      _lastWords = '';
+                                      _statusMessage = '버튼을 눌러 명령을 말씀해 주세요.';
+                                    });
+                                    _speak('녹음이 취소되었습니다.');
+                                  },
+                                  child: Container(
+                                    height: 64,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF1E1E1E),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(color: const Color(0xFF3A3A3A)),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        '취소',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 17 * rs,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               ),
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
-                      ),
+                      ] else if (isIdle) ...[
+                        // 대기 중 — 시작 버튼 1개
+                        Semantics(
+                          label: _micArmed
+                              ? '음성 명령 시작 버튼 선택됨. 한 번 더 탭하면 녹음이 시작됩니다.'
+                              : '음성 명령 시작 버튼',
+                          button: true,
+                          child: GestureDetector(
+                            onTap: _handleMicTap,
+                            child: Container(
+                              width: double.infinity,
+                              height: 64,
+                              decoration: BoxDecoration(
+                                color: _micArmed
+                                    ? const Color(0xFFFFD700)
+                                    : const Color(0xFFFFEB00),
+                                borderRadius: BorderRadius.circular(16),
+                                border: _micArmed
+                                    ? Border.all(color: Colors.white, width: 3)
+                                    : null,
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.mic, color: Colors.black, size: 26),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    _micArmed ? '한 번 더 눌러서 시작' : '말하기 시작',
+                                    style: TextStyle(
+                                      color: Colors.black,
+                                      fontSize: 17 * rs,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ] else ...[
+                        // 분석 중 — 비활성 버튼
+                        Container(
+                          width: double.infinity,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E1E1E),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Center(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Color(0xFFFFEB00),
+                                    strokeWidth: 2.5,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  '명령 분석 중...',
+                                  style: TextStyle(
+                                    color: const Color(0xFF888888),
+                                    fontSize: 16 * rs,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+
+                      const SizedBox(height: 24),
+
+                      // 예제 명령어 칩 (대기 중에만 표시)
+                      if (isIdle) ...[
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            '예시 명령어',
+                            style: TextStyle(
+                              color: const Color(0xFF888888),
+                              fontSize: 13 * rs,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: _exampleCommands
+                              .map(
+                                (cmd) => GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      _recognizedText = cmd;
+                                      _isProcessing = true;
+                                      _statusMessage = '명령 분석 중...';
+                                    });
+                                    _speak('$cmd 명령을 처리합니다.');
+                                    _sendTextToGemini(cmd);
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 14, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF1A1A1A),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(color: const Color(0xFF333333)),
+                                    ),
+                                    child: Text(
+                                      cmd,
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 14 * rs,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      ],
 
                       const Spacer(flex: 1),
                     ],
