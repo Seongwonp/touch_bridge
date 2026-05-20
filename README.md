@@ -71,16 +71,24 @@
 
 ## 환경 설정
 
-프로젝트 루트에 `.env` 파일 생성 (git 제외):
+### 앱(Flutter)
+프로젝트 루트 `.env`:
 
 ```env
-GOOGLE_AI_PRO_API_KEY=여기에_실제_키_입력
-GEMINI_MODEL=gemini-2.5-flash
+AI_BACKEND_URL=http://127.0.0.1:8000
 ```
 
-- API 키는 [Google AI Studio](https://aistudio.google.com/)에서 발급
-- Vision 기능(사진 매핑)도 동일 키 사용 (별도 키 불필요)
-- 고품질 분석이 필요하면 `GEMINI_MODEL=gemini-2.5-pro`
+앱은 Gemini API 키를 직접 사용하지 않고, 백엔드 API를 통해 AI 기능을 호출합니다.
+(`.env_ex` 참고)
+
+### 백엔드(FastAPI)
+`backend` 실행 환경 `.env`:
+
+```env
+GOOGLE_API_KEY=여기에_실제_키_입력
+GEMINI_MODEL=gemini-2.5-flash
+```
+(`backend/.env_ex` 참고)
 
 ---
 
@@ -176,7 +184,7 @@ lib/
 
 ---
 
-## 하드웨어 연동 (예정)
+## 하드웨어 연동
 
 ```
 ESP32 BLE GATT Server
@@ -199,13 +207,42 @@ Characteristic: 0000FFE1-...
 - [x] SharedPreferences 설정 저장
 - [x] 웹(Chrome) 지원
 - [x] Android·iOS·macOS 권한 설정
-- [ ] BLE 실제 연동 (하드웨어 완성 후)
-- [ ] QR 스캔 (`mobile_scanner` 패키지 필요)
-- [ ] 버튼 매핑 데이터 영속화
-- [ ] 기기 목록 동적 관리
+- [x] BLE 연동 1차 (`flutter_blue_plus`: 스캔/연결/명령 전송)
+- [x] immutable `deviceId` 기반 기기 관리 + 기존 name 기반 매핑 자동 마이그레이션
+- [x] API 키 클라이언트 분리 (앱→백엔드 프록시, Gemini 키 서버 보관)
+- [x] QR 스캔 (`mobile_scanner`)
+- [x] 버튼 매핑 데이터 영속화
+- [x] 기기 목록 동적 관리
+- [ ] BLE 실기기 검증 고도화 (재연결/타임아웃/센서 피드백)
 
 ---
 
 ## 작업 로그
 
 자세한 변경 이력은 [`docs/WORK_LOG.md`](docs/WORK_LOG.md)를 참고하세요.
+
+## 심사용 문서
+
+- [심사 요약서](docs/JUDGING_BRIEF.md)
+- [3분 데모 스크립트](docs/DEMO_SCRIPT_3MIN.md)
+- [재현 가이드/런북](docs/REPRO_RUNBOOK.md)
+
+## 테스트
+
+```bash
+flutter analyze
+flutter test
+```
+
+- 단위 테스트: 전자레인지 명령 규칙/시간 계산/버튼 좌표 매핑
+- 위젯 테스트: 홈 화면 스모크 테스트, BLE 연결 흐름(검색 없음/연결 성공)
+
+## 접근성 실험 지표
+
+설정 화면의 `접근성 실험 지표` 섹션에서 다음 항목을 누적 확인할 수 있습니다.
+- 총 작업 수 / 완료율 / 평균 완료 시간
+- 음성 작업 수 / 수동 작업 수
+- 비상 정지 횟수
+- 이중탭 타임아웃 횟수
+
+필요 시 `지표 초기화`로 실험 배치를 리셋할 수 있습니다.

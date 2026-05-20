@@ -1,9 +1,5 @@
-// TODO(hardware): BleService.scan() 결과로 _statusCard() 상태 동적 업데이트
-// TODO(hardware): 블루투스 연결 버튼 → BleService.connect() 호출
-// TODO(hardware): NFC 태그 → NFC 패키지로 ESP32 디바이스 ID 읽기
-// TODO(hardware): 수동 입력 → IP/MAC 주소 입력 다이얼로그 → BleService.connect()
-
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,7 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../theme/app_colors.dart';
 import '../../services/tts_service.dart';
-import '../../services/ble_service.dart'; // TODO(hardware): BLE 연동 시 활성화
+import '../../services/ble_service.dart';
 import 'qr_scan_screen.dart';
 
 int _iconCodePointForType(String type) {
@@ -27,10 +23,29 @@ int _iconCodePointForType(String type) {
   };
 }
 
-class DeviceConnectScreen extends StatelessWidget {
+class DeviceConnectScreen extends StatefulWidget {
   const DeviceConnectScreen({super.key});
 
+  @override
+  State<DeviceConnectScreen> createState() => _DeviceConnectScreenState();
+}
+
+class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
+  final TtsService _tts = TtsService();
+  final Random _random = Random();
+  bool _isScanning = false;
+  bool _isConnecting = false;
+  String _statusText = '연결 가능한 기기 감지됨';
+  String _hubName = 'ESP32 Smart Hub';
+  bool _connected = false;
+
   static const _prefKeyDevices = 'home_devices';
+
+  String _newDeviceId([String prefix = 'device']) {
+    final ts = DateTime.now().microsecondsSinceEpoch;
+    final suffix = _random.nextInt(1 << 20).toRadixString(16);
+    return '${prefix}_$ts$suffix';
+  }
 
   static const _iconOptions = [
     (label: '전자레인지', icon: Icons.microwave_rounded,               type: 'microwave'),
@@ -47,6 +62,7 @@ class DeviceConnectScreen extends StatelessWidget {
     BuildContext context, {
     required String name,
     required String type,
+    String? preferredDeviceId,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     final jsonStr = prefs.getString(_prefKeyDevices);
@@ -54,9 +70,13 @@ class DeviceConnectScreen extends StatelessWidget {
         ? (jsonDecode(jsonStr) as List).cast<Map<String, dynamic>>()
         : <Map<String, dynamic>>[];
 
-    if (devices.any((d) => d['name'] == name)) {
+    final candidateId = (preferredDeviceId?.trim().isNotEmpty ?? false)
+        ? preferredDeviceId!.trim()
+        : _newDeviceId(name.replaceAll(' ', '_'));
+
+    if (devices.any((d) => d['id'] == candidateId || d['name'] == name)) {
       if (context.mounted) {
-        TtsService().speak('$name 기기는 이미 등록되어 있습니다.');
+        _tts.speak('$name 기기는 이미 등록되어 있습니다.');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('$name 기기는 이미 등록되어 있습니다.'),
@@ -69,6 +89,7 @@ class DeviceConnectScreen extends StatelessWidget {
     }
 
     devices.add({
+      'id': candidateId,
       'name': name,
       'status': '작동 대기 중',
       'iconCodePoint': _iconCodePointForType(type),
@@ -76,7 +97,7 @@ class DeviceConnectScreen extends StatelessWidget {
     await prefs.setString(_prefKeyDevices, jsonEncode(devices));
 
     if (context.mounted) {
-      TtsService().speak('$name 기기가 홈에 추가되었습니다.');
+      _tts.speak('$name 기기가 홈에 추가되었습니다.');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('$name 기기가 홈에 추가되었습니다.'),
@@ -91,12 +112,13 @@ class DeviceConnectScreen extends StatelessWidget {
     BuildContext context, {
     required String initialName,
     required String initialType,
+    String? initialDeviceId,
   }) async {
     final nameCtrl = TextEditingController(text: initialName);
     int selectedIconIndex = _iconOptions.indexWhere((o) => o.type == initialType);
     if (selectedIconIndex < 0) selectedIconIndex = _iconOptions.length - 1; // 기타
 
-    TtsService().speak(
+    _tts.speak(
       '등록된 기기가 없습니다. 기기 이름과 종류를 확인하고 등록 버튼을 눌러주세요.',
     );
 
@@ -220,6 +242,7 @@ class DeviceConnectScreen extends StatelessWidget {
                   context,
                   name: name,
                   type: _iconOptions[selectedIconIndex].type,
+                  preferredDeviceId: initialDeviceId,
                 );
               },
               style: ElevatedButton.styleFrom(
@@ -243,12 +266,13 @@ class DeviceConnectScreen extends StatelessWidget {
         duration: const Duration(seconds: 1),
       ),
     );
-    TtsService().speak('$label 기능은 다음 단계에서 연결됩니다.'); // TTS 안내 추가
+    _tts.speak('$label 기능은 다음 단계에서 연결됩니다.');
   }
 
   Widget _statusCard() {
-    return Semantics( // 상태 카드 Semantics 추가
-      label: 'ESP32 Smart Hub, 연결 가능한 기기 감지됨',
+    final statusColor = _connected ? const Color(0xFF00FF88) : const Color(0xFFFFB020);
+    return Semantics(
+      label: '$_hubName, $_statusText',
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -262,31 +286,31 @@ class DeviceConnectScreen extends StatelessWidget {
             Container(
               width: 10,
               height: 10,
-              decoration: const BoxDecoration(
-                color: Color(0xFF00FF88),
+              decoration: BoxDecoration(
+                color: statusColor,
                 shape: BoxShape.circle,
               ),
             ),
-            SizedBox(width: 12),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'ESP32 Smart Hub',
+                    _hubName,
                     style: TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w700,
                       color: Colors.white,
                     ),
                   ),
-                  SizedBox(height: 2),
+                  const SizedBox(height: 2),
                   Text(
-                    '연결 가능한 기기 감지됨',
+                    _statusText,
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF00FF88),
+                      color: statusColor,
                     ),
                   ),
                 ],
@@ -306,7 +330,7 @@ class DeviceConnectScreen extends StatelessWidget {
     required VoidCallback onTap,
     required bool highlighted,
   }) {
-    return Semantics( // 옵션 카드 Semantics 추가
+    return Semantics(
       label: '$title. $subtitle. 버튼',
       button: true,
       child: Material(
@@ -391,7 +415,7 @@ class DeviceConnectScreen extends StatelessWidget {
     required VoidCallback onTap,
   }) {
     return Expanded(
-      child: Semantics( // 작은 액션 Semantics 추가
+      child: Semantics(
         label: '$title 버튼',
         button: true,
         child: Material(
@@ -428,6 +452,81 @@ class DeviceConnectScreen extends StatelessWidget {
     );
   }
 
+  Future<void> _onBluetoothConnectTap() async {
+    if (_isScanning || _isConnecting) return;
+    setState(() {
+      _isScanning = true;
+      _statusText = '주변 BLE 기기를 검색 중...';
+      _connected = false;
+    });
+    _tts.speak('주변 블루투스 기기를 검색합니다.');
+
+    final devices = await BleService.instance.scan(timeout: const Duration(seconds: 5));
+
+    if (!mounted) return;
+    setState(() => _isScanning = false);
+
+    if (devices.isEmpty) {
+      setState(() => _statusText = '검색된 BLE 기기가 없습니다.');
+      _tts.speak('검색된 블루투스 기기가 없습니다.');
+      return;
+    }
+
+    final selected = await showModalBottomSheet<BleDeviceInfo>(
+      context: context,
+      backgroundColor: const Color(0xFF111111),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: ListView.separated(
+          shrinkWrap: true,
+          itemCount: devices.length,
+          separatorBuilder: (context, index) => const Divider(color: Color(0xFF2A2A2A), height: 1),
+          itemBuilder: (_, index) {
+            final d = devices[index];
+            return ListTile(
+              title: Text(
+                d.name,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+              ),
+              subtitle: Text(
+                '${d.id} • RSSI ${d.rssi}',
+                style: const TextStyle(color: Color(0xFF888888), fontSize: 12),
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFFFFEB00)),
+              onTap: () => Navigator.of(ctx).pop(d),
+            );
+          },
+        ),
+      ),
+    );
+
+    if (selected == null || !mounted) return;
+
+    setState(() {
+      _isConnecting = true;
+      _statusText = '연결 중: ${selected.name}';
+      _hubName = selected.name;
+    });
+    _tts.speak('${selected.name}에 연결 중입니다.');
+
+    final ok = await BleService.instance.connect(selected.id);
+    if (!mounted) return;
+    setState(() {
+      _isConnecting = false;
+      _connected = ok;
+      _statusText = ok ? 'BLE 연결 완료' : 'BLE 연결 실패';
+    });
+    _tts.speak(ok ? '블루투스 연결이 완료되었습니다.' : '블루투스 연결에 실패했습니다.');
+  }
+
+  @override
+  void dispose() {
+    _tts.stop();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -442,7 +541,7 @@ class DeviceConnectScreen extends StatelessWidget {
               decoration: const BoxDecoration(
                 border: Border(bottom: BorderSide(color: Color(0xFF2A2A2A))),
               ),
-              child: Semantics( // 앱 타이틀 Semantics 추가
+              child: Semantics(
                 label: 'Touch Bridge 앱',
                 child: const Row(
                   children: [
@@ -491,13 +590,14 @@ class DeviceConnectScreen extends StatelessWidget {
                       subtitle: '허브의 QR을 촬영하여 즉시 연결',
                       highlighted: true,
                       onTap: () async {
-                        TtsService().speak('QR 코드 스캔 화면으로 이동합니다.');
+                        _tts.speak('QR 코드 스캔 화면으로 이동합니다.');
                         final result = await Navigator.of(context).push<Map<String, String>>(
                           MaterialPageRoute(builder: (_) => const QrScanScreen()),
                         );
                         if (result != null && context.mounted) {
                           final name = result['name'] ?? '알 수 없는 기기';
                           final type = result['type'] ?? '';
+                          final deviceId = (result['deviceId'] ?? '').trim();
 
                           // 홈 기기 목록에 없는 기기면 등록 다이얼로그 표시
                           final prefs = await SharedPreferences.getInstance();
@@ -505,12 +605,19 @@ class DeviceConnectScreen extends StatelessWidget {
                           final devices = jsonStr != null
                               ? (jsonDecode(jsonStr) as List).cast<Map<String, dynamic>>()
                               : <Map<String, dynamic>>[];
-                          final alreadyExists = devices.any((d) => d['name'] == name);
+                          final alreadyExists = devices.any(
+                            (d) => d['name'] == name || (deviceId.isNotEmpty && d['id'] == deviceId),
+                          );
 
                           if (!alreadyExists && context.mounted) {
-                            await _showRegisterDialog(context, initialName: name, initialType: type);
+                            await _showRegisterDialog(
+                              context,
+                              initialName: name,
+                              initialType: type,
+                              initialDeviceId: deviceId,
+                            );
                           } else if (context.mounted) {
-                            TtsService().speak('$name 기기가 이미 등록되어 있습니다.');
+                            _tts.speak('$name 기기가 이미 등록되어 있습니다.');
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text('$name 기기는 이미 등록되어 있습니다.'),
@@ -529,11 +636,7 @@ class DeviceConnectScreen extends StatelessWidget {
                       title: '블루투스 연결',
                       subtitle: '주변 기기 자동 검색 및 페어링',
                       highlighted: false,
-                      onTap: () {
-        // TODO(hardware): BleService.instance.scan() 호출 → 결과 목록 BottomSheet 표시
-        // TODO(hardware): 선택 시 BleService.instance.connect(deviceId)
-        _showPlaceholder(context, '블루투스 연결');
-      },
+                      onTap: _onBluetoothConnectTap,
                     ),
                     const SizedBox(height: 10),
                     Row(

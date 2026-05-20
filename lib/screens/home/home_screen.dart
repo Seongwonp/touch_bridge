@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,17 +12,29 @@ import '../mapping/photo_mapping_screen.dart';
 import '../voice/voice_listening_screen.dart';
 
 class DeviceInfo {
-  DeviceInfo({required this.name, this.status = '작동 대기 중', required this.iconCodePoint});
+  DeviceInfo({
+    required this.id,
+    required this.name,
+    this.status = '작동 대기 중',
+    required this.iconCodePoint,
+  });
 
+  final String id;
   final String name;
   final String status;
   final int iconCodePoint;
 
   IconData get icon => IconData(iconCodePoint, fontFamily: 'MaterialIcons');
 
-  Map<String, dynamic> toJson() => {'name': name, 'status': status, 'iconCodePoint': iconCodePoint};
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'status': status,
+        'iconCodePoint': iconCodePoint,
+      };
 
   factory DeviceInfo.fromJson(Map<String, dynamic> j) => DeviceInfo(
+        id: (j['id'] as String?) ?? '',
         name: j['name'] as String,
         status: j['status'] as String? ?? '작동 대기 중',
         iconCodePoint: j['iconCodePoint'] as int,
@@ -38,6 +51,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final TtsService _tts = TtsService();
   final PageController _pageController = PageController(viewportFraction: 0.92);
+  final Random _random = Random();
 
   int _currentDeviceIndex = 0;
   List<DeviceInfo> _devices = [];
@@ -45,9 +59,9 @@ class _HomeScreenState extends State<HomeScreen> {
   static const _prefKeyDevices = 'home_devices';
 
   static final _defaultDevices = [
-    DeviceInfo(name: '스마트 전자레인지', status: '작동 대기 중', iconCodePoint: Icons.microwave_rounded.codePoint),
-    DeviceInfo(name: '스마트 공기청정기', status: '공기 질 분석 중', iconCodePoint: Icons.air_rounded.codePoint),
-    DeviceInfo(name: '스마트 전등 허브', status: '원격 제어 가능', iconCodePoint: Icons.light_mode_rounded.codePoint),
+    DeviceInfo(id: 'default_microwave', name: '스마트 전자레인지', status: '작동 대기 중', iconCodePoint: Icons.microwave_rounded.codePoint),
+    DeviceInfo(id: 'default_air', name: '스마트 공기청정기', status: '공기 질 분석 중', iconCodePoint: Icons.air_rounded.codePoint),
+    DeviceInfo(id: 'default_light', name: '스마트 전등 허브', status: '원격 제어 가능', iconCodePoint: Icons.light_mode_rounded.codePoint),
   ];
 
   static final _kIconOptions = [
@@ -67,13 +81,70 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadDevices();
   }
 
+  String _newDeviceId([String prefix = 'device']) {
+    final ts = DateTime.now().microsecondsSinceEpoch;
+    final suffix = _random.nextInt(1 << 20).toRadixString(16);
+    return '${prefix}_$ts$suffix';
+  }
+
+  Future<List<DeviceInfo>> _migrateDevicesIfNeeded(SharedPreferences prefs, String jsonStr) async {
+    final rawList = (jsonDecode(jsonStr) as List).cast<Map<String, dynamic>>();
+    bool changed = false;
+    final usedIds = <String>{};
+    final devices = <DeviceInfo>[];
+    final legacyNameToId = <String, String>{};
+
+    for (final raw in rawList) {
+      final name = (raw['name'] as String?)?.trim() ?? '';
+      if (name.isEmpty) continue;
+      var id = (raw['id'] as String?)?.trim() ?? '';
+      if (id.isEmpty || usedIds.contains(id)) {
+        id = _newDeviceId(name.replaceAll(' ', '_'));
+        changed = true;
+      }
+      usedIds.add(id);
+      legacyNameToId[name] = id;
+      devices.add(DeviceInfo(
+        id: id,
+        name: name,
+        status: (raw['status'] as String?) ?? '작동 대기 중',
+        iconCodePoint: raw['iconCodePoint'] as int,
+      ));
+    }
+
+    for (final entry in legacyNameToId.entries) {
+      final legacyGridKey = 'mapping_grid_${entry.key}';
+      final legacyTypeKey = 'mapping_device_type_${entry.key}';
+      final newGridKey = 'mapping_grid_${entry.value}';
+      final newTypeKey = 'mapping_device_type_${entry.value}';
+
+      if (prefs.containsKey(legacyGridKey) && !prefs.containsKey(newGridKey)) {
+        final grid = prefs.getString(legacyGridKey);
+        if (grid != null) {
+          await prefs.setString(newGridKey, grid);
+          changed = true;
+        }
+      }
+      if (prefs.containsKey(legacyTypeKey) && !prefs.containsKey(newTypeKey)) {
+        final type = prefs.getString(legacyTypeKey);
+        if (type != null) {
+          await prefs.setString(newTypeKey, type);
+          changed = true;
+        }
+      }
+    }
+
+    if (changed) {
+      await prefs.setString(_prefKeyDevices, jsonEncode(devices.map((d) => d.toJson()).toList()));
+    }
+    return devices;
+  }
+
   Future<void> _loadDevices() async {
     final prefs = await SharedPreferences.getInstance();
     final jsonStr = prefs.getString(_prefKeyDevices);
     if (jsonStr != null) {
-      final list = (jsonDecode(jsonStr) as List)
-          .map((e) => DeviceInfo.fromJson(e as Map<String, dynamic>))
-          .toList();
+      final list = await _migrateDevicesIfNeeded(prefs, jsonStr);
       if (mounted) setState(() => _devices = list);
     } else {
       if (mounted) setState(() => _devices = List.from(_defaultDevices));
@@ -194,7 +265,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (name.isEmpty) return;
                 final opt = _kIconOptions[selectedIconIndex];
                 Navigator.of(ctx).pop();
-                final device = DeviceInfo(name: name, iconCodePoint: opt.icon.codePoint);
+                final device = DeviceInfo(
+                  id: _newDeviceId(name.replaceAll(' ', '_')),
+                  name: name,
+                  iconCodePoint: opt.icon.codePoint,
+                );
                 setState(() => _devices.add(device));
                 await _saveDevices();
                 if (_pageController.hasClients) {
@@ -254,7 +329,7 @@ class _HomeScreenState extends State<HomeScreen> {
               onTap: () {
                 Navigator.of(ctx).pop();
                 Navigator.of(context).push(MaterialPageRoute<void>(
-                  builder: (_) => PhotoMappingScreen(deviceId: device.name, deviceName: device.name),
+                  builder: (_) => PhotoMappingScreen(deviceId: device.id, deviceName: device.name),
                 ));
               },
             ),
@@ -300,7 +375,7 @@ class _HomeScreenState extends State<HomeScreen> {
               final name = ctrl.text.trim();
               if (name.isEmpty) return;
               Navigator.of(ctx).pop();
-              setState(() => _devices[index] = DeviceInfo(name: name, status: device.status, iconCodePoint: device.iconCodePoint));
+              setState(() => _devices[index] = DeviceInfo(id: device.id, name: name, status: device.status, iconCodePoint: device.iconCodePoint));
               await _saveDevices();
               _tts.speak('$name 으로 이름이 변경되었습니다.');
             },

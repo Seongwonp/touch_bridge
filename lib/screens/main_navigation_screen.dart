@@ -7,6 +7,7 @@ import 'connection/device_connect_screen.dart';
 import 'voice/voice_listening_screen.dart';
 import 'settings/settings_screen.dart';
 import '../services/tts_service.dart';
+import '../services/accessibility_experiment_service.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -54,6 +55,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           setState(() {
             _armedNavIndex = null;
           });
+          AccessibilityExperimentService.instance.recordDoubleTapTimeout();
         }
       });
 

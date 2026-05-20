@@ -1,14 +1,12 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../services/ai_backend_service.dart';
 import '../../services/tts_service.dart';
 
 class PhotoMappingScreen extends StatefulWidget {
@@ -58,11 +56,11 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
               : '저장된 매핑을 불러왔습니다.';
         });
         final prefix = widget.deviceName != null ? '${widget.deviceName} ' : '';
-        _tts.speak('${prefix}버튼 매핑 화면입니다. ${deviceType.isNotEmpty ? '저장된 $deviceType 매핑이 있습니다.' : '카메라 버튼을 눌러 가전기기를 촬영하면 AI가 버튼을 자동으로 인식합니다.'}');
+        _tts.speak('$prefix버튼 매핑 화면입니다. ${deviceType.isNotEmpty ? '저장된 $deviceType 매핑이 있습니다.' : '카메라 버튼을 눌러 가전기기를 촬영하면 AI가 버튼을 자동으로 인식합니다.'}');
       }
     } else {
       final prefix = widget.deviceName != null ? '${widget.deviceName} ' : '';
-      _tts.speak('${prefix}버튼 매핑 화면입니다. 카메라 버튼을 눌러 가전기기를 촬영하면 AI가 버튼을 자동으로 인식합니다.');
+      _tts.speak('$prefix버튼 매핑 화면입니다. 카메라 버튼을 눌러 가전기기를 촬영하면 AI가 버튼을 자동으로 인식합니다.');
     }
   }
 
@@ -89,9 +87,8 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
   }
 
   Future<void> _takePhoto() async {
-    final apiKey = dotenv.get('GOOGLE_AI_PRO_API_KEY', fallback: '');
-    if (apiKey.isEmpty) {
-      _tts.speak('API 키가 설정되지 않아 AI 분석을 사용할 수 없습니다.');
+    if (!AiBackendService.instance.isConfigured) {
+      _tts.speak('AI_BACKEND_URL이 설정되지 않아 AI 분석을 사용할 수 없습니다.');
       return;
     }
 
@@ -121,7 +118,7 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
       });
       _tts.speak('사진을 받았습니다. AI가 버튼을 분석하고 있습니다. 잠시 기다려 주세요.');
 
-      await _analyzeWithGemini(bytes, mime, apiKey);
+      await _analyzeWithBackend(bytes, mime);
     } catch (e) {
       if (kDebugMode) debugPrint('Photo pick error: $e');
       if (mounted) {
@@ -134,54 +131,15 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
     }
   }
 
-  Future<void> _analyzeWithGemini(
+  Future<void> _analyzeWithBackend(
     Uint8List imageBytes,
     String mimeType,
-    String apiKey,
   ) async {
     try {
-      final modelName = dotenv.get('GEMINI_MODEL', fallback: 'gemini-2.5-flash');
-      final model = GenerativeModel(model: modelName, apiKey: apiKey);
-
-      const prompt = '''
-이 이미지는 가전기기의 터치패드 사진입니다.
-사진에 보이는 버튼들을 분석하여 3×3 그리드(row 0~2, col 0~2)에 매핑해주세요.
-(0,0)은 왼쪽 위, (2,2)는 오른쪽 아래입니다.
-
-반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트는 포함하지 마세요:
-{
-  "device_type": "전자레인지",
-  "description": "전자레인지 터치패드입니다. 시작, 취소 등 6개 버튼을 인식했습니다.",
-  "buttons": [
-    {"row": 0, "col": 0, "label": "시작"},
-    {"row": 0, "col": 1, "label": "취소"},
-    {"row": 0, "col": 2, "label": "+30초"}
-  ]
-}
-
-버튼이 없는 위치는 포함하지 마세요. 라벨은 간결한 한국어로 작성하세요.
-''';
-
-      final response = await model.generateContent([
-        Content.multi([
-          DataPart(mimeType, imageBytes),
-          TextPart(prompt),
-        ]),
-      ]);
-
-      if (!mounted) return;
-
-      final text = response.text?.trim() ?? '';
-      String jsonStr = text;
-      if (jsonStr.startsWith('```json')) {
-        jsonStr = jsonStr.substring(7);
-        jsonStr = jsonStr.substring(0, jsonStr.lastIndexOf('```')).trim();
-      } else if (jsonStr.startsWith('```')) {
-        jsonStr = jsonStr.substring(3);
-        jsonStr = jsonStr.substring(0, jsonStr.lastIndexOf('```')).trim();
-      }
-
-      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+      final data = await AiBackendService.instance.analyzeMappingImage(
+        imageBytes: imageBytes,
+        mimeType: mimeType,
+      );
       final deviceType = data['device_type'] as String? ?? '기기';
       final description = data['description'] as String? ?? '';
       final buttons = data['buttons'] as List<dynamic>? ?? [];

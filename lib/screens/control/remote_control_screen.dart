@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/tts_service.dart';
+import '../../services/accessibility_experiment_service.dart';
 
 import '../../widgets/responsive_scale.dart';
 import '../safety/emergency_stop_screen.dart';
@@ -62,6 +63,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
         setState(() {
           _armedActionId = null;
         });
+        AccessibilityExperimentService.instance.recordDoubleTapTimeout();
       });
 
       await _speak(guide);
@@ -129,6 +131,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     }
 
     _speak('${_formatMMSS(_secondsLeft)} 타이머를 시작합니다.'); // 시작 전 TTS 피드백
+    AccessibilityExperimentService.instance.recordTaskStarted(TaskMode.manual);
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => EmergencyStopScreen(initialSeconds: _secondsLeft),

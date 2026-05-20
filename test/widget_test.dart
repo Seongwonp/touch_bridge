@@ -9,6 +9,6 @@ void main() {
     await tester.pumpWidget(const TouchBridgeApp());
 
     expect(find.text('Touch Bridge'), findsOneWidget);
-    expect(find.text('홈 - 기기 전환'), findsOneWidget);
+    expect(find.text('내 기기'), findsOneWidget);
   });
 }
