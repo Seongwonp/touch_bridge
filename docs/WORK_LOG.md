@@ -405,7 +405,7 @@
 ```
 # .env 파일 (프로젝트 루트, git 제외)
 GOOGLE_AI_PRO_API_KEY=실제_키_입력
-GEMINI_MODEL=gemini-2.5-flash   # 또는 gemini-2.5-pro
+GEMINI_MODEL=gemini-3-flash-preview
 ```
 
 ---
