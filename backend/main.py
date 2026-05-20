@@ -26,7 +26,7 @@ processor = AutoProcessor.from_pretrained(model_id)
 
 # 2. Gemini AI 설정
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-ai_model = genai.GenerativeModel(os.getenv("GEMINI_MODEL", "gemini-2.5-flash"))
+ai_model = genai.GenerativeModel(os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"))
 
 # 전자레인지 버튼 규격 (3x3 그리드 기준)
 # BT-01: 10초, BT-02: 30초, BT-03: 1분
