@@ -15,7 +15,7 @@ AI_BACKEND_URL=http://127.0.0.1:8000
 ### 백엔드 `.env` (`backend` 실행 환경)
 ```env
 GOOGLE_API_KEY=YOUR_REAL_KEY
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3-flash-preview
 ```
 (`backend/.env_ex` 참고)
 
