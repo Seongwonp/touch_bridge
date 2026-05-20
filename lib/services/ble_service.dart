@@ -1,64 +1,175 @@
-// TODO(hardware): BLE 연동 구현 — ESP32 GATT 서버와 통신
-//
-// 연결 순서:
-//   1. flutter_blue_plus 패키지 추가 (pubspec.yaml)
-//   2. BleService.scan() → ESP32 광고 패킷 감지
-//   3. BleService.connect(deviceId) → GATT 연결
-//   4. BleService.sendCommand(x, y) → Characteristic 쓰기
-//
-// ESP32 GATT 스펙:
-//   Service UUID    : 0000FFE0-0000-1000-8000-00805F9B34FB
-//   Characteristic  : 0000FFE1-0000-1000-8000-00805F9B34FB
-//
-// 명령 포맷 (JSON string):
-//   { "action": "press", "x": 0, "y": 1, "deviceId": "microwave_1" }
-//
-// 참고: CLAUDE.md "하드웨어 BLE 프로토콜" 섹션
-
-// ignore_for_file: unused_element
-
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+
+// ESP32 GATT 스펙:
+// Service UUID   : 0000FFE0-0000-1000-8000-00805F9B34FB
+// Characteristic : 0000FFE1-0000-1000-8000-00805F9B34FB
 
 class BleService {
   BleService._();
   static final BleService instance = BleService._();
 
-  bool get isConnected => false; // TODO(hardware): 실제 연결 상태 반환
+  static final Guid _serviceUuid = Guid('0000FFE0-0000-1000-8000-00805F9B34FB');
+  static final Guid _characteristicUuid = Guid('0000FFE1-0000-1000-8000-00805F9B34FB');
 
-  // TODO(hardware): 주변 ESP32 기기 스캔 시작
+  BluetoothDevice? _connectedDevice;
+  BluetoothCharacteristic? _commandCharacteristic;
+  Future<List<BleDeviceInfo>> Function(Duration timeout)? _scanOverride;
+  Future<bool> Function(String deviceId)? _connectOverride;
+
+  bool get isConnected => _connectedDevice != null && _commandCharacteristic != null;
+  String get connectedDeviceId => _connectedDevice?.remoteId.str ?? '';
+  String get connectedDeviceName {
+    final name = _connectedDevice?.platformName.trim() ?? '';
+    return name.isEmpty ? connectedDeviceId : name;
+  }
+
   Future<List<BleDeviceInfo>> scan({Duration timeout = const Duration(seconds: 5)}) async {
-    if (kDebugMode) debugPrint('[BLE] scan() — not implemented yet');
-    return [];
-  }
-
-  // TODO(hardware): 기기에 연결
-  Future<bool> connect(String deviceId) async {
-    if (kDebugMode) debugPrint('[BLE] connect($deviceId) — not implemented yet');
-    return false;
-  }
-
-  // TODO(hardware): 연결 해제
-  Future<void> disconnect() async {
-    if (kDebugMode) debugPrint('[BLE] disconnect() — not implemented yet');
-  }
-
-  // TODO(hardware): 버튼 좌표를 ESP32로 전송
-  // x, y: 0-based 그리드 인덱스 (3x3 → 0~2)
-  Future<bool> sendPress({required int x, required int y, required String deviceId}) async {
-    if (kDebugMode) {
-      debugPrint('[BLE] sendPress(x:$x, y:$y, deviceId:$deviceId) — not implemented yet');
+    if (_scanOverride != null) {
+      return _scanOverride!.call(timeout);
     }
-    // TODO(hardware): flutter_blue_plus로 Characteristic write 구현
-    // final characteristic = _getCharacteristic();
-    // final payload = jsonEncode({'action': 'press', 'x': x, 'y': y, 'deviceId': deviceId});
-    // await characteristic.write(utf8.encode(payload));
-    return false;
+    if (kIsWeb) {
+      if (kDebugMode) debugPrint('[BLE] Web BLE not supported in this flow');
+      return const [];
+    }
+
+    final found = <String, BleDeviceInfo>{};
+    late final StreamSubscription<List<ScanResult>> sub;
+    sub = FlutterBluePlus.scanResults.listen((results) {
+      for (final result in results) {
+        final id = result.device.remoteId.str;
+        final name = result.device.platformName.trim();
+        final candidateName = name.isNotEmpty ? name : 'Unknown BLE Device';
+        found[id] = BleDeviceInfo(
+          id: id,
+          name: candidateName,
+          rssi: result.rssi,
+        );
+      }
+    });
+
+    try {
+      await FlutterBluePlus.startScan(timeout: timeout);
+      await Future<void>.delayed(timeout);
+    } catch (e) {
+      if (kDebugMode) debugPrint('[BLE] scan error: $e');
+    } finally {
+      await FlutterBluePlus.stopScan();
+      await sub.cancel();
+    }
+
+    final list = found.values.toList()
+      ..sort((a, b) => b.rssi.compareTo(a.rssi));
+    return list;
   }
 
-  // TODO(hardware): 비상 정지 신호 전송
+  Future<bool> connect(String deviceId) async {
+    if (_connectOverride != null) {
+      return _connectOverride!.call(deviceId);
+    }
+    if (kIsWeb) return false;
+
+    try {
+      final devices = await FlutterBluePlus.systemDevices([_serviceUuid]);
+      final target = devices.where((d) => d.remoteId.str == deviceId).firstOrNull;
+      if (target == null) {
+        if (kDebugMode) debugPrint('[BLE] target not found: $deviceId');
+        return false;
+      }
+
+      await disconnect();
+      await target.connect(timeout: const Duration(seconds: 10));
+      final services = await target.discoverServices();
+
+      BluetoothCharacteristic? characteristic;
+      for (final s in services) {
+        if (s.uuid == _serviceUuid) {
+          for (final c in s.characteristics) {
+            if (c.uuid == _characteristicUuid) {
+              characteristic = c;
+              break;
+            }
+          }
+        }
+      }
+
+      if (characteristic == null) {
+        if (kDebugMode) debugPrint('[BLE] characteristic not found');
+        await target.disconnect();
+        return false;
+      }
+
+      _connectedDevice = target;
+      _commandCharacteristic = characteristic;
+      if (kDebugMode) {
+        debugPrint('[BLE] connected: ${target.remoteId.str} / ${target.platformName}');
+      }
+      return true;
+    } catch (e) {
+      if (kDebugMode) debugPrint('[BLE] connect error: $e');
+      await disconnect();
+      return false;
+    }
+  }
+
+  Future<void> disconnect() async {
+    try {
+      await _connectedDevice?.disconnect();
+    } catch (e) {
+      if (kDebugMode) debugPrint('[BLE] disconnect error: $e');
+    } finally {
+      _connectedDevice = null;
+      _commandCharacteristic = null;
+    }
+  }
+
+  Future<bool> sendPress({required int x, required int y, required String deviceId}) async {
+    final c = _commandCharacteristic;
+    if (c == null) return false;
+
+    final payload = jsonEncode({
+      'action': 'press',
+      'x': x,
+      'y': y,
+      'deviceId': deviceId,
+    });
+    try {
+      await c.write(utf8.encode(payload), withoutResponse: false);
+      if (kDebugMode) debugPrint('[BLE] sendPress: $payload');
+      return true;
+    } catch (e) {
+      if (kDebugMode) debugPrint('[BLE] sendPress error: $e');
+      return false;
+    }
+  }
+
   Future<void> sendEmergencyStop(String deviceId) async {
-    if (kDebugMode) debugPrint('[BLE] sendEmergencyStop($deviceId) — not implemented yet');
-    // TODO(hardware): { "action": "stop", "deviceId": deviceId } 전송
+    final c = _commandCharacteristic;
+    if (c == null) return;
+    final payload = jsonEncode({'action': 'stop', 'deviceId': deviceId});
+    try {
+      await c.write(utf8.encode(payload), withoutResponse: false);
+      if (kDebugMode) debugPrint('[BLE] sendEmergencyStop: $payload');
+    } catch (e) {
+      if (kDebugMode) debugPrint('[BLE] stop error: $e');
+    }
+  }
+
+  @visibleForTesting
+  void setTestOverrides({
+    Future<List<BleDeviceInfo>> Function(Duration timeout)? scan,
+    Future<bool> Function(String deviceId)? connect,
+  }) {
+    _scanOverride = scan;
+    _connectOverride = connect;
+  }
+
+  @visibleForTesting
+  void clearTestOverrides() {
+    _scanOverride = null;
+    _connectOverride = null;
   }
 }
 

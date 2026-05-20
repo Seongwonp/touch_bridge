@@ -1,5 +1,5 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../services/accessibility_experiment_service.dart';
 import '../../services/accessibility_settings.dart';
 import '../../services/tts_service.dart';
 
@@ -308,6 +308,57 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                   const SizedBox(height: 24),
 
+                  _SectionLabel(
+                    icon: Icons.analytics_rounded,
+                    label: '접근성 실험 지표',
+                  ),
+                  const SizedBox(height: 10),
+                  AnimatedBuilder(
+                    animation: AccessibilityExperimentService.instance,
+                    builder: (context, child) {
+                      final exp = AccessibilityExperimentService.instance;
+                      return _SettingsCard(
+                        children: [
+                          _MetricRow(label: '총 작업 수', value: '${exp.totalTasks}회'),
+                          const _Divider(),
+                          _MetricRow(label: '완료율', value: '${exp.completionRate.toStringAsFixed(1)}%'),
+                          const _Divider(),
+                          _MetricRow(label: '평균 완료 시간', value: '${exp.averageCompletionSeconds.toStringAsFixed(1)}초'),
+                          const _Divider(),
+                          _MetricRow(label: '음성 작업', value: '${exp.voiceTasks}회'),
+                          const _Divider(),
+                          _MetricRow(label: '수동 작업', value: '${exp.manualTasks}회'),
+                          const _Divider(),
+                          _MetricRow(label: '비상 정지', value: '${exp.emergencyStops}회'),
+                          const _Divider(),
+                          _MetricRow(label: '이중탭 타임아웃', value: '${exp.doubleTapTimeouts}회'),
+                          const SizedBox(height: 10),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: () async {
+                                  await AccessibilityExperimentService.instance.reset();
+                                  _tts.speak('접근성 실험 지표를 초기화했습니다.');
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(color: Color(0xFF555555)),
+                                  foregroundColor: const Color(0xFFD1D5DB),
+                                ),
+                                icon: const Icon(Icons.refresh_rounded),
+                                label: const Text('지표 초기화'),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                        ],
+                      );
+                    },
+                  ),
+
+                  const SizedBox(height: 24),
+
                   // 비상 연락처 섹션
                   _SectionLabel(
                     icon: Icons.emergency_rounded,
@@ -342,6 +393,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _MetricRow extends StatelessWidget {
+  const _MetricRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Color(0xFFFFEB00),
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
       ),
     );
   }

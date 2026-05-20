@@ -4,7 +4,8 @@ import io
 import librosa
 import numpy as np
 import torch
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from pydantic import BaseModel
 from transformers import MoonshineForConditionalGeneration, AutoProcessor
 from dotenv import load_dotenv
 import google.generativeai as genai
@@ -25,7 +26,7 @@ processor = AutoProcessor.from_pretrained(model_id)
 
 # 2. Gemini AI 설정
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-ai_model = genai.GenerativeModel('gemini-2.0-flash')
+ai_model = genai.GenerativeModel(os.getenv("GEMINI_MODEL", "gemini-2.5-flash"))
 
 # 전자레인지 버튼 규격 (3x3 그리드 기준)
 # BT-01: 10초, BT-02: 30초, BT-03: 1분
@@ -113,6 +114,82 @@ def interpret_with_ai(text: str):
         print(f"AI 해석 오류: {e}")
         return {"action": "NONE", "message": "명령을 분석하는 중 오류가 발생했습니다."}
 
+
+class CommandRequest(BaseModel):
+    text: str
+
+
+@app.post("/parse-command")
+async def parse_command(req: CommandRequest):
+    text = req.text.strip()
+    if not text:
+        return {"action": "NONE", "commands": [], "target": None, "message": "명령이 비어 있습니다."}
+
+    rule_result = check_simple_rules(text)
+    if rule_result:
+        if "target" not in rule_result:
+            rule_result["target"] = None
+        if "commands" not in rule_result:
+            rule_result["commands"] = []
+        return rule_result
+
+    result = interpret_with_ai(text)
+    result.setdefault("commands", [])
+    result.setdefault("target", None)
+    result.setdefault("message", "명령을 분석했습니다.")
+    return result
+
+
+@app.post("/vision-mapping")
+async def vision_mapping(image: UploadFile = File(...)):
+    if not image.content_type or not image.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="이미지 파일만 허용됩니다.")
+
+    image_bytes = await image.read()
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="빈 이미지입니다.")
+
+    prompt = """
+이 이미지는 가전기기의 터치패드 사진입니다.
+사진에 보이는 버튼들을 분석하여 3×3 그리드(row 0~2, col 0~2)에 매핑해주세요.
+(0,0)은 왼쪽 위, (2,2)는 오른쪽 아래입니다.
+
+반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트는 포함하지 마세요:
+{
+  "device_type": "전자레인지",
+  "description": "전자레인지 터치패드입니다. 시작, 취소 등 6개 버튼을 인식했습니다.",
+  "buttons": [
+    {"row": 0, "col": 0, "label": "시작"},
+    {"row": 0, "col": 1, "label": "취소"},
+    {"row": 0, "col": 2, "label": "+30초"}
+  ]
+}
+버튼이 없는 위치는 포함하지 마세요. 라벨은 간결한 한국어로 작성하세요.
+"""
+
+    try:
+        response = ai_model.generate_content([
+            {"mime_type": image.content_type, "data": image_bytes},
+            prompt,
+        ])
+        text = (response.text or "").strip()
+        if text.startswith("```json"):
+            text = text[7:]
+            text = text[:text.rfind("```")].strip()
+        elif text.startswith("```"):
+            text = text[3:]
+            text = text[:text.rfind("```")].strip()
+        data = json.loads(text)
+    except Exception as e:
+        print(f"vision_mapping error: {e}")
+        raise HTTPException(status_code=500, detail="AI 이미지 분석에 실패했습니다.")
+
+    return {
+        "device_type": data.get("device_type", "기기"),
+        "description": data.get("description", ""),
+        "buttons": data.get("buttons", []),
+    }
+
 @app.post("/voice-command")
 async def process_voice(file: UploadFile = File(...)):
     audio_bytes = await file.read()
@@ -148,4 +225,3 @@ async def process_voice(file: UploadFile = File(...)):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
-

@@ -7,6 +7,187 @@
 
 ---
 
+## 2026-05-20 (세션 4) — BLE 실제 연동 1차
+
+### BLE 서비스 구현
+- **파일**: `lib/services/ble_service.dart`
+- `flutter_blue_plus` 기반 실제 메서드 구현
+  - `scan(timeout)` : 주변 BLE 기기 스캔 + RSSI 정렬
+  - `connect(deviceId)` : 대상 기기 연결 + GATT 서비스/특성 탐색
+  - `disconnect()` : 연결 해제 및 상태 초기화
+  - `sendPress(x, y, deviceId)` : 버튼 좌표 명령 JSON 전송
+  - `sendEmergencyStop(deviceId)` : 긴급 정지 명령 전송
+
+### 연결 화면 연동
+- **파일**: `lib/screens/connection/device_connect_screen.dart`
+- `StatefulWidget` 전환 후 BLE 스캔/선택/연결 플로우 연결
+- 스캔 결과 Bottom Sheet에서 기기 선택 후 연결
+- 상태 카드에 연결 상태(검색 중/연결 중/성공/실패) 반영
+
+### 음성 명령 → BLE 전송 연결
+- **파일**: `lib/screens/voice/voice_listening_screen.dart`
+- `MICROWAVE_CONTROL` 명령 시 버튼 시퀀스를 3x3 좌표로 변환해 `sendPress` 호출
+- `BT-06` 또는 `EMERGENCY_STOP` 명령 시 `sendEmergencyStop` 호출
+- `switch` 케이스별 `return` 정리로 의도치 않은 연속 실행 방지
+
+### 문서/의존성 업데이트
+- **파일**: `pubspec.yaml` → `flutter_blue_plus` 추가
+- **파일**: `CLAUDE.md`, `README.md` → BLE 1차 구현 상태 반영
+
+---
+
+## 2026-05-20 (세션 5) — 데이터 무결성 1차 (deviceId 도입)
+
+### 목적
+- 기기 이름 변경 시 버튼 매핑 연결이 끊기지 않도록 식별자 분리
+
+### 변경 내용
+- **파일**: `lib/screens/home/home_screen.dart`
+  - `DeviceInfo`에 immutable `id` 필드 추가
+  - 기기 추가 시 `deviceId` 자동 생성
+  - 이름 수정 시 `id` 유지
+  - 기존 `home_devices` 데이터 자동 마이그레이션:
+    - `id` 없는 레코드에 신규 `deviceId` 부여
+    - 중복/빈 `id` 보정
+  - 기존 매핑 키 자동 마이그레이션:
+    - `mapping_grid_<deviceName>` → `mapping_grid_<deviceId>`
+    - `mapping_device_type_<deviceName>` → `mapping_device_type_<deviceId>`
+- **파일**: `lib/screens/connection/device_connect_screen.dart`
+  - QR 등록 시 `deviceId`를 `home_devices`에 저장
+  - 중복 등록 검사 기준에 `id` 포함 (`id` 또는 `name` 중복 차단)
+- **파일**: `lib/screens/home/home_screen.dart`
+  - 버튼 매핑 진입 시 `PhotoMappingScreen(deviceId: device.id)` 전달
+
+### 검증
+- `flutter analyze` : 통과
+- `flutter test` : 통과
+
+---
+
+## 2026-05-20 (세션 6) — 보안/운영성 1차 (API 키 클라이언트 분리)
+
+### 목적
+- 앱 번들에서 Gemini API 키를 제거하고 서버 측에서만 키를 관리
+
+### 변경 내용
+- **신규 파일**: `lib/services/ai_backend_service.dart`
+  - 앱에서 AI 기능 호출을 백엔드 API로 통일
+  - `POST /parse-command` (음성 명령 파싱)
+  - `POST /vision-mapping` (버튼 매핑 이미지 분석)
+- **파일**: `lib/screens/voice/voice_listening_screen.dart`
+  - `google_generative_ai` 직접 호출 제거
+  - 백엔드 `parse-command` 호출로 전환
+- **파일**: `lib/screens/mapping/photo_mapping_screen.dart`
+  - Gemini Vision 직접 호출 제거
+  - 백엔드 `vision-mapping` 호출로 전환
+- **파일**: `backend/main.py`
+  - `POST /parse-command` 추가
+  - `POST /vision-mapping` 추가
+  - Gemini 키/모델은 백엔드 `.env`(`GOOGLE_API_KEY`, `GEMINI_MODEL`)에서만 사용
+
+### 운영 환경 변수
+- 앱(Flutter): `AI_BACKEND_URL`
+- 백엔드(FastAPI): `GOOGLE_API_KEY`, `GEMINI_MODEL`
+
+### 검증
+- `flutter analyze` : 통과
+- `flutter test` : 통과
+
+---
+
+## 2026-05-20 (세션 7) — 테스트 체계 확장 1차
+
+### 목적
+- 회귀 위험이 큰 음성 명령 핵심 로직을 자동 테스트로 고정
+
+### 변경 내용
+- **신규 파일**: `lib/services/microwave_command_service.dart`
+  - 단순 규칙 파싱(`checkSimpleRules`)
+  - 버튼 시퀀스 시간 계산(`calculateSeconds`)
+  - 버튼 라벨 조합(`buildCommandsLabel`)
+  - 버튼→3x3 좌표 매핑(`btnToGrid`)
+- **파일**: `lib/screens/voice/voice_listening_screen.dart`
+  - 내부 private 로직을 `MicrowaveCommandService` 호출로 대체
+- **신규 테스트**: `test/services/microwave_command_service_test.dart`
+  - 규칙 파싱 3건
+  - 시간 계산 2건
+  - 좌표 매핑 2건
+
+### 검증
+- `flutter analyze` : 통과
+- `flutter test` : 통과 (총 8개)
+
+---
+
+## 2026-05-20 (세션 8) — 테스트 체계 확장 2차 (BLE/연결 흐름)
+
+### 변경 내용
+- **파일**: `lib/services/ble_service.dart`
+  - 테스트용 오버라이드 훅 추가
+    - `setTestOverrides(scan, connect)`
+    - `clearTestOverrides()`
+- **신규 테스트**: `test/screens/device_connect_screen_test.dart`
+  - BLE 검색 결과 없음 시 상태 문구 검증
+  - BLE 스캔 결과 선택 후 연결 성공 상태 문구 검증
+
+### 검증
+- `flutter analyze` : 통과
+- `flutter test` : 통과 (총 10개)
+
+---
+
+## 2026-05-20 (세션 9) — 접근성 실험 지표화 1차
+
+### 목적
+- 사용자 테스트(시각장애인/저시력) 시 정량 지표를 앱 내부에서 즉시 수집
+
+### 변경 내용
+- **신규 파일**: `lib/services/accessibility_experiment_service.dart`
+  - 지표 영속화(SharedPreferences)
+  - 수집 항목:
+    - 총 작업 수, 완료 작업 수, 완료율
+    - 평균 완료 시간
+    - 음성 작업 수, 수동 작업 수
+    - 비상 정지 횟수
+    - 이중탭 타임아웃 횟수
+- **파일**: `lib/main.dart`
+  - 앱 시작 시 실험 지표 로드
+- **파일**: `lib/screens/control/remote_control_screen.dart`
+  - 수동 작업 시작 지표 기록
+  - 이중탭 타임아웃 기록
+- **파일**: `lib/screens/voice/voice_listening_screen.dart`
+  - 음성 작업 시작 지표 기록
+- **파일**: `lib/screens/main_navigation_screen.dart`
+  - 하단 탭 이중탭 타임아웃 기록
+- **파일**: `lib/screens/safety/emergency_stop_screen.dart`
+  - 자연 완료 시 작업 완료 기록
+  - 비상 정지 시 정지 횟수/작업 중단 기록
+- **파일**: `lib/screens/settings/settings_screen.dart`
+  - `접근성 실험 지표` 섹션 추가
+  - 실시간 지표 표시 + 지표 초기화 버튼
+
+### 검증
+- `flutter analyze` : 통과
+- `flutter test` : 통과 (총 10개)
+
+---
+
+## 2026-05-20 (세션 10) — 심사용 패키징
+
+### 변경 내용
+- **신규 문서**: `docs/JUDGING_BRIEF.md`
+  - 문제/해결/차별점/정량지표/기대효과 요약
+- **신규 문서**: `docs/DEMO_SCRIPT_3MIN.md`
+  - 3분 발표 시간축 기준 시연 스크립트
+- **신규 문서**: `docs/REPRO_RUNBOOK.md`
+  - 환경 변수/실행 명령/검증 명령/장애 대응 플랜 B
+- **파일**: `README.md`
+  - 심사용 문서 링크 섹션 추가
+- **파일**: `CLAUDE.md`
+  - 심사용 패키징 완료 상태 반영
+
+---
+
 ## 2026-03 초중순 — 아이디어 구상 및 팀 결성
 
 - 시각장애인의 터치패드 가전 접근성 문제 발굴

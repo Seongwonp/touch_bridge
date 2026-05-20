@@ -65,7 +65,7 @@ lib/
 │   └── mapping/photo_mapping_screen.dart  # 3x3 그리드 버튼 매핑 (기기별 저장)
 ├── services/
 │   ├── tts_service.dart                   # Singleton TTS (flutter_tts 래퍼)
-│   ├── ble_service.dart                   # BLE 스텁 — 하드웨어 연동 대기
+│   ├── ble_service.dart                   # BLE 스캔/연결/명령 전송 서비스
 │   ├── accessibility_settings.dart        # Singleton ChangeNotifier (설정 영속화)
 │   └── timer_service.dart                 # 카운트다운 타이머
 ├── theme/
@@ -107,7 +107,7 @@ TTS: "이전 화면으로 돌아갑니다."
 - 완료: `"완료되었습니다."` or `"작동이 안전하게 중단되었습니다."`
 
 ### 기기 목록 관리 (HomeScreen)
-- `DeviceInfo` 클래스: name, status, iconCodePoint → JSON 직렬화
+- `DeviceInfo` 클래스: id(immutable), name, status, iconCodePoint → JSON 직렬화
 - SharedPreferences 키: `home_devices`
 - 상단 "+" 버튼: 이름 + 아이콘 8종 선택 → 추가
 - 카드 롱프레스: 수정 / 버튼 매핑 / 삭제 Bottom Sheet
@@ -118,6 +118,7 @@ TTS: "이전 화면으로 돌아갑니다."
 - SharedPreferences 키: `mapping_grid_<deviceId>`, `mapping_device_type_<deviceId>`
 - 전역(기기 미지정) 키: `mapping_grid_global`
 - 홈 화면 롱프레스 → "버튼 매핑" 선택 시 기기명 전달하며 진입
+- 기존 `mapping_grid_<deviceName>` 데이터는 홈 로드시 `deviceId` 키로 자동 마이그레이션
 
 ## 음성 명령 (Gemini AI)
 
@@ -126,7 +127,7 @@ TTS: "이전 화면으로 돌아갑니다."
 **1단계 — 간단한 규칙 체크 (`_checkSimpleRules`)**
 "30초 시작", "1분 시작", "취소/정지/그만" 등 자주 쓰는 명령은 Gemini 호출 없이 즉시 처리.
 
-**2단계 — Gemini API 파싱 (버튼 ID 시퀀스 방식)**
+**2단계 — 백엔드 AI 파싱 API 호출 (버튼 ID 시퀀스 방식)**
 ```json
 {
   "action": "EMERGENCY_STOP | NAVIGATE | MICROWAVE_CONTROL | NONE",
@@ -150,7 +151,7 @@ TTS: "이전 화면으로 돌아갑니다."
 | BT-09 | 자동조리 | — |
 
 `_calculateSeconds(commands)` — 버튼 시퀀스에서 총 초를 계산해 `EmergencyStopScreen`에 전달.
-나중에 BLE 연동 시 각 버튼 ID → 그리드 좌표로 변환해 `BleService.sendPress()` 호출.
+버튼 ID 시퀀스는 3x3 그리드 좌표로 변환되어 `BleService.sendPress()`로 전송됨.
 
 - 5초 침묵 감지: 말 없음 → 재시도 안내 / 말 있었음 → 자동 분석
 - Chrome `onStatus: 'done'` 처리 포함
@@ -158,10 +159,9 @@ TTS: "이전 화면으로 돌아갑니다."
 ## 환경 설정 (.env)
 
 ```
-GOOGLE_AI_PRO_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL=gemini-2.5-flash
+AI_BACKEND_URL=http://127.0.0.1:8000
 ```
-`.env`는 git에 올리지 말 것 (`.gitignore` 등록됨).
+앱은 API 키를 직접 보관하지 않고 백엔드 경유로 AI 기능을 사용.
 
 ## 플랫폼별 TTS/STT 주의사항
 
@@ -201,7 +201,7 @@ if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) return;
 - `largeTextEnabled`: 텍스트 1.18배 확대 (기본 false)
 - `highContrastEnabled`: boldText 강화 (기본 false)
 
-## 하드웨어 BLE 프로토콜 (연동 대기)
+## 하드웨어 BLE 프로토콜
 
 ```
 ESP32 GATT Server
@@ -212,10 +212,10 @@ Characteristic  : 0000FFE1-0000-1000-8000-00805F9B34FB
 { "action": "press", "x": 0, "y": 1, "deviceId": "microwave_1" }
 ```
 
-BLE 연동 준비 파일: `lib/services/ble_service.dart`
-- 모든 메서드가 스텁으로 구현됨 (scan, connect, disconnect, sendPress, sendEmergencyStop)
-- `flutter_blue_plus` 패키지 추가 후 스텁 채우면 됨
-- 연결 지점: `device_connect_screen.dart`, `home_screen.dart`, `photo_mapping_screen.dart`의 `// TODO(hardware):` 주석 참고
+BLE 연동 구현 파일: `lib/services/ble_service.dart`
+- 구현 메서드: `scan`, `connect`, `disconnect`, `sendPress`, `sendEmergencyStop`
+- 패키지: `flutter_blue_plus`
+- 연결 지점: `device_connect_screen.dart`(스캔/연결), `voice_listening_screen.dart`(명령 전송)
 
 ## QR 코드 포맷 (하드웨어 QR 출력 시 참고)
 
@@ -246,7 +246,13 @@ BLE 연동 준비 파일: `lib/services/ble_service.dart`
 - [x] macOS TCC 버그 workaround
 
 ### 대기 중 ⏳
-- [ ] BLE 실제 연동 — `ble_service.dart` 스텁 채우기 (`flutter_blue_plus` 추가 후)
+- [x] BLE 실제 연동 1차 — `ble_service.dart` 구현 + 연결 화면/음성 명령 전송 연동
+- [x] 데이터 무결성 1차 — `deviceId` 도입 + name 기반 매핑 키 자동 마이그레이션
+- [x] 보안/운영성 1차 — AI 키 클라이언트 분리 (백엔드 프록시 API)
+- [x] 테스트 체계 확장 1차 — 명령 규칙/시간 계산/좌표 매핑 단위 테스트 추가
+- [x] 테스트 체계 확장 2차 — BLE 연결 흐름 위젯 테스트 추가
+- [x] 접근성 실험 지표화 1차 — 작업/완료/정지/타임아웃 지표 수집 및 설정 화면 노출
+- [x] 심사용 패키징 — 심사 요약서/데모 스크립트/재현 런북 문서화
 - [ ] 기기 상태 실시간 모니터링 — 전류/온도 센서 데이터 (하드웨어 연동 후)
 - [ ] macOS TTS/STT — macOS 26 정식 출시 후 TCC 재확인
 - [ ] 가디언 알림 — Firebase 연동 (공모전 후반)
