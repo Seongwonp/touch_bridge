@@ -22,6 +22,9 @@ migrate_working_dir/
 .env
 .env.*
 backend/.env
+backend/.env.*
+!.env_ex
+!backend/.env_ex
 
 # IntelliJ related
 *.iml
@@ -37,12 +40,16 @@ __pycache__/
 *.py[cod]
 *$py.class
 .venv/
+backend/.venv/
 venv/
 ENV/
 env/
 build/
 dist/
 *.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # Flutter/Dart/Pub related
 **/doc/api/
@@ -53,6 +60,7 @@ dist/
 .pub/
 /build/
 /coverage/
+devtools_options.yaml
 
 # Symbolication related
 app.*.symbols

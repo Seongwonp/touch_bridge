@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/timer_service.dart';
 import '../../services/tts_service.dart';
+import '../../services/accessibility_experiment_service.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../widgets/responsive_scale.dart';
@@ -134,6 +135,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
       },
       onFinished: () {
         if (mounted) {
+          AccessibilityExperimentService.instance.recordTaskCompleted();
           _tts.speak('${widget.deviceName} 작동이 끝났습니다.');
           Navigator.of(context).pushReplacement(
             MaterialPageRoute<void>(builder: (_) => const StopDoneScreen()),
@@ -195,6 +197,8 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
 
     _speech.stop();
     _timerService.stop();
+    await AccessibilityExperimentService.instance.recordEmergencyStop();
+    await AccessibilityExperimentService.instance.recordTaskAborted();
 
     HapticFeedback.heavyImpact();
     await _speak('작동이 중단되었습니다.');

@@ -43,6 +43,7 @@ dependencies:
   shared_preferences: ^2.3.2
   image_picker: ^1.1.2
   mobile_scanner: ^6.0.0
+  flutter_blue_plus: ^1.35.5
 
 dev_dependencies:
   flutter_test:
