@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'hardware_protocol.dart';
 
 // ESP32 GATT 스펙:
 // Service UUID   : 0000FFE0-0000-1000-8000-00805F9B34FB
@@ -11,8 +12,8 @@ class BleService {
   BleService._();
   static final BleService instance = BleService._();
 
-  static final Guid _serviceUuid = Guid('0000FFE0-0000-1000-8000-00805F9B34FB');
-  static final Guid _characteristicUuid = Guid('0000FFE1-0000-1000-8000-00805F9B34FB');
+  static final Guid _serviceUuid = Guid(HardwareProtocol.serviceUuid);
+  static final Guid _characteristicUuid = Guid(HardwareProtocol.characteristicUuid);
 
   BluetoothDevice? _connectedDevice;
   BluetoothCharacteristic? _commandCharacteristic;
@@ -130,7 +131,7 @@ class BleService {
     if (c == null) return false;
 
     final payload = jsonEncode({
-      'action': 'press',
+      'action': HardwareProtocol.actionPress,
       'x': x,
       'y': y,
       'deviceId': deviceId,
@@ -148,7 +149,7 @@ class BleService {
   Future<void> sendEmergencyStop(String deviceId) async {
     final c = _commandCharacteristic;
     if (c == null) return;
-    final payload = jsonEncode({'action': 'stop', 'deviceId': deviceId});
+    final payload = jsonEncode({'action': HardwareProtocol.actionStop, 'deviceId': deviceId});
     try {
       await c.write(utf8.encode(payload), withoutResponse: false);
       if (kDebugMode) debugPrint('[BLE] sendEmergencyStop: $payload');
