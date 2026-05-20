@@ -226,6 +226,7 @@ Characteristic: 0000FFE1-...
 - [심사 요약서](docs/JUDGING_BRIEF.md)
 - [3분 데모 스크립트](docs/DEMO_SCRIPT_3MIN.md)
 - [재현 가이드/런북](docs/REPRO_RUNBOOK.md)
+- [앱-하드웨어 연동 계약서 (enum/주의점/가변 그리드)](docs/HW_APP_INTEGRATION_CONTRACT_KO.md)
 
 ## 테스트
 
