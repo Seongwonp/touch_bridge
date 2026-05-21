@@ -7,13 +7,23 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/ai_backend_service.dart';
+import '../../services/app_logger.dart';
+import '../../services/device_mapping_service.dart';
 import '../../services/tts_service.dart';
 
 class PhotoMappingScreen extends StatefulWidget {
-  const PhotoMappingScreen({super.key, this.deviceId, this.deviceName});
+  const PhotoMappingScreen({
+    super.key,
+    this.deviceId,
+    this.deviceName,
+    this.requireCompletion = false,
+    this.popOnComplete = false,
+  });
 
   final String? deviceId;
   final String? deviceName;
+  final bool requireCompletion;
+  final bool popOnComplete;
 
   @override
   State<PhotoMappingScreen> createState() => _PhotoMappingScreenState();
@@ -23,12 +33,16 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
   final TtsService _tts = TtsService();
   final ImagePicker _picker = ImagePicker();
 
-  // 3x3 그리드: null = 빈 셀, String = 버튼 라벨
   List<List<String?>> _grid = List.generate(3, (_) => List.filled(3, null));
+  List<List<String?>> _buttonIdGrid = List.generate(3, (_) => List.filled(3, null));
+  int _rows = 3;
+  int _cols = 3;
   Uint8List? _imageBytes;
   String _deviceType = '';
   bool _isAnalyzing = false;
+  bool _completed = false;
   String _statusMessage = '카메라 버튼을 눌러 기기를 촬영하세요.';
+  int _mappingRequestId = 0;
 
   String get _prefKeyGrid => 'mapping_grid_${widget.deviceId ?? 'global'}';
   String get _prefKeyDevice => 'mapping_device_type_${widget.deviceId ?? 'global'}';
@@ -41,12 +55,31 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
 
   Future<void> _loadMapping() async {
     final prefs = await SharedPreferences.getInstance();
+    if (widget.deviceId != null) {
+      final profile = await DeviceMappingService.instance.load(widget.deviceId!);
+      _rows = profile.rows;
+      _cols = profile.cols;
+      _grid = List.generate(_rows, (_) => List.filled(_cols, null));
+      _buttonIdGrid = List.generate(_rows, (_) => List.filled(_cols, null));
+      for (final entry in profile.buttonMap.entries) {
+        final row = entry.value.row;
+        final col = entry.value.col;
+        if (row >= 0 && row < _rows && col >= 0 && col < _cols) {
+          _buttonIdGrid[row][col] = entry.key;
+          _grid[row][col] = entry.key;
+        }
+      }
+    }
+
     final gridJson = prefs.getString(_prefKeyGrid);
     final deviceType = prefs.getString(_prefKeyDevice) ?? '';
 
     if (gridJson != null) {
       final flat = (jsonDecode(gridJson) as List).cast<String?>();
-      final loaded = List.generate(3, (r) => List.generate(3, (c) => flat[r * 3 + c]));
+      final loaded = List.generate(_rows, (r) => List.generate(_cols, (c) {
+            final idx = r * _cols + c;
+            return idx < flat.length ? flat[idx] : null;
+          }));
       if (mounted) {
         setState(() {
           _grid = loaded;
@@ -69,6 +102,52 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
     final flat = [for (final row in _grid) ...row];
     await prefs.setString(_prefKeyGrid, jsonEncode(flat));
     await prefs.setString(_prefKeyDevice, _deviceType);
+    if (widget.deviceId != null) {
+      final buttonMap = <String, ({int row, int col})>{};
+      for (var r = 0; r < _rows; r++) {
+        for (var c = 0; c < _cols; c++) {
+          final bt = _buttonIdGrid[r][c];
+          if (bt != null && bt.isNotEmpty) {
+            buttonMap[bt] = (row: r, col: c);
+          }
+        }
+      }
+      final profile = DeviceMappingProfile(
+        rows: _rows,
+        cols: _cols,
+        originX: 0,
+        originY: 0,
+        pitchX: 1,
+        pitchY: 1,
+        buttonMap: buttonMap,
+      );
+      await DeviceMappingService.instance.save(widget.deviceId!, profile);
+    }
+  }
+
+  void _resizeGrid(int rows, int cols) {
+    final newRows = rows.clamp(1, 5);
+    final newCols = cols.clamp(1, 5);
+    if (newRows == _rows && newCols == _cols) return;
+
+    final nextGrid = List.generate(newRows, (_) => List<String?>.filled(newCols, null));
+    final nextButtonIdGrid = List.generate(newRows, (_) => List<String?>.filled(newCols, null));
+
+    for (var r = 0; r < _rows && r < newRows; r++) {
+      for (var c = 0; c < _cols && c < newCols; c++) {
+        nextGrid[r][c] = _grid[r][c];
+        nextButtonIdGrid[r][c] = _buttonIdGrid[r][c];
+      }
+    }
+
+    setState(() {
+      _rows = newRows;
+      _cols = newCols;
+      _grid = nextGrid;
+      _buttonIdGrid = nextButtonIdGrid;
+      _statusMessage = '그리드를 $newRows×$newCols로 변경했습니다.';
+    });
+    _tts.speak('그리드를 $newRows 곱하기 $newCols로 변경했습니다.');
   }
 
   @override
@@ -113,10 +192,12 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
         _imageBytes = bytes;
         _isAnalyzing = true;
         _statusMessage = 'AI가 버튼을 분석 중입니다...';
-        _grid = List.generate(3, (_) => List.filled(3, null));
+        _grid = List.generate(_rows, (_) => List.filled(_cols, null));
+        _buttonIdGrid = List.generate(_rows, (_) => List.filled(_cols, null));
         _deviceType = '';
       });
       _tts.speak('사진을 받았습니다. AI가 버튼을 분석하고 있습니다. 잠시 기다려 주세요.');
+      AppLogger.info('mapping.analyze.start', {'bytes': bytes.length, 'mime': mime});
 
       await _analyzeWithBackend(bytes, mime);
     } catch (e) {
@@ -135,31 +216,45 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
     Uint8List imageBytes,
     String mimeType,
   ) async {
+    final requestId = ++_mappingRequestId;
     try {
       final data = await AiBackendService.instance.analyzeMappingImage(
         imageBytes: imageBytes,
         mimeType: mimeType,
       );
+      if (requestId != _mappingRequestId) return;
       final deviceType = data['device_type'] as String? ?? '기기';
       final description = data['description'] as String? ?? '';
       final buttons = data['buttons'] as List<dynamic>? ?? [];
+      final grid = (data['grid'] as Map<String, dynamic>?) ?? {};
+      final rows = ((grid['rows'] as num?)?.toInt() ?? _rows).clamp(1, 5);
+      final cols = ((grid['cols'] as num?)?.toInt() ?? _cols).clamp(1, 5);
 
-      final newGrid = List.generate(3, (_) => List.filled(3, null as String?));
+      final newGrid = List.generate(rows, (_) => List.filled(cols, null as String?));
+      final newButtonIdGrid = List.generate(rows, (_) => List.filled(cols, null as String?));
       for (final btn in buttons) {
         final row = (btn['row'] as num).toInt();
         final col = (btn['col'] as num).toInt();
         final label = btn['label'] as String? ?? '';
-        if (row >= 0 && row < 3 && col >= 0 && col < 3 && label.isNotEmpty) {
+        final buttonId = btn['button_id'] as String?;
+        if (row >= 0 && row < rows && col >= 0 && col < cols && label.isNotEmpty) {
           newGrid[row][col] = label;
+          if (buttonId != null && buttonId.isNotEmpty) {
+            newButtonIdGrid[row][col] = buttonId;
+          }
         }
       }
 
       setState(() {
+        _rows = rows;
+        _cols = cols;
         _grid = newGrid;
+        _buttonIdGrid = newButtonIdGrid;
         _deviceType = deviceType;
         _isAnalyzing = false;
         _statusMessage = description.isNotEmpty ? description : '$deviceType 버튼 인식 완료';
       });
+      AppLogger.info('mapping.analyze.done', {'rows': rows, 'cols': cols, 'buttons': buttons.length});
 
       _tts.speak(
         description.isNotEmpty
@@ -168,6 +263,8 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
       );
     } catch (e) {
       if (kDebugMode) debugPrint('Gemini Vision error: $e');
+      if (requestId != _mappingRequestId) return;
+      AppLogger.error('mapping.analyze.error', {'error': e.toString()});
       if (mounted) {
         setState(() {
           _isAnalyzing = false;
@@ -176,6 +273,51 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
         _tts.speak(_statusMessage);
       }
     }
+  }
+
+  void _cancelMappingAnalysis() {
+    _mappingRequestId++;
+    if (!_isAnalyzing) return;
+    setState(() {
+      _isAnalyzing = false;
+      _statusMessage = '버튼 분석이 취소되었습니다.';
+    });
+    AppLogger.info('mapping.analyze.cancel');
+    _tts.speak('버튼 분석을 취소했습니다.');
+  }
+
+  Future<bool> _handleLeaveAttempt() async {
+    if (!widget.requireCompletion || _completed) return true;
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          '매핑을 취소할까요?',
+          style: TextStyle(color: Color(0xFFFDE047), fontWeight: FontWeight.w800),
+        ),
+        content: const Text(
+          '매핑을 완료하지 않고 나가면 방금 추가한 기기는 등록되지 않습니다.',
+          style: TextStyle(color: Colors.white),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('계속 매핑', style: TextStyle(color: Color(0xFF888888))),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFDE047),
+              foregroundColor: const Color(0xFF041329),
+            ),
+            child: const Text('나가기'),
+          ),
+        ],
+      ),
+    );
+    return leave == true;
   }
 
   void _editCell(int row, int col) {
@@ -228,7 +370,11 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
           ElevatedButton(
             onPressed: () {
               final label = ctrl.text.trim();
-              setState(() => _grid[row][col] = label.isEmpty ? null : label);
+              setState(() {
+                _grid[row][col] = label.isEmpty ? null : label;
+                if (label.isEmpty) _buttonIdGrid[row][col] = null;
+                if (label.startsWith('BT-')) _buttonIdGrid[row][col] = label;
+              });
               Navigator.of(ctx).pop();
               HapticFeedback.selectionClick();
               _tts.speak(
@@ -251,10 +397,11 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
 
   Widget _buildCell(int row, int col) {
     final label = _grid[row][col];
+    final buttonId = _buttonIdGrid[row][col];
     final hasLabel = label != null && label.isNotEmpty;
 
     return Semantics(
-      label: hasLabel ? '$label 버튼. 탭하여 수정.' : '빈 셀 ${row + 1}행 ${col + 1}열. 탭하여 추가.',
+      label: hasLabel ? '$label 버튼${buttonId != null ? ', $buttonId' : ''}. 탭하여 수정.' : '빈 셀 ${row + 1}행 ${col + 1}열. 탭하여 추가.',
       button: true,
       child: GestureDetector(
         onTap: () => _editCell(row, col),
@@ -292,6 +439,13 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      if (buttonId != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          buttonId,
+                          style: const TextStyle(fontSize: 9, color: Color(0xAAFFFFFF), fontWeight: FontWeight.w700),
+                        ),
+                      ],
                     ],
                   )
                 : const Icon(
@@ -308,8 +462,19 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
   @override
   Widget build(BuildContext context) {
     final assignedCount = _grid.expand((r) => r).where((c) => c != null).length;
+    final navigator = Navigator.of(context);
 
-    return Scaffold(
+    return PopScope(
+      canPop: !_isAnalyzing,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final allow = await _handleLeaveAttempt();
+        if (!mounted) return;
+        if (allow) {
+          navigator.pop(false);
+        }
+      },
+      child: Scaffold(
       backgroundColor: const Color(0xFF041329),
       body: Stack(
         children: [
@@ -337,9 +502,11 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
                   child: Row(
                     children: [
                       IconButton(
-                        onPressed: () {
+                        onPressed: () async {
+                          final allow = await _handleLeaveAttempt();
+                          if (!mounted || !allow) return;
                           _tts.speak('이전 화면으로 돌아갑니다.');
-                          Navigator.of(context).pop();
+                          navigator.pop(false);
                         },
                         icon: const Icon(
                           Icons.arrow_back_rounded,
@@ -388,6 +555,15 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
                                         color: Color(0xFFE2C62D),
                                       ),
                                     ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    '현재 그리드 $_rows×$_cols',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xAAD6E3FF),
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
@@ -409,7 +585,7 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
                                 ),
                               ),
                               child: Text(
-                                '$assignedCount / 9',
+                                '$assignedCount / ${_rows * _cols}',
                                 style: TextStyle(
                                   color: assignedCount > 0
                                       ? const Color(0xFFFDE047)
@@ -423,17 +599,57 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
                         ),
 
                         const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            _GridAdjustButton(
+                              label: '행 -',
+                              onTap: _isAnalyzing ? null : () => _resizeGrid(_rows - 1, _cols),
+                            ),
+                            _GridAdjustButton(
+                              label: '행 +',
+                              onTap: _isAnalyzing ? null : () => _resizeGrid(_rows + 1, _cols),
+                            ),
+                            _GridAdjustButton(
+                              label: '열 -',
+                              onTap: _isAnalyzing ? null : () => _resizeGrid(_rows, _cols - 1),
+                            ),
+                            _GridAdjustButton(
+                              label: '열 +',
+                              onTap: _isAnalyzing ? null : () => _resizeGrid(_rows, _cols + 1),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
 
                         // 상태 메시지
-                        Text(
-                          _statusMessage,
-                          style: const TextStyle(
-                            color: Color(0xAAD6E3FF),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                _statusMessage,
+                                style: const TextStyle(
+                                  color: Color(0xAAD6E3FF),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (_isAnalyzing)
+                              TextButton(
+                                onPressed: _cancelMappingAnalysis,
+                                child: const Text(
+                                  '분석 취소',
+                                  style: TextStyle(
+                                    color: Color(0xFFFDE047),
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
 
                         const SizedBox(height: 12),
@@ -502,7 +718,7 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
                                     ),
                                   )
                                 else
-                                  // 3x3 그리드
+                                  // 가변 그리드
                                   Container(
                                     decoration: BoxDecoration(
                                       border: Border.all(
@@ -512,14 +728,13 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
                                     ),
                                     child: GridView.builder(
                                       physics: const NeverScrollableScrollPhysics(),
-                                      gridDelegate:
-                                          const SliverGridDelegateWithFixedCrossAxisCount(
-                                        crossAxisCount: 3,
+                                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                        crossAxisCount: _cols,
                                       ),
-                                      itemCount: 9,
+                                      itemCount: _rows * _cols,
                                       itemBuilder: (_, index) {
-                                        final row = index ~/ 3;
-                                        final col = index % 3;
+                                        final row = index ~/ _cols;
+                                        final col = index % _cols;
                                         return _buildCell(row, col);
                                       },
                                     ),
@@ -574,6 +789,7 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
                                       ? null
                                       : () async {
                                           await _saveMapping();
+                                          _completed = true;
                                           _tts.speak(
                                             '$assignedCount개 버튼 매핑이 저장되었습니다. 하드웨어 연결 후 적용됩니다.',
                                           );
@@ -581,12 +797,15 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
                                             ScaffoldMessenger.of(context).showSnackBar(
                                               SnackBar(
                                                 content: Text(
-                                                  '$assignedCount개 버튼 매핑 저장 완료! (BLE 연결 후 적용)',
+                                                  '$assignedCount개 버튼 매핑 저장 완료 ($_rows x $_cols, BLE 연결 후 적용)',
                                                 ),
                                                 backgroundColor: const Color(0xFFFDE047),
                                                 behavior: SnackBarBehavior.floating,
                                               ),
                                             );
+                                          }
+                                          if (widget.popOnComplete && context.mounted) {
+                                            Navigator.of(context).pop(true);
                                           }
                                         },
                                   style: ElevatedButton.styleFrom(
@@ -621,6 +840,33 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
             ),
           ),
         ],
+      ),
+    ));
+  }
+}
+
+class _GridAdjustButton extends StatelessWidget {
+  const _GridAdjustButton({
+    required this.label,
+    required this.onTap,
+  });
+
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton(
+      onPressed: onTap,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: const Color(0xFFFDE047),
+        side: const BorderSide(color: Color(0x55FDE047)),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        minimumSize: const Size(0, 32),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
       ),
     );
   }

@@ -8,7 +8,8 @@
 ## 2) 환경 변수
 ### 앱 루트 `.env`
 ```env
-AI_BACKEND_URL=http://127.0.0.1:8000
+# 아이폰 실기기 테스트 시 맥의 hostname.local 주소를 사용하세요
+AI_BACKEND_URL=http://bagseong-won-ui-MacBookPro.local:8001
 ```
 (`.env_ex` 참고)
 
@@ -16,17 +17,20 @@ AI_BACKEND_URL=http://127.0.0.1:8000
 ```env
 GOOGLE_API_KEY=YOUR_REAL_KEY
 GEMINI_MODEL=gemini-3-flash-preview
+MONGO_URI=mongodb://localhost:27017/
 ```
 (`backend/.env_ex` 참고)
 
 ## 3) 백엔드 실행
+- **MongoDB 실행**: `brew services start mongodb-community` (최초 1회)
+- **가상환경 활성화 및 실행**:
 ```bash
 cd backend
-pip install -r requirements.txt
-python main.py
+source .venv/bin/activate
+python3 -m uvicorn main:app --host 0.0.0.0 --port 8001
 ```
 
-기본 주소: `http://127.0.0.1:8000`
+기본 주소: `http://localhost:8001`
 
 ## 4) 앱 실행
 ```bash
