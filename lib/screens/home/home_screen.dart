@@ -57,6 +57,8 @@ class _HomeScreenState extends State<HomeScreen> {
   List<DeviceInfo> _devices = [];
 
   static const _prefKeyDevices = 'home_devices';
+  static const _prefKeyActiveDeviceId = 'active_device_id';
+  static const _prefKeyActiveDeviceName = 'active_device_name';
 
   static final _defaultDevices = [
     DeviceInfo(id: 'default_microwave', name: '스마트 전자레인지', status: '작동 대기 중', iconCodePoint: Icons.microwave_rounded.codePoint),
@@ -272,6 +274,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 );
                 setState(() => _devices.add(device));
                 await _saveDevices();
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setString(_prefKeyActiveDeviceId, device.id);
+                await prefs.setString(_prefKeyActiveDeviceName, device.name);
                 if (_pageController.hasClients) {
                   _pageController.animateToPage(
                     _devices.length - 1,
@@ -279,7 +284,27 @@ class _HomeScreenState extends State<HomeScreen> {
                     curve: Curves.easeOut,
                   );
                 }
-                _tts.speak('$name 기기가 추가되었습니다.');
+                await _tts.speak('$name 기기가 추가되었습니다. 이제 카메라로 버튼 매핑을 진행합니다.');
+                if (!mounted) return;
+                final mappingDone = await Navigator.of(context).push<bool>(MaterialPageRoute<bool>(
+                  builder: (_) => PhotoMappingScreen(
+                    deviceId: device.id,
+                    deviceName: device.name,
+                    requireCompletion: true,
+                    popOnComplete: true,
+                  ),
+                ));
+                if (!mounted) return;
+                if (mappingDone != true) {
+                  setState(() {
+                    _devices.removeWhere((d) => d.id == device.id);
+                    if (_currentDeviceIndex >= _devices.length && _currentDeviceIndex > 0) {
+                      _currentDeviceIndex = _devices.length - 1;
+                    }
+                  });
+                  await _saveDevices();
+                  _tts.speak('매핑이 취소되어 $name 기기 추가를 취소했습니다.');
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFFEB00),
@@ -422,6 +447,10 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openDeviceControl(int index) {
     HapticFeedback.lightImpact();
     final device = _devices[index];
+    SharedPreferences.getInstance().then((prefs) async {
+      await prefs.setString(_prefKeyActiveDeviceId, device.id);
+      await prefs.setString(_prefKeyActiveDeviceName, device.name);
+    });
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -465,6 +494,11 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               child: Row(
                 children: [
+                  if (Navigator.of(context).canPop())
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFFFFEB00)),
+                    ),
                   const Text(
                     'Touch Bridge',
                     style: TextStyle(

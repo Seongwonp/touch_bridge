@@ -3,11 +3,15 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:nfc_manager/nfc_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../theme/app_colors.dart';
 import '../../services/tts_service.dart';
 import '../../services/ble_service.dart';
+import '../../services/ai_backend_service.dart';
+import '../../services/device_mapping_service.dart';
+import '../../services/app_logger.dart';
 import 'qr_scan_screen.dart';
 
 int _iconCodePointForType(String type) {
@@ -452,6 +456,170 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
     );
   }
 
+  Future<void> _onNfcTagTap() async {
+    bool isAvailable = await NfcManager.instance.isAvailable();
+    if (!isAvailable) {
+      _tts.speak('이 기기는 NFC 기능을 지원하지 않습니다.');
+      return;
+    }
+
+    _tts.speak('NFC 태그를 기기 뒷면에 가까이 대주세요.');
+    HapticFeedback.mediumImpact();
+
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF111111),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.nfc_rounded, size: 64, color: Color(0xFFFFEB00)),
+            const SizedBox(height: 16),
+            const Text(
+              'NFC 태그 인식 대기 중...',
+              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '태그를 폰 뒷면 상단에 밀착시켜 주세요.',
+              style: TextStyle(color: Colors.grey, fontSize: 14),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  NfcManager.instance.stopSession();
+                  Navigator.pop(ctx);
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF333333)),
+                child: const Text('취소', style: TextStyle(color: Colors.white)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    NfcManager.instance.startSession(onDiscovered: (NfcTag tag) async {
+      try {
+        final ndef = Ndef.from(tag);
+        if (ndef == null || ndef.cachedMessage == null) {
+          _tts.speak('태그 형식이 올바르지 않습니다.');
+          return;
+        }
+
+        final record = ndef.cachedMessage!.records.first;
+        final payload = String.fromCharCodes(record.payload);
+        // NFC payload often has language code prefix (e.g. \x02enDeviceId)
+        final deviceId = payload.length > 3 ? payload.substring(3).trim() : payload.trim();
+        
+        AppLogger.info('nfc.discovered', {'id': deviceId});
+        
+        await NfcManager.instance.stopSession();
+        if (mounted) Navigator.pop(context); // Close bottom sheet
+
+        await _processCloudDeviceId(deviceId);
+      } catch (e) {
+        AppLogger.error('nfc.error', {'error': e.toString()});
+        await NfcManager.instance.stopSession();
+        if (mounted) {
+          Navigator.pop(context);
+          _tts.speak('태그를 읽는 중 오류가 발생했습니다.');
+        }
+      }
+    });
+  }
+
+  Future<void> _onManualInputTap() async {
+    final codeCtrl = TextEditingController();
+    _tts.speak('기기에 적힌 6자리 코드를 입력해 주세요.');
+
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          '수동 코드 입력',
+          style: TextStyle(color: Color(0xFFFFEB00), fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              '기기에 부착된 고유 코드를 입력하면 설정을 자동으로 불러옵니다.',
+              style: TextStyle(color: Colors.grey, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: codeCtrl,
+              autofocus: true,
+              style: const TextStyle(color: Colors.white, fontSize: 20),
+              textAlign: TextAlign.center,
+              decoration: InputDecoration(
+                hintText: '예: MW-BASE-001',
+                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.2)),
+                filled: true,
+                fillColor: const Color(0xFF0D1C32),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('취소', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final code = codeCtrl.text.trim().toUpperCase();
+              if (code.isNotEmpty) {
+                Navigator.pop(ctx);
+                _processCloudDeviceId(code);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFFEB00),
+              foregroundColor: Colors.black,
+            ),
+            child: const Text('확인', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _processCloudDeviceId(String deviceId) async {
+    _tts.speak('서버에서 기기 정보를 불러오는 중입니다.');
+    
+    try {
+      final profileData = await AiBackendService.instance.fetchDeviceProfile(deviceId);
+      final name = profileData['device_type'] ?? '새 기기';
+      
+      // 1. 기기 목록에 추가
+      await _registerDevice(
+        context,
+        name: name,
+        type: name == '전자레인지' ? 'microwave' : (name == '세탁기' ? 'washer' : ''),
+        preferredDeviceId: deviceId,
+      );
+
+      // 2. 매핑 정보 저장
+      final profile = DeviceMappingProfile.fromJson(profileData);
+      await DeviceMappingService.instance.save(deviceId, profile);
+
+      _tts.speak('클라우드에서 $name 정보를 성공적으로 가져왔습니다.');
+    } catch (e) {
+      _tts.speak('기기 정보를 가져오지 못했습니다. $e');
+    }
+  }
+
   Future<void> _onBluetoothConnectTap() async {
     if (_isScanning || _isConnecting) return;
     setState(() {
@@ -543,9 +711,14 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
               ),
               child: Semantics(
                 label: 'Touch Bridge 앱',
-                child: const Row(
+                child: Row(
                   children: [
-                    Text(
+                    if (Navigator.of(context).canPop())
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFFFFEB00)),
+                      ),
+                    const Text(
                       'Touch Bridge',
                       style: TextStyle(
                         color: Color(0xFFFFEB00),
@@ -559,118 +732,96 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
               ),
             ),
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text(
-                      '기기 연결',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        '기기 연결',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      '기기를 연결하여 제어를 시작하세요',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Color(0xFF888888),
+                      const SizedBox(height: 4),
+                      const Text(
+                        '기기를 연결하여 제어를 시작하세요',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFF888888),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
-                    _statusCard(),
-                    const SizedBox(height: 12),
-                    _optionCard(
-                      context: context,
-                      icon: Icons.qr_code_scanner_rounded,
-                      title: 'QR 코드 스캔',
-                      subtitle: '허브의 QR을 촬영하여 즉시 연결',
-                      highlighted: true,
-                      onTap: () async {
-                        _tts.speak('QR 코드 스캔 화면으로 이동합니다.');
-                        final result = await Navigator.of(context).push<Map<String, String>>(
-                          MaterialPageRoute(builder: (_) => const QrScanScreen()),
-                        );
-                        if (result != null && context.mounted) {
-                          final name = result['name'] ?? '알 수 없는 기기';
-                          final type = result['type'] ?? '';
-                          final deviceId = (result['deviceId'] ?? '').trim();
-
-                          // 홈 기기 목록에 없는 기기면 등록 다이얼로그 표시
-                          final prefs = await SharedPreferences.getInstance();
-                          final jsonStr = prefs.getString(_prefKeyDevices);
-                          final devices = jsonStr != null
-                              ? (jsonDecode(jsonStr) as List).cast<Map<String, dynamic>>()
-                              : <Map<String, dynamic>>[];
-                          final alreadyExists = devices.any(
-                            (d) => d['name'] == name || (deviceId.isNotEmpty && d['id'] == deviceId),
+                      const SizedBox(height: 20),
+                      _statusCard(),
+                      const SizedBox(height: 12),
+                      _optionCard(
+                        context: context,
+                        icon: Icons.qr_code_scanner_rounded,
+                        title: 'QR 코드 스캔',
+                        subtitle: '허브의 QR을 촬영하여 즉시 연결',
+                        highlighted: true,
+                        onTap: () async {
+                          _tts.speak('QR 코드 스캔 화면으로 이동합니다.');
+                          final result = await Navigator.of(context).push<Map<String, String>>(
+                            MaterialPageRoute(builder: (_) => const QrScanScreen()),
                           );
-
-                          if (!alreadyExists && context.mounted) {
-                            await _showRegisterDialog(
-                              context,
-                              initialName: name,
-                              initialType: type,
-                              initialDeviceId: deviceId,
-                            );
-                          } else if (context.mounted) {
-                            _tts.speak('$name 기기가 이미 등록되어 있습니다.');
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('$name 기기는 이미 등록되어 있습니다.'),
-                                backgroundColor: const Color(0xFFFFB020),
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
+                          if (result != null && context.mounted) {
+                            // QR에서 deviceId 또는 raw 데이터를 읽어옴
+                            final deviceId = (result['deviceId'] ?? result['raw'] ?? '').trim();
+                            if (deviceId.isNotEmpty) {
+                              await _processCloudDeviceId(deviceId);
+                            } else {
+                              _tts.speak('올바른 QR 코드가 아닙니다.');
+                            }
                           }
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    _optionCard(
-                      context: context,
-                      icon: Icons.bluetooth_rounded,
-                      title: '블루투스 연결',
-                      subtitle: '주변 기기 자동 검색 및 페어링',
-                      highlighted: false,
-                      onTap: _onBluetoothConnectTap,
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        _smallAction(
-                          context: context,
-                          title: 'NFC 태그',
-                          icon: Icons.nfc_rounded,
-                          onTap: () => _showPlaceholder(context, 'NFC 태그'),
-                        ),
-                        const SizedBox(width: 10),
-                        _smallAction(
-                          context: context,
-                          title: '수동 입력',
-                          icon: Icons.keyboard_rounded,
-                          onTap: () => _showPlaceholder(context, '수동 입력'),
-                        ),
-                      ],
-                    ),
-                    const Spacer(),
-                    Semantics( // 도움말 텍스트 Semantics 추가
-                      label: '연결에 문제가 있나요? 도움말 보기 버튼',
-                      button: true,
-                      child: Center(
-                        child: Text(
-                          '연결에 문제가 있나요? 도움말 보기',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary.withValues(alpha: 0.7),
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      _optionCard(
+                        context: context,
+                        icon: Icons.bluetooth_rounded,
+                        title: '블루투스 연결',
+                        subtitle: '주변 기기 자동 검색 및 페어링',
+                        highlighted: false,
+                        onTap: _onBluetoothConnectTap,
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          _smallAction(
+                            context: context,
+                            title: 'NFC 태그',
+                            icon: Icons.nfc_rounded,
+                            onTap: _onNfcTagTap,
+                          ),
+                          const SizedBox(width: 10),
+                          _smallAction(
+                            context: context,
+                            title: '수동 입력',
+                            icon: Icons.keyboard_rounded,
+                            onTap: _onManualInputTap,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 40), // 도움말 전 여백
+                      Semantics(
+                        label: '연결에 문제가 있나요? 도움말 보기 버튼',
+                        button: true,
+                        child: Center(
+                          child: Text(
+                            '연결에 문제가 있나요? 도움말 보기',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary.withValues(alpha: 0.7),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

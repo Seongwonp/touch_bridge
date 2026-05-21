@@ -178,6 +178,158 @@
 - **신규 문서**: `docs/JUDGING_BRIEF.md`
   - 문제/해결/차별점/정량지표/기대효과 요약
 - **신규 문서**: `docs/DEMO_SCRIPT_3MIN.md`
+
+---
+
+## 2026-05-20 (세션 11) — 기기 추가 직후 자동 매핑 플로우
+
+### 목적
+- 기기만 추가하고 매핑을 빼먹는 사용 흐름을 차단하여, 등록 직후 바로 제어 가능한 상태로 유도
+
+### 변경 내용
+- **파일**: `lib/screens/home/home_screen.dart`
+  - `기기 추가` 완료 시 active device(`active_device_id`, `active_device_name`) 즉시 저장
+  - 추가 완료 TTS 이후 `PhotoMappingScreen(deviceId, deviceName)`으로 자동 이동
+  - 결과적으로 `+` → 이름/종류 입력 → 추가 → 카메라 매핑 순서가 1개 연속 플로우로 동작
+
+### 검증
+- 수동 확인: 홈 `+`에서 기기 추가 후 매핑 화면 자동 진입 확인
+
+---
+
+## 2026-05-20 (세션 17) — 하드웨어-앱 통신 프로토콜 최종 정렬 (ACK 기반)
+
+### 목적
+- 실제 물리 기기(ESP32/AVR)와 앱 간의 통신 신뢰성을 확보하고 현장 테스트를 위한 디버깅 도구 구축
+
+### 변경 내용 (App)
+- **파일**: `lib/services/ble_service.dart` (v2.0 고도화)
+  - **Notify/ACK 메커니즘**: 하드웨어의 응답(Notify)을 기다리는 `_sendAndWaitAck` 구현 (최대 5초 대기)
+  - **수치 규격화**: `mm * 10` 정수 스케일링 전송 (`ox10`, `px10` 등)
+  - **설정 제어**: `SET_SERVO`, `GET_SERVO` 명령 추가
+  - **로그 스트림**: 실시간 통신 로그 전송을 위한 broadcast stream 구축
+- **파일**: `lib/screens/settings/ble_log_screen.dart` (신규)
+  - **하드웨어 디버깅 UI**: 실시간 SEND/RECV 로그 시각화 및 서보 설정 조회 버튼 구현
+- **파일**: `lib/screens/voice/voice_listening_screen.dart`
+  - 명령 전송 시 하드웨어의 ACK를 기다리도록 순차 실행 보완 및 전송 실패 시 TTS 안내 추가
+
+### 변경 내용 (Docs)
+- **파일**: `Touch_bridge_HW_code/docs/FINAL_PROTOCOL_ALIGNMENT_KO.md` (신규)
+  - 하드웨어 개발자와의 최종 협의를 위한 통신 규약 및 JSON 스펙 문서화
+
+### 검증
+- 앱 설정 메뉴에 "하드웨어 디버깅" 섹션 노출 확인
+- 음성 명령 시퀀스 중 하드웨어 응답 지연(Timeout) 시나리오 대응 확인
+
+---
+
+## 2026-05-20 (세션 16) — 통합 클라우드 연결 (QR/NFC/Manual)
+
+### 목적
+- 모든 기기 등록 경로(QR, NFC, 수동 입력)를 클라우드 DB와 통합하여 사용자 편의성 극대화
+
+### 변경 내용 (App)
+- **파일**: `lib/screens/connection/device_connect_screen.dart`
+  - `_onManualInputTap()`: 6자리 기기 코드를 직접 입력받는 다이얼로그 구현
+  - `QR 스캔 로직 업그레이드`: 기존의 단순 이름 등록 방식에서 클라우드 프로필 자동 로드 방식으로 통합
+  - `_processCloudDeviceId()`: 통합 처리 로직을 통해 어떤 경로로든 `deviceId`만 확보되면 서버에서 매핑 정보를 즉시 동기화하도록 개선
+- **파일**: `docs/DATABASE_SCHEMA.md` (신규)
+  - MongoDB 컬렉션 구조 및 샘플 데이터 규격 문서화
+
+### 검증
+- 수동 입력창에 `MW-LUX-777` 입력 시 고급형 전자레인지 정보 자동 로드 확인
+- QR 스캔 시 해당 기기의 버튼 매핑까지 한 번에 완료되는 'Zero-Touch' 경험 확인
+
+---
+
+## 2026-05-20 (세션 15) — NFC 클라우드 연동 (Zero-Configuration)
+
+### 목적
+- 시각장애인이 복잡한 설정 없이 NFC 태그만으로 기기 정보를 즉시 로드하도록 구현
+
+### 변경 내용 (App)
+- **파일**: `pubspec.yaml` → `nfc_manager` 패키지 추가
+- **파일**: `lib/services/ai_backend_service.dart`
+  - `fetchDeviceProfile(deviceId)` 메서드 추가: 백엔드에서 특정 기기의 JSON 매핑 정보를 가져옴
+- **파일**: `lib/screens/connection/device_connect_screen.dart`
+  - `_onNfcTagTap()`: NFC 세션 시작 및 태그 감지 UI 구현
+  - `_processCloudDeviceId()`: 읽어온 ID로 클라우드 데이터를 조회하고, 로컬 DB(`home_devices` 및 `DeviceMappingProfile`)에 자동 등록하는 워크플로우 완성
+
+### 검증
+- NFC 태그 인식 시 바텀 시트 노출 및 진동 피드백 확인
+- `MW-BASE-001` 태그 인식 시 "전자레인지 조리를 시작합니다" 등 안내와 함께 기기 자동 추가 확인
+
+---
+
+## 2026-05-20 (세션 14) — MongoDB 전환 (Cloud Ready)
+
+### 목적
+- SQLite를 MongoDB로 교체하여 클라우드 확장성 및 유연한 데이터 구조 확보
+
+### 변경 내용 (Backend)
+- **파일**: `backend/database.py` (전면 재작성)
+  - `motor` (비동기 MongoDB 드라이버) 도입
+  - JSON 프로필 저장 및 조회를 위한 NoSQL 구조 설계
+  - `device_id` 유니크 인덱스 설정
+- **파일**: `backend/main.py`
+  - 모든 DB 호출을 `await` 기반 비동기 처리로 업데이트
+  - `vision-mapping` 시 기기 프로필 자동 저장 옵션(`save_as_id`) 추가
+
+### 검증
+- `pip install pymongo motor` 설치 확인
+- 서버 시작 시 `MongoDB 연결 성공!` 로그 및 샘플 데이터(`MW-BASE-001`) 자동 생성 확인
+
+---
+
+## 2026-05-20 (세션 13) — 백엔드 고도화 및 클라우드 인프라 Phase 1
+
+### 목적
+- 음성 명령의 정확도 획기적 개선 및 기기 프로필 클라우드화 기초 마련
+
+### 변경 내용 (Backend)
+- **파일**: `backend/main.py`, `backend/prompts.py`, `backend/microwave_logic.py` (모듈화)
+  - **정규식 기반 시간 파서:** "7분 30초" 등 복잡한 시간 표현을 AI 없이 즉시 1.0 확신도로 파싱
+  - **프롬프트 고도화:** AI에게 요리 전문가 페르소나 부여, 모호한 명령(냉동만두 등)에도 적정 시간 추론 기능 강화
+  - **리팩토링:** 뇌(Prompts), 지식(Logic), 통로(Main)로 역할 분리
+- **신규 파일**: `backend/database.py`
+  - SQLite 기반 기기 프로필 저장소 구축
+  - QR/NFC 연동을 위한 `device_id` 기반 조회 API 추가
+- **네트워크 문제 해결**
+  - `iproxy` 포트 충돌(8000) 해결 및 백엔드 포트 8001 전환
+  - 아이폰-맥 간 로컬 호스트(`hostname.local`) 연결 가이드 수립
+
+### 변경 내용 (App & Docs)
+- **신규 문서**: `docs/CLOUD_INTEGRATION_PLAN.md`
+  - MongoDB 전환 계획 및 QR/NFC/수동 입력 로드맵 작성
+
+### 검증
+- 백엔드: "7분 30초" 요청 시 즉시 `450s` 응답 확인
+- 앱: "해동해줘" 명령 시 자동 타이머 화면 전환 확인
+
+---
+
+## 2026-05-20 (세션 12) — 내비게이션/중지 보완 + 유동 매핑 명시 + 로깅
+
+### 변경 내용
+- **뒤로가기 누락 보완**
+  - `DeviceConnectScreen`, `SettingsScreen`, `HomeScreen`에서 `Navigator.canPop()`일 때 상단 뒤로가기 버튼 노출
+  - 탭 화면으로 쓸 때는 기존처럼 상단 타이틀만 유지, push 진입 시에는 즉시 복귀 가능
+- **매핑 분석 중 중지(취소) 추가**
+  - `PhotoMappingScreen`에 `분석 취소` 버튼 추가
+  - 분석 요청 ID 토큰 방식으로 late response 무시 처리
+- **유동 그리드 명시 강화**
+  - 문서/백엔드 프롬프트에서 `3x3 고정` 뉘앙스 제거
+  - `rows×cols` 동적 매핑 + 기본 fallback 3x3 정책으로 정리
+- **로그 체계 추가 (Flutter + Backend)**
+  - 신규 `lib/services/app_logger.dart`
+  - Flutter 주요 이벤트 로깅:
+    - 음성 분석 시작/결과/취소/오류
+    - 매핑 분석 시작/완료/취소/오류
+    - BLE 스캔/연결/해제/오류
+    - AI 백엔드 요청/응답 상태
+  - 백엔드 `main.py`:
+    - 요청 미들웨어(요청 ID, 경로, status, elapsed ms)
+    - `/parse-command`, `/vision-mapping` 핵심 이벤트 로깅
   - 3분 발표 시간축 기준 시연 스크립트
 - **신규 문서**: `docs/REPRO_RUNBOOK.md`
   - 환경 변수/실행 명령/검증 명령/장애 대응 플랜 B

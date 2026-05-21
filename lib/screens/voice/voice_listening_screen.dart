@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/tts_service.dart';
 import 'package:speech_to_text/speech_to_text.dart'; // Speech-to-Text 패키지 임포트
 
@@ -13,9 +14,11 @@ import '../connection/device_connect_screen.dart';
 import '../mapping/photo_mapping_screen.dart';
 import '../settings/settings_screen.dart';
 import '../../services/ai_backend_service.dart';
+import '../../services/app_logger.dart';
 import '../../services/ble_service.dart';
 import '../../services/microwave_command_service.dart';
 import '../../services/accessibility_experiment_service.dart';
+import '../../services/device_mapping_service.dart';
 
 class VoiceListeningScreen extends StatefulWidget {
   const VoiceListeningScreen({super.key});
@@ -47,6 +50,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   Timer? _actionResetTimer;
   bool _micArmed = false;
   bool _isStartingRecording = false;
+  int _analysisRequestId = 0;
   final Duration _maxRecordingDuration = const Duration(seconds: 8);
   static const _silenceTimeout = Duration(seconds: 5);
 
@@ -324,6 +328,8 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   }
 
   Future<void> _sendTextToGemini(String text) async {
+    final requestId = ++_analysisRequestId;
+    AppLogger.info('voice.analysis.start', {'text_len': text.length});
     if (text.isEmpty) {
       _speak('처리할 명령이 없습니다.');
       setState(() {
@@ -336,20 +342,37 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     // 간단한 명령은 AI 호출 없이 즉시 처리
     final ruleResult = MicrowaveCommandService.checkSimpleRules(text);
     if (ruleResult != null) {
+      if (requestId != _analysisRequestId) return;
+      AppLogger.info('voice.analysis.rule_match');
       _handleCommand(ruleResult, recognizedText: text);
       return;
     }
 
     try {
       final commandData = await AiBackendService.instance.parseVoiceCommand(text);
+      if (requestId != _analysisRequestId) return;
+      AppLogger.info('voice.analysis.ai_result', {'action': commandData['action']?.toString() ?? 'NONE'});
       _handleCommand(commandData, recognizedText: text);
     } catch (e) {
-      _speak('AI 처리 중 문제가 발생했습니다: $e');
+      if (requestId != _analysisRequestId) return;
+      AppLogger.error('voice.analysis.error', {'error': e.toString()});
+      _speak('명령 분석에 실패했습니다. 네트워크 연결과 백엔드 주소를 확인한 뒤 다시 시도해 주세요.');
       setState(() {
-        _statusMessage = 'AI 처리 오류: $e';
+        _statusMessage = '명령 분석에 실패했습니다. 다시 시도해 주세요.';
         _isProcessing = false;
       });
     }
+  }
+
+  void _cancelAnalysis() {
+    _analysisRequestId++;
+    AppLogger.info('voice.analysis.cancel');
+    setState(() {
+      _isProcessing = false;
+      _statusMessage = '명령 분석이 취소되었습니다.';
+      _recognizedText = '아직 인식된 명령이 없어요.';
+    });
+    _speak('명령 분석을 취소했습니다.');
   }
 
   Future<void> _sendBleSequence(List<dynamic> commands) async {
@@ -359,23 +382,65 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       return;
     }
 
+    final prefs = await SharedPreferences.getInstance();
+    final activeDeviceId = prefs.getString('active_device_id') ?? deviceId;
+    final profile = await DeviceMappingService.instance.load(activeDeviceId);
+    
+    // 1. 그리드 설정 먼저 전송
+    final setGridOk = await BleService.instance.sendSetGrid(
+      rows: profile.rows,
+      cols: profile.cols,
+      originX: profile.originX,
+      originY: profile.originY,
+      pitchX: profile.pitchX,
+      pitchY: profile.pitchY,
+      deviceId: deviceId,
+    );
+
+    if (!setGridOk) {
+      _speak('기기 설정 전송에 실패했습니다. 하드웨어 상태를 확인해 주세요.');
+      return;
+    }
+
+    // 2. 버튼 시퀀스 전송
     for (final dynamic raw in commands) {
       final btn = raw as String;
-      if (btn == 'BT-05') continue; // 시작 버튼은 논리 신호로만 사용
-      final pos = MicrowaveCommandService.btnToGrid(btn);
-      if (pos == null) continue;
-      await BleService.instance.sendPress(
-        x: pos.$2,
-        y: pos.$1,
-        deviceId: deviceId,
-      );
+      
+      bool ok = false;
+      final mapped = profile.buttonMap[btn];
+      final pos = mapped == null ? MicrowaveCommandService.btnToGrid(btn) : (mapped.row, mapped.col);
+      
+      if (pos != null) {
+        // 좌표 기반 전송
+        ok = await BleService.instance.sendPress(
+          x: pos.$2,
+          y: pos.$1,
+          deviceId: deviceId,
+        );
+      } else {
+        // 좌표가 없는 경우 (논리 버튼 지원 여부에 따라 다름)
+        // 여기서는 BT-05 등 직접 전송 시도 가능 (하드웨어가 지원한다면)
+        // 우선은 좌표 매핑된 버튼만 실행하도록 유지하거나 하드웨어 확장에 맞춰 추가
+      }
+
+      if (!ok) {
+        _speak('명령 전송 중 오류가 발생했습니다.');
+        break;
+      }
+      
+      // 연속 전송 시 하드웨어 부하 방지를 위해 짧은 대기
+      await Future<void>.delayed(const Duration(milliseconds: 500));
     }
   }
 
   Future<void> _handleCommand(Map<String, dynamic> data, {required String recognizedText}) async {
     final action = data['action'] as String? ?? 'NONE';
+    AppLogger.info('voice.command.handle', {'action': action, 'recognized_text': recognizedText});
     final message = (data['message'] as String? ?? '').trim();
     final commands = (data['commands'] as List<dynamic>?) ?? [];
+    final inferredSeconds = (data['inferred_seconds'] as num?)?.toInt();
+    final confidence = (data['confidence'] as num?)?.toDouble() ?? 0.5;
+    final needsConfirmation = (data['needs_confirmation'] as bool?) ?? false;
 
     setState(() {
       _isProcessing = false;
@@ -422,6 +487,16 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         return;
 
       case 'MICROWAVE_CONTROL':
+        if (needsConfirmation || confidence < 0.55) {
+          await _speak(
+            message.isNotEmpty
+                ? '$message 확신이 낮아 확인이 필요합니다. 시간을 다시 말해 주세요.'
+                : '명령 확신이 낮습니다. 시간을 구체적으로 다시 말씀해 주세요.',
+          );
+          setState(() => _statusMessage = '시간 확인 필요');
+          return;
+        }
+
         if (commands.isEmpty) {
           await _speak(message.isNotEmpty ? message : '시간을 말씀해 주세요. 예: 30초 돌려줘');
           setState(() => _statusMessage = '시간을 말씀해 주세요.');
@@ -439,7 +514,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
           return;
         }
 
-        final seconds = MicrowaveCommandService.calculateSeconds(commands);
+        final seconds = inferredSeconds ?? MicrowaveCommandService.calculateSeconds(commands);
         final cmdLabel = MicrowaveCommandService.buildCommandsLabel(commands);
         final tts = message.isNotEmpty ? message : '$cmdLabel. 조리를 시작합니다.';
 
@@ -747,35 +822,26 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
                           ),
                         ),
                       ] else ...[
-                        // 분석 중 — 비활성 버튼
-                        Container(
+                        // 분석 중 — 취소 가능 버튼
+                        SizedBox(
                           width: double.infinity,
                           height: 64,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1E1E1E),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Center(
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    color: Color(0xFFFFEB00),
-                                    strokeWidth: 2.5,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Text(
-                                  '명령 분석 중...',
-                                  style: TextStyle(
-                                    color: const Color(0xFF888888),
-                                    fontSize: 16 * rs,
-                                  ),
-                                ),
-                              ],
+                          child: OutlinedButton.icon(
+                            onPressed: _cancelAnalysis,
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFF555555)),
+                              foregroundColor: const Color(0xFFD1D5DB),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            icon: const Icon(Icons.close_rounded),
+                            label: Text(
+                              '명령 분석 취소',
+                              style: TextStyle(
+                                fontSize: 16 * rs,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                         ),
