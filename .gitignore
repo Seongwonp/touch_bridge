@@ -74,4 +74,12 @@ app.*.map.json
 /android/app/release
 
 
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# touch-bridge-495300-e3f42de71ebd.json
 touch-bridge-495300-e3f42de71ebd.json
+
+Touch_bridge_HW_code/

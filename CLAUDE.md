@@ -62,7 +62,7 @@ lib/
 │   ├── connection/
 │   │   ├── device_connect_screen.dart     # 기기 연결 (QR/BLE/NFC)
 │   │   └── qr_scan_screen.dart            # QR 코드 실시간 스캔 (mobile_scanner)
-│   └── mapping/photo_mapping_screen.dart  # 3x3 그리드 버튼 매핑 (기기별 저장)
+│   └── mapping/photo_mapping_screen.dart  # 유동 rows×cols 버튼 매핑 (기기별 저장)
 ├── services/
 │   ├── tts_service.dart                   # Singleton TTS (flutter_tts 래퍼)
 │   ├── ble_service.dart                   # BLE 스캔/연결/명령 전송 서비스
@@ -137,7 +137,7 @@ TTS: "이전 화면으로 돌아갑니다."
 }
 ```
 
-**전자레인지 버튼 규격 (3x3 그리드)**
+**전자레인지 버튼 규격 (논리 버튼 ID, 그리드 크기와 분리)**
 | 버튼 | 동작 | 시간(초) |
 |------|------|----------|
 | BT-01 | 10초 추가 | 10 |
@@ -151,7 +151,7 @@ TTS: "이전 화면으로 돌아갑니다."
 | BT-09 | 자동조리 | — |
 
 `_calculateSeconds(commands)` — 버튼 시퀀스에서 총 초를 계산해 `EmergencyStopScreen`에 전달.
-버튼 ID 시퀀스는 3x3 그리드 좌표로 변환되어 `BleService.sendPress()`로 전송됨.
+버튼 ID 시퀀스는 기기별 매핑(rows×cols)에 따라 좌표로 변환되어 `BleService.sendPress()`로 전송됨.
 
 - 5초 침묵 감지: 말 없음 → 재시도 안내 / 말 있었음 → 자동 분석
 - Chrome `onStatus: 'done'` 처리 포함
@@ -236,7 +236,7 @@ BLE 연동 구현 파일: `lib/services/ble_service.dart`
 - [x] 설정 화면 (접근성, 음성 안내, 가디언 모드)
 - [x] 기기 연결 화면 (QR/BLE/NFC UI)
 - [x] QR 스캔 실제 구현 (mobile_scanner, Android/iOS)
-- [x] 사진 매핑 화면 (Gemini Vision + 3x3 그리드)
+- [x] 사진 매핑 화면 (Gemini Vision + 유동 rows×cols 그리드)
 - [x] Semantics 접근성 태그 전체 적용
 - [x] SharedPreferences 설정·기기목록·버튼매핑 영속화
 - [x] 기기 목록 동적 관리 (추가/수정/삭제)

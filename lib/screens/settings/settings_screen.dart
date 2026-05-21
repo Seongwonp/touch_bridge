@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../services/accessibility_experiment_service.dart';
 import '../../services/accessibility_settings.dart';
 import '../../services/tts_service.dart';
+import 'ble_log_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -117,31 +118,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final canPop = Navigator.of(context).canPop();
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
         child: Column(
           children: [
-            // 상단 바
             Container(
               height: 64,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
               decoration: const BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(color: Color(0xFF2A2A2A)),
-                ),
+                border: Border(bottom: BorderSide(color: Color(0xFF2A2A2A))),
               ),
-              child: const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Touch Bridge',
-                  style: TextStyle(
-                    color: Color(0xFFFFEB00),
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.5,
+              child: Row(
+                children: [
+                  if (canPop)
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFFFFEB00)),
+                    ),
+                  const Text(
+                    'Touch Bridge',
+                    style: TextStyle(
+                      color: Color(0xFFFFEB00),
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.5,
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
             Expanded(
@@ -160,8 +165,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-
-                  // 음성 안내 섹션
                   _SectionLabel(
                     icon: Icons.record_voice_over_rounded,
                     label: '음성 안내',
@@ -198,10 +201,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 24),
-
-                  // 접근성 섹션
                   _SectionLabel(
                     icon: Icons.accessibility_new_rounded,
                     label: '접근성',
@@ -243,10 +243,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 24),
-
-                  // 가디언 모드 섹션
                   _SectionLabel(
                     icon: Icons.shield_rounded,
                     label: '가디언 모드',
@@ -305,9 +302,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 24),
-
+                  _SectionLabel(
+                    icon: Icons.bug_report_rounded,
+                    label: '하드웨어 디버깅',
+                  ),
+                  const SizedBox(height: 10),
+                  _SettingsCard(
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.list_alt_rounded, color: Color(0xFFFFEB00)),
+                        title: const Text('통신 로그 확인', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                        subtitle: const Text('ESP32/AVR 전송 및 응답 로그', style: TextStyle(color: Color(0xFF888888), fontSize: 13)),
+                        trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF555555)),
+                        onTap: () {
+                          _tts.speak('하드웨어 통신 로그 화면으로 이동합니다.');
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const BleLogScreen()));
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
                   _SectionLabel(
                     icon: Icons.analytics_rounded,
                     label: '접근성 실험 지표',
@@ -356,10 +371,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       );
                     },
                   ),
-
                   const SizedBox(height: 24),
-
-                  // 비상 연락처 섹션
                   _SectionLabel(
                     icon: Icons.emergency_rounded,
                     label: '비상 연락처',
@@ -386,7 +398,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 40),
                 ],
               ),
