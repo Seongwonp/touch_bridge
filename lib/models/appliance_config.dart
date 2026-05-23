@@ -9,8 +9,34 @@ enum ApplianceType {
   other         // 기타
 }
 
+/// 추천 킷에 포함된 개별 부품 정보
+class KitPart {
+  final String name;
+  final int count;
+  final IconData icon;
+
+  KitPart({
+    required this.name,
+    required this.count,
+    required this.icon,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'count': count,
+    'icon': icon.codePoint,
+  };
+
+  factory KitPart.fromJson(Map<String, dynamic> json) {
+    return KitPart(
+      name: json['name'],
+      count: json['count'],
+      icon: IconData(json['icon'], fontFamily: 'MaterialIcons'),
+    );
+  }
+}
+
 /// 가전별 설정 및 추천 정보를 담는 모델 클래스
-/// 나중에 클라우드(Firebase 등)에 이 데이터 덩어리를 그대로 저장할 수 있습니다.
 class ApplianceConfig {
   final String id;
   final String name;
@@ -18,6 +44,7 @@ class ApplianceConfig {
   
   // 권장 하드웨어 구성
   final String recommendedKit; // 예: "초슬림 키캡 4개 + 고무휠 1개"
+  final List<KitPart> parts;   // 시각화를 위한 상세 부품 리스트
   final String assemblyGuide;  // 부착 가이드 문구
   
   // 기본 제어 값
@@ -32,6 +59,7 @@ class ApplianceConfig {
     required this.name,
     required this.type,
     required this.recommendedKit,
+    required this.parts,
     required this.assemblyGuide,
     this.defaultSensitivity = 70,
     this.defaultSpeed = 50,
@@ -45,6 +73,7 @@ class ApplianceConfig {
       'name': name,
       'type': type.toString(),
       'recommendedKit': recommendedKit,
+      'parts': parts.map((p) => p.toJson()).toList(),
       'assemblyGuide': assemblyGuide,
       'defaultSensitivity': defaultSensitivity,
       'defaultSpeed': defaultSpeed,
@@ -59,6 +88,9 @@ class ApplianceConfig {
       name: json['name'],
       type: ApplianceType.values.firstWhere((e) => e.toString() == json['type']),
       recommendedKit: json['recommendedKit'],
+      parts: (json['parts'] as List)
+          .map((p) => KitPart.fromJson(p))
+          .toList(),
       assemblyGuide: json['assemblyGuide'],
       defaultSensitivity: json['defaultSensitivity'],
       defaultSpeed: json['defaultSpeed'],

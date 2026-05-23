@@ -138,9 +138,10 @@ class _ApplianceCard extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF111111),
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (context) => Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -152,14 +153,48 @@ class _ApplianceCard extends StatelessWidget {
                 Text(appliance.name, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
               ],
             ),
-            const SizedBox(height: 20),
-            const Text('추천 부착 가이드', style: TextStyle(color: Color(0xFFFFEB00), fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Text(appliance.assemblyGuide, style: const TextStyle(color: Colors.white70, height: 1.5)),
             const SizedBox(height: 24),
+            const Text('필요한 부품 구성', style: TextStyle(color: Color(0xFFFFEB00), fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 12),
+            
+            // 부품 시각화 리스트
+            Container(
+              height: 100,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: appliance.parts.length,
+                itemBuilder: (context, index) {
+                  final part = appliance.parts[index];
+                  return Container(
+                    width: 90,
+                    margin: const EdgeInsets.only(right: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A1A1A),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF2A2A2A)),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(part.icon, color: Colors.white70, size: 28),
+                        const SizedBox(height: 8),
+                        Text(part.name, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500), textAlign: TextAlign.center),
+                        Text('${part.count}개', style: const TextStyle(color: Color(0xFFFFEB00), fontSize: 11, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            
+            const SizedBox(height: 24),
+            const Text('추천 부착 가이드', style: TextStyle(color: Color(0xFFFFEB00), fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 8),
+            Text(appliance.assemblyGuide, style: const TextStyle(color: Colors.white70, height: 1.5, fontSize: 14)),
+            const SizedBox(height: 32),
             SizedBox(
               width: double.infinity,
-              height: 56,
+              height: 60,
               child: ElevatedButton(
                 onPressed: () {
                   Navigator.pop(context);
@@ -171,9 +206,9 @@ class _ApplianceCard extends StatelessWidget {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFFFEB00),
                   foregroundColor: Colors.black,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
-                child: const Text('가이드 확인 및 매핑 시작', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                child: const Text('가이드 확인 및 매핑 시작', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
               ),
             ),
           ],

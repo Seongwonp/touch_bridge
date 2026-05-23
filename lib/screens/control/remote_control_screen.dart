@@ -228,6 +228,85 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     super.dispose();
   }
 
+  double _sensitivity = 70;
+  double _speed = 50;
+
+  void _showSettings() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF111111),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('기기 정밀 설정', style: TextStyle(color: Color(0xFFFFEB00), fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 24),
+              
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('모터 감도', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  Text('${_sensitivity.toInt()}%', style: const TextStyle(color: Color(0xFFFFEB00))),
+                ],
+              ),
+              Slider(
+                value: _sensitivity,
+                min: 0,
+                max: 100,
+                activeColor: const Color(0xFFFFEB00),
+                inactiveColor: const Color(0xFF2A2A2A),
+                onChanged: (val) {
+                  setModalState(() => _sensitivity = val);
+                  setState(() => _sensitivity = val);
+                },
+              ),
+              
+              const SizedBox(height: 16),
+              
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('동작 속도', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  Text('${_speed.toInt()}%', style: const TextStyle(color: Color(0xFFFFEB00))),
+                ],
+              ),
+              Slider(
+                value: _speed,
+                min: 10,
+                max: 100,
+                activeColor: const Color(0xFFFFEB00),
+                inactiveColor: const Color(0xFF2A2A2A),
+                onChanged: (val) {
+                  setModalState(() => _speed = val);
+                  setState(() => _speed = val);
+                },
+              ),
+              
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFFEB00),
+                    foregroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('설정 저장 및 닫기', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
@@ -237,7 +316,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // 상단 바 - 뒤로가기 버튼 포함
+            // 상단 바
             Container(
               height: ResponsiveScale.v(context, 64),
               padding: EdgeInsets.symmetric(
@@ -262,6 +341,12 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                       fontWeight: FontWeight.w900,
                       letterSpacing: 0.5,
                     ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: _showSettings,
+                    icon: const Icon(Icons.tune_rounded, color: Color(0xFFFFEB00)),
+                    tooltip: '설정',
                   ),
                 ],
               ),
