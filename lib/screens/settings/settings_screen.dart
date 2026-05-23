@@ -42,6 +42,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _testMotor() async {
     if (_deviceService.isOperating.value) return;
 
+    setState(() {
+      _deviceService.resetStall();
+    });
+    
     HapticFeedback.heavyImpact();
     await _announce('테스트를 시작합니다.');
     
@@ -51,7 +55,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     
     if (mounted) {
-      await _announce('작동이 완료되었습니다.');
+      setState(() {
+        if (_deviceService.isStalled.value) {
+          HapticFeedback.vibrate();
+          _announce('경고. 모터 과부하가 감지되었습니다. 감도를 낮춰주세요.');
+        } else {
+          _announce('작동이 완료되었습니다.');
+        }
+      });
     }
   }
 
@@ -348,6 +359,115 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _MotorStatusCard extends StatefulWidget {
+  final DeviceService deviceService;
+  const _MotorStatusCard({required this.deviceService});
+
+  @override
+  State<_MotorStatusCard> createState() => _MotorStatusCardState();
+}
+
+class _MotorStatusCardState extends State<_MotorStatusCard> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    );
+
+    widget.deviceService.isOperating.addListener(_handleStateChange);
+  }
+
+  void _handleStateChange() {
+    if (widget.deviceService.isOperating.value) {
+      _controller.repeat();
+    } else {
+      _controller.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.deviceService.isOperating.removeListener(_handleStateChange);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: widget.deviceService.isOperating,
+      builder: (context, isOperating, _) {
+        return ValueListenableBuilder<bool>(
+          valueListenable: widget.deviceService.isStalled,
+          builder: (context, isStalled, _) {
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isStalled ? const Color(0xFF2A0A0A) : const Color(0xFF111111),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isStalled ? const Color(0xFFFF4444) : (isOperating ? const Color(0xFFFFEB00) : const Color(0xFF2A2A2A)),
+                  width: (isOperating || isStalled) ? 2 : 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      RotationTransition(
+                        turns: _controller,
+                        child: Icon(
+                          Icons.settings_rounded,
+                          size: 40,
+                          color: isStalled ? const Color(0xFFFF4444) : (isOperating ? const Color(0xFFFFEB00) : const Color(0xFF444444)),
+                        ),
+                      ),
+                      if (isStalled)
+                        const Icon(Icons.close_rounded, color: Colors.white, size: 20),
+                    ],
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isStalled ? '모터 과부하 감지' : (isOperating ? '모터 작동 중...' : '모터 대기 중'),
+                          style: TextStyle(
+                            color: isStalled ? const Color(0xFFFF4444) : Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          isStalled 
+                            ? '버튼이 너무 딱딱합니다. 감도를 낮춰주세요.' 
+                            : (isOperating ? '기기가 물리 버튼을 누르고 있습니다.' : '연결된 기기가 명령을 기다리고 있습니다.'),
+                          style: TextStyle(
+                            color: isStalled ? const Color(0xFFFF4444).withValues(alpha: 0.7) : const Color(0xFF888888),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

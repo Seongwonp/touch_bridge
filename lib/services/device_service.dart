@@ -7,14 +7,12 @@ import 'package:flutter/foundation.dart';
 abstract class DeviceService {
   ValueNotifier<bool> get isConnected;
   ValueNotifier<bool> get isOperating;
+  ValueNotifier<bool> get isStalled; // 과부하(걸림) 상태 추가
 
   Future<bool> connect(String deviceId);
   Future<void> disconnect();
-  
-  /// 모터 제어 명령 전송
-  /// [sensitivity]: 누르는 힘 (10~100)
-  /// [speed]: 이동 속도 (10~100)
   Future<void> sendMotorCommand({required int sensitivity, required int speed});
+  void resetStall(); // 과부하 상태 초기화
 }
 
 /// 하드웨어 없이 테스트하기 위한 가상 서비스
@@ -23,36 +21,48 @@ class MockDeviceService implements DeviceService {
   final ValueNotifier<bool> isConnected = ValueNotifier<bool>(false);
   @override
   final ValueNotifier<bool> isOperating = ValueNotifier<bool>(false);
+  @override
+  final ValueNotifier<bool> isStalled = ValueNotifier<bool>(false);
 
   @override
   Future<bool> connect(String deviceId) async {
     print('Mock: 연결 시도 중... ($deviceId)');
     await Future.delayed(const Duration(seconds: 1));
     isConnected.value = true;
-    print('Mock: 연결 성공');
     return true;
   }
 
   @override
   Future<void> disconnect() async {
-    print('Mock: 연결 해제');
     isConnected.value = false;
   }
 
   @override
+  void resetStall() {
+    isStalled.value = false;
+    print('Mock: 과부하 상태 초기화');
+  }
+
+  @override
   Future<void> sendMotorCommand({required int sensitivity, required int speed}) async {
-    if (!isConnected.value) {
-      print('Mock Error: 기기가 연결되어 있지 않습니다.');
+    if (!isConnected.value) return;
+
+    isOperating.value = true;
+    isStalled.value = false;
+    print('Mock: 명령 전송 -> {"cmd": "ST", "sen": $sensitivity, "spd": $speed}');
+    
+    // 시뮬레이션: 감도가 90 이상이면 무조건 과부하 발생 (테스트 용이성을 위해 100%로 변경)
+    await Future.delayed(const Duration(seconds: 1));
+    
+    if (sensitivity >= 90) {
+      isStalled.value = true;
+      isOperating.value = false;
+      print('Mock: !!! 과부하(Stall) 감지 !!!');
       return;
     }
 
-    print('Mock: 명령 전송 -> {"cmd": "ST", "sen": $sensitivity, "spd": $speed}');
-    
-    isOperating.value = true;
-    // 실제 모터가 작동하는 시간을 시뮬레이션
-    await Future.delayed(const Duration(seconds: 2));
+    await Future.delayed(const Duration(seconds: 1));
     isOperating.value = false;
-    
     print('Mock: 작동 완료');
   }
 }
