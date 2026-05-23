@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import '../../services/device_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -11,9 +13,24 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final FlutterTts _tts = FlutterTts();
+  
+  // 가상 디바이스 서비스 초기화
+  final DeviceService _deviceService = MockDeviceService();
+  
   double _speed = 1.2;
   double _volume = 85;
   bool _guardianMode = true;
+
+  // 모터 제어 설정 값
+  double _motorSensitivity = 70;
+  double _motorSpeed = 50;
+
+  @override
+  void initState() {
+    super.initState();
+    // 가짜로 기기 연결 (나중에 블루투스 스캔 후 연결로 변경될 부분)
+    _deviceService.connect('TEST_DEVICE_ID');
+  }
 
   Future<void> _announce(String message) async {
     await _tts.setLanguage('ko-KR');
@@ -22,9 +39,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _tts.speak(message);
   }
 
+  Future<void> _testMotor() async {
+    if (_deviceService.isOperating.value) return;
+
+    HapticFeedback.heavyImpact();
+    await _announce('테스트를 시작합니다.');
+    
+    await _deviceService.sendMotorCommand(
+      sensitivity: _motorSensitivity.round(),
+      speed: _motorSpeed.round(),
+    );
+    
+    if (mounted) {
+      await _announce('작동이 완료되었습니다.');
+    }
+  }
+
   @override
   void dispose() {
     _tts.stop();
+    _deviceService.disconnect();
     super.dispose();
   }
 
@@ -35,7 +69,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // 상단 바
+            // 상단 바 (생략...)
             Container(
               height: 64,
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -70,7 +104,77 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // 음성 안내 섹션
+                  // 기기 제어 섹션
+                  _SectionLabel(
+                    icon: Icons.settings_input_component_rounded,
+                    label: '기기 제어 (모터 설정)',
+                  ),
+                  const SizedBox(height: 10),
+                  _SettingsCard(
+                    children: [
+                      _SliderRow(
+                        label: '누르는 힘 (감도)',
+                        value: _motorSensitivity,
+                        min: 10,
+                        max: 100,
+                        display: '${_motorSensitivity.round()}%',
+                        onChanged: (v) => setState(() => _motorSensitivity = v),
+                      ),
+                      const _Divider(),
+                      _SliderRow(
+                        label: '작동 속도',
+                        value: _motorSpeed,
+                        min: 10,
+                        max: 100,
+                        display: '${_motorSpeed.round()}%',
+                        onChanged: (v) => setState(() => _motorSpeed = v),
+                      ),
+                      const _Divider(),
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: ValueListenableBuilder<bool>(
+                          valueListenable: _deviceService.isOperating,
+                          builder: (context, isOperating, child) {
+                            return SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: isOperating ? null : _testMotor,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: isOperating 
+                                      ? const Color(0xFF1A1A1A) 
+                                      : const Color(0xFF2A2A2A),
+                                  foregroundColor: isOperating 
+                                      ? const Color(0xFF555555) 
+                                      : const Color(0xFFFFEB00),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                ),
+                                icon: isOperating 
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor: AlwaysStoppedAnimation(Color(0xFF555555)),
+                                        ),
+                                      )
+                                    : const Icon(Icons.play_circle_filled_rounded),
+                                label: Text(
+                                  isOperating ? '기기가 작동 중입니다...' : '현재 설정으로 테스트 작동',
+                                  style: const TextStyle(fontWeight: FontWeight.w800),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+// ... 나머지 섹션 유지
+
                   _SectionLabel(
                     icon: Icons.record_voice_over_rounded,
                     label: '음성 안내',
