@@ -1,377 +1,279 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import '../../services/device_service.dart';
 
-import '../home/home_screen.dart';
-import '../voice/voice_listening_screen.dart';
+/// 사용자가 사진 위에서 선택한 버튼의 좌표 정보
+class ButtonPoint {
+  final String id;
+  final Offset position; // 0.0 ~ 1.0 사이의 상대 좌표 (기기 대응용)
+  final String label;
 
-class PhotoMappingScreen extends StatelessWidget {
+  ButtonPoint({
+    required this.id,
+    required this.position,
+    required this.label,
+  });
+}
+
+class PhotoMappingScreen extends StatefulWidget {
   const PhotoMappingScreen({super.key});
 
-  void _showPlaceholder(BuildContext context, String label) {
-    HapticFeedback.selectionClick();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$label 기능은 다음 단계에서 연결됩니다.'),
-        duration: const Duration(seconds: 1),
-      ),
-    );
+  @override
+  State<PhotoMappingScreen> createState() => _PhotoMappingScreenState();
+}
+
+class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
+  final List<ButtonPoint> _points = [];
+  final GlobalKey _imageKey = GlobalKey();
+  
+  // 가상 서비스 사용
+  final DeviceService _deviceService = MockDeviceService();
+
+  @override
+  void initState() {
+    super.initState();
+    // 테스트용 연결
+    _deviceService.connect('TEST_DEVICE');
   }
 
-  Widget _mappingCell({
-    required BuildContext context,
-    required String tag,
-    required bool active,
-  }) {
-    return Material(
-      color: active ? const Color(0x33FDE047) : Colors.transparent,
-      child: InkWell(
-        onTap: () => _showPlaceholder(context, '$tag 매핑'),
-        child: Center(
-          child: active
-              ? const Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.check_circle,
-                      color: Color(0xFFE2C62D),
-                      size: 22,
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'BT-01 ACTIVE',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFFE2C62D),
-                        letterSpacing: 0.4,
-                      ),
-                    ),
-                  ],
-                )
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      tag,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFFCEC6AD),
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'ASSIGN',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFFFDE047),
-                        letterSpacing: 0.4,
-                      ),
-                    ),
-                  ],
-                ),
-        ),
-      ),
-    );
+  void _handleTap(TapUpDetails details) {
+    final RenderBox? renderBox = _imageKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+    
+    final localPosition = renderBox.globalToLocal(details.globalPosition);
+    
+    // 이미지 크기에 대한 상대적 좌표 계산 (0.0 ~ 1.0)
+    final relativeX = (localPosition.dx / renderBox.size.width).clamp(0.0, 1.0);
+    final relativeY = (localPosition.dy / renderBox.size.height).clamp(0.0, 1.0);
+
+    setState(() {
+      if (_points.length < 9) {
+        _points.add(ButtonPoint(
+          id: DateTime.now().toString(),
+          position: Offset(relativeX, relativeY),
+          label: '버튼 ${_points.length + 1}',
+        ));
+      }
+    });
   }
 
-  Widget _bottomItem({
-    required BuildContext context,
-    required IconData icon,
-    required String label,
-    required bool active,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(28),
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: active ? 18 : 8,
-          vertical: active ? 8 : 4,
-        ),
-        decoration: BoxDecoration(
-          color: active ? const Color(0xFFFDE047) : Colors.transparent,
-          borderRadius: BorderRadius.circular(28),
-          boxShadow: active
-              ? const [BoxShadow(color: Color(0x66FDE047), blurRadius: 14)]
-              : null,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              color: active ? const Color(0xFF726300) : const Color(0xB3D6E3FF),
-              size: 24,
-            ),
-            const SizedBox(height: 1),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: active
-                    ? const Color(0xFF726300)
-                    : const Color(0xB3D6E3FF),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  void _removePoint(int index) {
+    setState(() {
+      _points.removeAt(index);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF041329),
-      body: Stack(
+      body: SafeArea(
+        child: Column(
+          children: [
+            // 상단 바
+            _buildAppBar(context),
+            
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(),
+                    const SizedBox(height: 16),
+                    
+                    // 매핑 영역
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            // 1. 배경 사진 (터치 감지 레이어)
+                            GestureDetector(
+                              onTapUp: _handleTap,
+                              child: Image.network(
+                                'https://lh3.googleusercontent.com/aida-public/AB6AXuBnqtd9QhBxdz_JPVKIqregy0_eQ3-Kmm7GhJ8UoFacsWE5PEO-nYQkiuURtdw1a2Cs-HJLoqEIedm0jvg30rAPgKdOP31oZW5vxfMBJbKgF91uW3lKKboV4zYLwECV2iUnU_UEVKndaTiSpa38QlC_tjoqt7_M9_T9vRF0bU4s2DcqnJHCe6dAFIbehXzzPXMcudEPtJGpt2aY-AFAF4Mn3vw5n7xiaxpHljgqh7f0myzhl1b-copBdl6DRlJsKMDkY-1Pm1K4y8ZO',
+                                key: _imageKey,
+                                fit: BoxFit.cover,
+                                errorBuilder: (c, e, s) => Container(color: Colors.black26),
+                              ),
+                            ),
+                            
+                            // 2. 어두운 오버레이
+                            IgnorePointer(
+                              child: Container(color: Colors.black.withValues(alpha: 0.3)),
+                            ),
+
+                            // 3. 생성된 버튼 마커들
+                            LayoutBuilder(
+                              builder: (context, constraints) {
+                                return Stack(
+                                  children: _points.asMap().entries.map((entry) {
+                                    final idx = entry.key;
+                                    final point = entry.value;
+                                    return Positioned(
+                                      left: point.position.dx * constraints.maxWidth - 20,
+                                      top: point.position.dy * constraints.maxHeight - 20,
+                                      child: _buildMarker(idx, point),
+                                    );
+                                  }).toList(),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    
+                    const SizedBox(height: 16),
+                    _buildStatusFooter(),
+                  ],
+                ),
+              ),
+            ),
+            
+            // 하단 액션 바
+            _buildBottomActionBar(context),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAppBar(BuildContext context) {
+    return Container(
+      height: 64,
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Color(0x33FDE047))),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFFFDE047), size: 20),
+          ),
+          const Text(
+            '버튼 매핑',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFFFDE047)),
+          ),
+          const Spacer(),
+          TextButton(
+            onPressed: () => setState(() => _points.clear()),
+            child: const Text('초기화', style: TextStyle(color: Colors.white70)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'STEP 2: 정밀 매핑',
+          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFFE2C62D)),
+        ),
+        SizedBox(height: 4),
+        Text(
+          '실제 버튼 위치를 터치하세요',
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.white),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMarker(int index, ButtonPoint point) {
+    return GestureDetector(
+      onTap: () => _removePoint(index),
+      child: Column(
         children: [
           Container(
-            decoration: const BoxDecoration(
-              gradient: RadialGradient(
-                center: Alignment(0.8, -0.7),
-                radius: 1.2,
-                colors: [Color(0x2200B8FF), Color(0xFF041329)],
-              ),
-            ),
-          ),
-          SafeArea(
-            child: Column(
-              children: [
-                Container(
-                  height: 64,
-                  padding: const EdgeInsets.symmetric(horizontal: 18),
-                  decoration: const BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(color: Color(0x33FDE047)),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.menu, color: Color(0xFFFDE047)),
-                      ),
-                      const SizedBox(width: 4),
-                      const Text(
-                        'Touch Bridge',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -0.4,
-                          color: Color(0xFFFDE047),
-                        ),
-                      ),
-                      const Spacer(),
-                      Container(
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Color(0x221C2A41),
-                        ),
-                        child: IconButton(
-                          onPressed: () => _showPlaceholder(context, '설정'),
-                          icon: const Icon(
-                            Icons.settings,
-                            color: Color(0xFFFDE047),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'STEP 2: 버튼 위치 매핑',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.0,
-                            color: Color(0xFFE2C62D),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          '2단계: 사진 매핑 (3x3 그리드)',
-                          style: TextStyle(
-                            fontSize: 30,
-                            fontWeight: FontWeight.w900,
-                            color: Colors.white,
-                            height: 1.15,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Expanded(
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(16),
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                Image.network(
-                                  'https://lh3.googleusercontent.com/aida-public/AB6AXuBnqtd9QhBxdz_JPVKIqregy0_eQ3-Kmm7GhJ8UoFacsWE5PEO-nYQkiuURtdw1a2Cs-HJLoqEIedm0jvg30rAPgKdOP31oZW5vxfMBJbKgF91uW3lKKboV4zYLwECV2iUnU_UEVKndaTiSpa38QlC_tjoqt7_M9_T9vRF0bU4s2DcqnJHCe6dAFIbehXzzPXMcudEPtJGpt2aY-AFAF4Mn3vw5n7xiaxpHljgqh7f0myzhl1b-copBdl6DRlJsKMDkY-1Pm1K4y8ZO',
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) =>
-                                      Container(
-                                        color: const Color(0xFF0D1C32),
-                                        child: const Icon(
-                                          Icons.image,
-                                          size: 96,
-                                          color: Color(0x55D6E3FF),
-                                        ),
-                                      ),
-                                ),
-                                Container(color: const Color(0x66041329)),
-                                Container(
-                                  decoration: BoxDecoration(
-                                    border: Border.all(
-                                      color: const Color(0x55FDE047),
-                                      width: 1.5,
-                                    ),
-                                  ),
-                                  child: GridView.count(
-                                    physics:
-                                        const NeverScrollableScrollPhysics(),
-                                    crossAxisCount: 3,
-                                    children: [
-                                      for (int i = 0; i < 9; i++)
-                                        Container(
-                                          decoration: BoxDecoration(
-                                            border: Border.all(
-                                              color: const Color(0x22FDE047),
-                                            ),
-                                          ),
-                                          child: _mappingCell(
-                                            context: context,
-                                            tag: 'BT-0${i + 1}',
-                                            active: i == 4,
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Center(
-                          child: TextButton.icon(
-                            onPressed: () =>
-                                _showPlaceholder(context, '사진 다시 촬영하기'),
-                            style: TextButton.styleFrom(
-                              backgroundColor: const Color(0xFF27354C),
-                              foregroundColor: const Color(0xFFE2C62D),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 18,
-                                vertical: 12,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            icon: const Icon(
-                              Icons.photo_camera_rounded,
-                              size: 18,
-                            ),
-                            label: const Text(
-                              '사진 다시 촬영하기',
-                              style: TextStyle(fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 118),
-                      ],
-                    ),
-                  ),
-                ),
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFEB00).withValues(alpha: 0.9),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 2),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 8),
               ],
             ),
-          ),
-          Positioned(
-            right: 18,
-            bottom: 104,
-            child: ElevatedButton.icon(
-              onPressed: () => _showPlaceholder(context, '매핑 완료'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFDE047),
-                foregroundColor: const Color(0xFF726300),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 18,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                elevation: 12,
+            child: Center(
+              child: Text(
+                '${index + 1}',
+                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
               ),
-              icon: const Text(
-                '매핑 완료',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-              ),
-              label: const Icon(Icons.arrow_forward_rounded),
             ),
           ),
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Container(
-              height: 88,
-              padding: const EdgeInsets.fromLTRB(18, 8, 18, 12),
-              decoration: const BoxDecoration(
-                color: Color(0xFF0D1C32),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _bottomItem(
-                    context: context,
-                    icon: Icons.home_rounded,
-                    label: '홈',
-                    active: false,
-                    onTap: () => Navigator.of(context).pushReplacement(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const HomeScreen(),
-                      ),
-                    ),
-                  ),
-                  _bottomItem(
-                    context: context,
-                    icon: Icons.photo_camera_rounded,
-                    label: '기기',
-                    active: true,
-                    onTap: () {},
-                  ),
-                  _bottomItem(
-                    context: context,
-                    icon: Icons.volume_up_rounded,
-                    label: '음성',
-                    active: false,
-                    onTap: () => Navigator.of(context).pushReplacement(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const VoiceListeningScreen(),
-                      ),
-                    ),
-                  ),
-                  _bottomItem(
-                    context: context,
-                    icon: Icons.settings_rounded,
-                    label: '설정',
-                    active: false,
-                    onTap: () => _showPlaceholder(context, '설정'),
-                  ),
-                ],
-              ),
+          const SizedBox(height: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.black87,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Text(
+              '삭제',
+              style: TextStyle(color: Colors.white, fontSize: 10),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildStatusFooter() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D1C32),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline_rounded, color: Color(0xFFFDE047), size: 18),
+          const SizedBox(width: 8),
+          Text(
+            '현재 ${_points.length}/9개 매핑됨 (마커 클릭 시 삭제)',
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomActionBar(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      child: ElevatedButton(
+        onPressed: _points.isEmpty ? null : () async {
+          // 1. 상대 좌표 리스트 추출
+          final offsets = _points.map((p) => p.position).toList();
+          
+          // 2. 하드웨어 전송 시뮬레이션
+          await _deviceService.saveMappingData(offsets);
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('${_points.length}개의 버튼 위치가 기기에 저장되었습니다.'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFFFFEB00),
+          foregroundColor: Colors.black,
+          minimumSize: const Size(double.infinity, 60),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+        child: const Text(
+          '이 구성으로 저장하기',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+        ),
       ),
     );
   }

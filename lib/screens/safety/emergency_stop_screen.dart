@@ -175,52 +175,9 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     final rs = ResponsiveScale.factor(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF041329),
+      backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // Background Decoration Glows
-          Positioned(
-            top: ResponsiveScale.v(context, 120),
-            right: -ResponsiveScale.v(context, 120),
-            child: IgnorePointer(
-              child: Container(
-                width: ResponsiveScale.v(context, 380),
-                height: ResponsiveScale.v(context, 380),
-                decoration: BoxDecoration(
-                  color: const Color(0x33FDE047),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x33FDE047),
-                      blurRadius: 120,
-                      spreadRadius: 20,
-                    ),
-                  ],
-                  borderRadius: BorderRadius.circular(190),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: ResponsiveScale.v(context, 180),
-            left: -ResponsiveScale.v(context, 100),
-            child: IgnorePointer(
-              child: Container(
-                width: ResponsiveScale.v(context, 320),
-                height: ResponsiveScale.v(context, 320),
-                decoration: BoxDecoration(
-                  color: const Color(0x33FFB4AB),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x33FFB4AB),
-                      blurRadius: 100,
-                      spreadRadius: 10,
-                    ),
-                  ],
-                  borderRadius: BorderRadius.circular(160),
-                ),
-              ),
-            ),
-          ),
           SafeArea(
             child: Column(
               children: [
@@ -228,23 +185,25 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                 Container(
                   height: ResponsiveScale.v(context, 64),
                   padding: EdgeInsets.symmetric(
-                    horizontal: ResponsiveScale.v(context, 24),
+                    horizontal: ResponsiveScale.v(context, 8),
+                  ),
+                  decoration: const BoxDecoration(
+                    border: Border(bottom: BorderSide(color: Color(0xFF2A2A2A))),
                   ),
                   child: Row(
                     children: [
-                      const Icon(
-                        Icons.menu,
-                        color: Color(0xFFFDE047),
-                        size: 28,
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFFFFEB00)),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 4),
                       const Text(
                         'Touch Bridge',
                         style: TextStyle(
-                          color: Color(0xFFFDE047),
+                          color: Color(0xFFFFEB00),
                           fontSize: 22,
                           fontWeight: FontWeight.w900,
-                          letterSpacing: -0.5,
+                          letterSpacing: 0.5,
                         ),
                       ),
                       const Spacer(),
@@ -254,17 +213,17 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                           margin: const EdgeInsets.only(right: 12),
                           padding: const EdgeInsets.symmetric(
                             horizontal: 10,
-                            vertical: 4,
+                            vertical: 6,
                           ),
                           decoration: BoxDecoration(
                             color: _isListening
-                                ? const Color(0x33FDE047)
+                                ? const Color(0xFFFFEB00).withValues(alpha: 0.1)
                                 : Colors.transparent,
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(8),
                             border: Border.all(
                               color: _isListening
-                                  ? const Color(0xFFFDE047)
-                                  : const Color(0x40FDE047),
+                                  ? const Color(0xFFFFEB00)
+                                  : const Color(0xFF2A2A2A),
                               width: 1,
                             ),
                           ),
@@ -272,43 +231,26 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
-                                Icons.mic,
+                                Icons.mic_rounded,
                                 size: 14,
                                 color: _isListening
-                                    ? const Color(0xFFFDE047)
-                                    : const Color(0x80FDE047),
+                                    ? const Color(0xFFFFEB00)
+                                    : const Color(0xFF888888),
                               ),
                               const SizedBox(width: 4),
                               Text(
                                 _isListening ? '듣는 중' : '대기 중',
                                 style: TextStyle(
                                   color: _isListening
-                                      ? const Color(0xFFFDE047)
-                                      : const Color(0x80FDE047),
+                                      ? const Color(0xFFFFEB00)
+                                      : const Color(0xFF888888),
                                   fontSize: 12,
-                                  fontWeight: FontWeight.bold,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1C2A41),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: const Color(0xFFFDE047),
-                            width: 2,
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.person,
-                          color: Color(0xFFD6E3FF),
-                          size: 22,
-                        ),
-                      ),
                     ],
                   ),
                 ),
@@ -319,43 +261,35 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                     ),
                     child: Column(
                       children: [
-                        SizedBox(height: ResponsiveScale.v(context, 32)),
+                        SizedBox(height: ResponsiveScale.v(context, 24)),
                         // Status Card
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 14,
+                            horizontal: 20,
+                            vertical: 12,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF1C2A41),
-                            borderRadius: BorderRadius.circular(999),
+                            color: const Color(0xFF111111),
+                            borderRadius: BorderRadius.circular(16),
                             border: Border.all(
-                              color: const Color(0xFFFDE047),
-                              width: 2.5,
+                              color: const Color(0xFF2A2A2A),
                             ),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Color(0x66000000),
-                                blurRadius: 15,
-                                offset: Offset(0, 8),
-                              ),
-                            ],
                           ),
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
-                                Icons.microwave,
-                                color: Color(0xFFFDE047),
-                                size: 28,
+                                Icons.microwave_rounded,
+                                color: Color(0xFFFFEB00),
+                                size: 24,
                               ),
                               SizedBox(width: 10),
                               Text(
-                                '전자레인지 30초 작동 중',
+                                '스마트 전자레인지 작동 중',
                                 style: TextStyle(
-                                  color: Color(0xFFFDE047),
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w900,
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
                                 ),
                               ),
                             ],
@@ -366,75 +300,44 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                         const Text(
                           '남은 시간',
                           style: TextStyle(
-                            color: Color(0xFFCEC6AD),
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 4,
+                            color: Color(0xFF888888),
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 2,
                           ),
                         ),
-                        SizedBox(height: ResponsiveScale.v(context, 8)),
+                        SizedBox(height: ResponsiveScale.v(context, 4)),
                         Text(
                           _formatMMSS(_secondsLeft),
                           style: TextStyle(
-                            color: const Color(0xFFFDE047),
-                            fontSize: 100 * rs,
+                            color: const Color(0xFFFFEB00),
+                            fontSize: 84 * rs,
                             fontWeight: FontWeight.w900,
                             height: 1,
-                            letterSpacing: -4,
-                            shadows: const [
-                              Shadow(
-                                color: Color(0x66FDE047),
-                                blurRadius: 30,
-                                offset: Offset(0, 0),
-                              ),
-                            ],
                           ),
                         ),
                         const Spacer(),
                         // Instruction Text
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 18,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0x660D1C32),
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(color: const Color(0xFF27354C)),
-                          ),
-                          child: RichText(
-                            textAlign: TextAlign.center,
-                            text: const TextSpan(
-                              style: TextStyle(
-                                color: Color(0xFFD6E3FF),
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                height: 1.4,
-                                fontFamily: 'Inter',
-                              ),
-                              children: [
-                                TextSpan(text: '\'중단하려면 아래 버튼을 '),
-                                TextSpan(
-                                  text: '3초간 길게',
-                                  style: TextStyle(color: Color(0xFFFDE047)),
-                                ),
-                                TextSpan(text: ' 누르세요\''),
-                              ],
-                            ),
+                        Text(
+                          '중단하려면 아래 버튼을 3초간 길게 누르세요',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: const Color(0xFF888888),
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                        SizedBox(height: ResponsiveScale.v(context, 20)),
+                        SizedBox(height: ResponsiveScale.v(context, 16)),
                         // Emergency Button Area
                         Column(
                           children: [
                             // Progress Bar
                             ClipRRect(
-                              borderRadius: BorderRadius.circular(999),
+                              borderRadius: BorderRadius.circular(4),
                               child: Container(
-                                height: 8,
+                                height: 6,
                                 width: double.infinity,
-                                color: const Color(0xFF27354C),
+                                color: const Color(0xFF1A1A1A),
                                 child: Align(
                                   alignment: Alignment.centerLeft,
                                   child: AnimatedBuilder(
@@ -447,13 +350,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                                     },
                                     child: Container(
                                       decoration: const BoxDecoration(
-                                        color: Color(0xFFFDE047),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Color(0xFFFDE047),
-                                            blurRadius: 10,
-                                          ),
-                                        ],
+                                        color: Color(0xFFFFEB00),
                                       ),
                                     ),
                                   ),
@@ -471,90 +368,61 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                               child: AnimatedContainer(
                                 duration: const Duration(milliseconds: 150),
                                 width: double.infinity,
-                                height: ResponsiveScale.v(context, 240),
+                                height: ResponsiveScale.v(context, 200),
                                 decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      Color(0xFFFF5252),
-                                      Color(0xFF93000A),
-                                    ],
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                  ),
-                                  borderRadius: BorderRadius.circular(40),
+                                  color: _isHolding
+                                      ? const Color(0xFFFF4444)
+                                      : const Color(0xFF1A0A0A),
+                                  borderRadius: BorderRadius.circular(24),
                                   border: Border.all(
                                     color: _isHolding
                                         ? Colors.white
-                                        : const Color(0xFFFFB4AB),
-                                    width: _isHolding ? 6 : 4,
+                                        : const Color(0xFFFF4444),
+                                    width: _isHolding ? 4 : 2,
                                   ),
                                   boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(0x9993000A),
-                                      blurRadius: _isHolding ? 50 : 30,
-                                      offset: const Offset(0, 16),
-                                    ),
+                                    if (_isHolding)
+                                      BoxShadow(
+                                        color: const Color(0xFFFF4444).withValues(alpha: 0.3),
+                                        blurRadius: 30,
+                                        spreadRadius: 5,
+                                      ),
                                   ],
                                 ),
-                                child: Stack(
-                                  alignment: Alignment.center,
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    // Pulse Ring Effect (Static Border for UI recreation)
-                                    Container(
-                                      margin: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(32),
-                                        border: Border.all(
-                                          color: Colors.white.withValues(alpha: 0.1),
-                                          width: 16,
-                                        ),
+                                    Icon(
+                                      Icons.stop_circle_rounded,
+                                      size: 72 * rs,
+                                      color: _isHolding ? Colors.white : const Color(0xFFFF4444),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      '길게 눌러서 중단',
+                                      style: TextStyle(
+                                        color: _isHolding ? Colors.white : const Color(0xFFFF4444),
+                                        fontSize: 28 * rs,
+                                        fontWeight: FontWeight.w900,
                                       ),
                                     ),
-                                    Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.back_hand,
-                                          size: 90 * rs,
-                                          color: Colors.white,
-                                        ),
-                                        const SizedBox(height: 12),
-                                        Text(
-                                          '길게 눌러서 중단',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 36 * rs,
-                                            fontWeight: FontWeight.w900,
-                                            letterSpacing: -1.5,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          'HOLD FOR 3 SEC',
-                                          style: TextStyle(
-                                            color: const Color(0xFFFFDAD6),
-                                            fontSize: 18 * rs,
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: 3,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    if (_isHolding)
-                                      Container(
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withValues(alpha: 0.1),
-                                          borderRadius:
-                                              BorderRadius.circular(40),
-                                        ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '3초간 유지하세요',
+                                      style: TextStyle(
+                                        color: _isHolding ? Colors.white.withValues(alpha: 0.8) : const Color(0xFF884444),
+                                        fontSize: 14 * rs,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 1,
                                       ),
+                                    ),
                                   ],
                                 ),
                               ),
                             ),
                           ],
                         ),
-                        SizedBox(height: ResponsiveScale.v(context, 24)),
+                        SizedBox(height: ResponsiveScale.v(context, 32)),
                       ],
                     ),
                   ),

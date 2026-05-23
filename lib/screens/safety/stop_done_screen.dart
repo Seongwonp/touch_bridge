@@ -92,253 +92,116 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
     final rs = ResponsiveScale.factor(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF020617),
-      body: Stack(
-        children: [
-          Positioned(
-            top: ResponsiveScale.v(context, 150),
-            left: ResponsiveScale.v(context, 40),
-            child: IgnorePointer(
-              child: Container(
-                width: ResponsiveScale.v(context, 320),
-                height: ResponsiveScale.v(context, 320),
-                decoration: BoxDecoration(
-                  color: const Color(0x08FDE047),
-                  borderRadius: BorderRadius.circular(180),
-                ),
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Top Bar
+            Container(
+              height: ResponsiveScale.v(context, 64),
+              padding: EdgeInsets.symmetric(
+                horizontal: ResponsiveScale.v(context, 8),
               ),
-            ),
-          ),
-          Positioned(
-            bottom: ResponsiveScale.v(context, 120),
-            right: ResponsiveScale.v(context, 40),
-            child: IgnorePointer(
-              child: Container(
-                width: ResponsiveScale.v(context, 260),
-                height: ResponsiveScale.v(context, 260),
-                decoration: BoxDecoration(
-                  color: const Color(0x063B82F6),
-                  borderRadius: BorderRadius.circular(150),
-                ),
-              ),
-            ),
-          ),
-          SafeArea(
-            child: Column(
-              children: [
-                Container(
-                  height: ResponsiveScale.v(context, 64),
-                  padding: EdgeInsets.symmetric(
-                    horizontal: ResponsiveScale.v(context, 16),
-                  ),
-                  decoration: const BoxDecoration(
-                    color: Color(0xCC020617),
-                    border: Border(
-                      bottom: BorderSide(color: Color(0x14FFFFFF)),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.menu,
-                        color: Color(0xFFFDE047),
-                        size: 24,
-                      ),
-                      const SizedBox(width: 10),
-                      const Text(
-                        'Touch Bridge',
-                        style: TextStyle(
-                          color: Color(0xFFFDE047),
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -0.4,
-                        ),
-                      ),
-                      const Spacer(),
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E293B),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: const Color(0x4DFDE047)),
-                        ),
-                        child: const Icon(
-                          Icons.person,
-                          color: Color(0xFFF8FAFC),
-                          size: 20,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      ResponsiveScale.v(context, 24),
-                      ResponsiveScale.v(context, 20),
-                      ResponsiveScale.v(context, 24),
-                      ResponsiveScale.v(context, 108),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: ResponsiveScale.v(context, 170),
-                          height: ResponsiveScale.v(context, 170),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: const Color(0x100F172A),
-                            border: Border.all(color: const Color(0x33FDE047)),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Color(0x26FDE047),
-                                blurRadius: 36,
-                              ),
-                            ],
-                          ),
-                          child: Center(
-                            child: Container(
-                              width: ResponsiveScale.v(context, 140),
-                              height: ResponsiveScale.v(context, 140),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: const Color(0xFFFDE047),
-                                  width: 4,
-                                ),
-                              ),
-                              child: const Icon(
-                                Icons.check_circle,
-                                size: 96,
-                                color: Color(0xFFFDE047),
-                              ),
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: ResponsiveScale.v(context, 20)),
-                        Text(
-                          '작동이 안전하게\n중단되었습니다',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Color(0xFFFDE047),
-                            fontSize: 34 * rs,
-                            height: 1.15,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.7,
-                          ),
-                        ),
-                        SizedBox(height: ResponsiveScale.v(context, 14)),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 18,
-                            vertical: 14,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0x991E293B),
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(color: const Color(0x1AFFFFFF)),
-                          ),
-                          child: const Text(
-                            '모든 동작이 중단되었습니다.\n홈으로 돌아가려면 버튼을 탭하세요.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Color(0xFFCBD5E1),
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                              height: 1.5,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: ResponsiveScale.v(context, 20)),
-                        SizedBox(
-                          width: double.infinity,
-                          height: ResponsiveScale.v(context, 86),
-                          child: ElevatedButton(
-                            onPressed: _goHome,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFFDE047),
-                              foregroundColor: const Color(0xFF422006),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(18),
-                              ),
-                              elevation: 12,
-                              shadowColor: const Color(0x26FDE047),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.home, size: 34 * rs),
-                                SizedBox(width: ResponsiveScale.v(context, 10)),
-                                Text(
-                                  '홈으로 돌아가기',
-                                  style: TextStyle(
-                                    fontSize: 28 * rs,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: -0.4,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
               decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Color(0xFF020617),
-                    Color(0xE6020617),
-                    Color(0x00020617),
-                  ],
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                ),
+                border: Border(bottom: BorderSide(color: Color(0xFF2A2A2A))),
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _bottomItem(
-                    index: 0,
-                    icon: Icons.home,
-                    label: 'HOME',
-                    active: true,
-                  ),
-                  _bottomItem(
-                    index: 1,
-                    icon: Icons.mic,
-                    label: 'VOICE',
-                    active: false,
-                  ),
-                  _bottomItem(
-                    index: 2,
-                    icon: Icons.settings_remote,
-                    label: 'CONTROL',
-                    active: false,
-                  ),
-                  _bottomItem(
-                    index: 3,
-                    icon: Icons.settings,
-                    label: 'SETTINGS',
-                    active: false,
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Touch Bridge',
+                    style: TextStyle(
+                      color: Color(0xFFFFEB00),
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.5,
+                    ),
                   ),
                 ],
               ),
             ),
-          ),
-        ],
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  ResponsiveScale.v(context, 24),
+                  ResponsiveScale.v(context, 40),
+                  ResponsiveScale.v(context, 24),
+                  ResponsiveScale.v(context, 40),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: ResponsiveScale.v(context, 140),
+                      height: ResponsiveScale.v(context, 140),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: const Color(0xFF111111),
+                        border: Border.all(
+                          color: const Color(0xFFFFEB00),
+                          width: 4,
+                        ),
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          Icons.check_circle_rounded,
+                          size: 84,
+                          color: Color(0xFFFFEB00),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: ResponsiveScale.v(context, 32)),
+                    Text(
+                      '작동이 안전하게\n중단되었습니다',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 32 * rs,
+                        height: 1.2,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    SizedBox(height: ResponsiveScale.v(context, 16)),
+                    const Text(
+                      '모든 기기 동작이 멈췄습니다.\n안심하고 확인하셔도 좋습니다.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Color(0xFF888888),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        height: 1.5,
+                      ),
+                    ),
+                    const Spacer(),
+                    SizedBox(
+                      width: double.infinity,
+                      height: ResponsiveScale.v(context, 72),
+                      child: ElevatedButton.icon(
+                        onPressed: _goHome,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFFEB00),
+                          foregroundColor: Colors.black,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          elevation: 0,
+                        ),
+                        icon: const Icon(Icons.home_rounded, size: 28),
+                        label: Text(
+                          '홈으로 돌아가기',
+                          style: TextStyle(
+                            fontSize: 22 * rs,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -6,6 +6,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 
 import '../control/remote_control_screen.dart';
 import '../voice/voice_listening_screen.dart';
+import 'appliance_selection_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -109,28 +110,33 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text(
-                      '내 기기',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      '기기를 눌러 제어하세요',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: Color(0xFF888888),
-                      ),
+                    const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '내 기기',
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          '기기를 눌러 제어하세요',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Color(0xFF888888),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 16),
-                    // 페이지 인디케이터
+                    // 페이지 인디케이터 (추가 카드 포함하여 +1)
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(_devices.length, (index) {
+                      children: List.generate(_devices.length + 1, (index) {
                         final bool active = index == _currentDeviceIndex;
                         return AnimatedContainer(
                           duration: const Duration(milliseconds: 180),
@@ -155,10 +161,77 @@ class _HomeScreenState extends State<HomeScreen> {
                             _currentDeviceIndex = index;
                           });
                           HapticFeedback.selectionClick();
-                          _tts.speak(_devices[index].name);
+                          if (index < _devices.length) {
+                            _tts.speak(_devices[index].name);
+                          } else {
+                            _tts.speak('새 기기 추가하기. 버튼을 눌러 새로운 기기를 등록하세요.');
+                          }
                         },
-                        itemCount: _devices.length,
+                        itemCount: _devices.length + 1,
                         itemBuilder: (context, index) {
+                          if (index == _devices.length) {
+                            // 새 기기 추가 카드
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              child: GestureDetector(
+                                onTap: () {
+                                  HapticFeedback.mediumImpact();
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(builder: (_) => const ApplianceSelectionScreen()),
+                                  );
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.all(28),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF1A1A1A), // 약간 다른 배경색으로 구분
+                                    borderRadius: BorderRadius.circular(24),
+                                    border: Border.all(color: const Color(0xFFFFEB00), width: 2), // 노란 테두리로 강조
+                                  ),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Container(
+                                        width: 100,
+                                        height: 100,
+                                        decoration: const BoxDecoration(
+                                          color: Color(0xFF2A2A2A),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Center(
+                                          child: Icon(
+                                            Icons.add_rounded,
+                                            color: Color(0xFFFFEB00),
+                                            size: 64,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 32),
+                                      const Text(
+                                        '새 기기 추가하기',
+                                        style: TextStyle(
+                                          fontSize: 26,
+                                          fontWeight: FontWeight.w900,
+                                          color: Color(0xFFFFEB00),
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                      const SizedBox(height: 12),
+                                      const Text(
+                                        '터치 브리지를 새로운 가전에\n연결하고 매핑을 시작합니다',
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF888888),
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
+
                           final device = _devices[index];
                           return Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 4),
