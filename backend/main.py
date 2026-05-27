@@ -1,16 +1,11 @@
 import json
 import os
-import io
 import time
 import uuid
 import logging
 import asyncio
-import librosa
-import numpy as np
-import torch
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel
-from transformers import MoonshineForConditionalGeneration, AutoProcessor
 from dotenv import load_dotenv
 import google.generativeai as genai
 
@@ -35,16 +30,7 @@ async def startup_event():
     await init_db()
     logger.info("Database initialized.")
 
-# 1. Moonshine 모델 로드
-print("AI 모델 로딩 중...")
-model_id = 'UsefulSensors/moonshine-tiny-ko'
-device = "cuda" if torch.cuda.is_available() else "cpu"
-torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-
-model = MoonshineForConditionalGeneration.from_pretrained(model_id).to(device).to(torch_dtype)
-processor = AutoProcessor.from_pretrained(model_id)
-
-# 2. Gemini AI 설정
+# Gemini AI 설정
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 ai_model = genai.GenerativeModel(os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"))
 
@@ -179,23 +165,11 @@ async def vision_mapping(image: UploadFile = File(...), save_as_id: str = None):
 
 @app.post("/voice-command")
 async def process_voice(file: UploadFile = File(...)):
-    audio_bytes = await file.read()
-    audio_data, _ = librosa.load(io.BytesIO(audio_bytes), sr=processor.feature_extractor.sampling_rate)
-    
-    inputs = processor(audio_data, return_tensors="pt", sampling_rate=processor.feature_extractor.sampling_rate)
-    inputs = inputs.to(device, torch_dtype)
-    
-    generated_ids = model.generate(**inputs, max_length=128)
-    recognized_text = processor.decode(generated_ids[0], skip_special_tokens=True)
-    
-    if not recognized_text.strip():
-        return {"action": "NONE", "message": "음성이 인식되지 않았습니다."}
-
-    # parse_command 로직 재사용
-    req = CommandRequest(text=recognized_text)
-    result = await parse_command(req)
-    result["text"] = recognized_text
-    return result
+    raise HTTPException(
+        status_code=503,
+        detail="클라우드 경량 모드에서는 /voice-command를 지원하지 않습니다. "
+               "앱에서 STT 후 /parse-command를 사용하세요.",
+    )
 
 if __name__ == "__main__":
     import uvicorn
