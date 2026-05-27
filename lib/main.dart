@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'services/accessibility_settings.dart';
 import 'services/accessibility_experiment_service.dart';
+import 'services/ble_service.dart';
 import 'screens/main_navigation_screen.dart';
 import 'theme/app_theme.dart';
 
@@ -12,6 +13,7 @@ void main() async {
   } catch (_) {}
   await AccessibilitySettings.instance.load();
   await AccessibilityExperimentService.instance.load();
+  BleService.instance.warmUp();
   runApp(const TouchBridgeApp());
 }
 

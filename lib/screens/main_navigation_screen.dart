@@ -8,6 +8,7 @@ import 'voice/voice_listening_screen.dart';
 import 'settings/settings_screen.dart';
 import '../services/tts_service.dart';
 import '../services/accessibility_experiment_service.dart';
+import '../widgets/responsive_scale.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -22,7 +23,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Timer? _navResetTimer;
   int? _armedNavIndex;
 
-  final List<Widget> _screens = const [ // const 추가
+  final List<Widget> _screens = const [
+    // const 추가
     HomeScreen(),
     DeviceConnectScreen(),
     VoiceListeningScreen(),
@@ -73,9 +75,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     await _tts.speak('${_navItems[index].label} 탭으로 이동합니다.'); // 이동 완료 TTS 추가
   }
 
-  Widget _buildBottomBar() {
+  Widget _buildBottomBar(double rs, BuildContext context) {
     return Container(
-      height: 80,
+      height: ResponsiveScale.v(context, 80),
       decoration: const BoxDecoration(
         color: Color(0xFF000000),
         border: Border(top: BorderSide(color: Color(0xFF2A2A2A), width: 1)),
@@ -87,17 +89,24 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           final bool isArmed = _armedNavIndex == index;
 
           return Expanded(
-            child: Semantics( // Semantics 위젯 추가
-              label: '${item.label} 탭. ${isActive ? '현재 선택됨' : ''} ${isArmed ? '활성화하려면 두 번 탭하세요.' : ''}',
+            child: Semantics(
+              // Semantics 위젯 추가
+              label:
+                  '${item.label} 탭. ${isActive ? '현재 선택됨' : ''} ${isArmed ? '활성화하려면 두 번 탭하세요.' : ''}',
               selected: isActive,
               button: true,
               child: GestureDetector(
                 onTap: () => _handleBottomTap(index),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
-                  margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                  margin: EdgeInsets.symmetric(
+                    horizontal: ResponsiveScale.v(context, 6),
+                    vertical: ResponsiveScale.v(context, 8),
+                  ),
                   decoration: BoxDecoration(
-                    color: isActive ? const Color(0xFFFFEB00) : Colors.transparent,
+                    color: isActive
+                        ? const Color(0xFFFFEB00)
+                        : Colors.transparent,
                     borderRadius: BorderRadius.circular(12),
                     border: isArmed
                         ? Border.all(color: Colors.white, width: 2)
@@ -108,16 +117,20 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     children: [
                       Icon(
                         item.icon,
-                        color: isActive ? Colors.black : const Color(0xFF888888),
-                        size: 24,
+                        color: isActive
+                            ? Colors.black
+                            : const Color(0xFF888888),
+                        size: 24 * rs,
                       ),
-                      const SizedBox(height: 3),
+                      SizedBox(height: ResponsiveScale.v(context, 3)),
                       Text(
                         item.label,
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 11 * rs,
                           fontWeight: FontWeight.w700,
-                          color: isActive ? Colors.black : const Color(0xFF888888),
+                          color: isActive
+                              ? Colors.black
+                              : const Color(0xFF888888),
                         ),
                       ),
                     ],
@@ -140,13 +153,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final rs = ResponsiveScale.factor(context);
     return Scaffold(
       backgroundColor: Colors.black,
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
-      ),
-      bottomNavigationBar: _buildBottomBar(),
+      body: IndexedStack(index: _currentIndex, children: _screens),
+      bottomNavigationBar: _buildBottomBar(rs, context),
     );
   }
 }
