@@ -14,24 +14,35 @@ class BleService {
   static final BleService instance = BleService._();
 
   static final Guid _serviceUuid = Guid(HardwareProtocol.serviceUuid);
-  static final Guid _characteristicUuid = Guid(HardwareProtocol.characteristicUuid);
+  static final Guid _characteristicUuid = Guid(
+    HardwareProtocol.characteristicUuid,
+  );
+  static const _targetNameHints = ['ble bridge', 'esp32', 'touch bridge'];
 
   BluetoothDevice? _connectedDevice;
   BluetoothCharacteristic? _commandCharacteristic;
   StreamSubscription<List<int>>? _notifySub;
-  
+  StreamSubscription<BluetoothAdapterState>? _adapterStateSub;
+  BluetoothAdapterState _adapterState = BluetoothAdapterState.unknown;
+
   final _logController = StreamController<String>.broadcast();
   Stream<String> get logStream => _logController.stream;
 
-  final _connectionStateController = StreamController<BluetoothConnectionState>.broadcast();
-  Stream<BluetoothConnectionState> get connectionStateStream => _connectionStateController.stream;
+  final _connectionStateController =
+      StreamController<BluetoothConnectionState>.broadcast();
+  Stream<BluetoothConnectionState> get connectionStateStream =>
+      _connectionStateController.stream;
 
   Completer<String>? _ackCompleter;
+  String? _lastScanError;
 
   Future<List<BleDeviceInfo>> Function(Duration timeout)? _scanOverride;
   Future<bool> Function(String deviceId)? _connectOverride;
 
-  bool get isConnected => _connectedDevice != null && _commandCharacteristic != null;
+  bool get isConnected =>
+      _connectedDevice != null && _commandCharacteristic != null;
+  String? get lastScanError => _lastScanError;
+  BluetoothAdapterState get adapterState => _adapterState;
   String get connectedDeviceId => _connectedDevice?.remoteId.str ?? '';
   String get connectedDeviceName {
     final name = _connectedDevice?.platformName.trim() ?? '';
@@ -45,7 +56,17 @@ class BleService {
     if (kDebugMode) debugPrint('[BLE] $formatted');
   }
 
-  Future<List<BleDeviceInfo>> scan({Duration timeout = const Duration(seconds: 5)}) async {
+  void warmUp() {
+    _adapterStateSub ??= FlutterBluePlus.adapterState.listen((state) {
+      _adapterState = state;
+      _addLog('어댑터 상태: ${state.name}');
+    });
+    _adapterState = FlutterBluePlus.adapterStateNow;
+  }
+
+  Future<List<BleDeviceInfo>> scan({
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
     if (_scanOverride != null) {
       return _scanOverride!.call(timeout);
     }
@@ -54,13 +75,43 @@ class BleService {
       return const [];
     }
 
+    _lastScanError = null;
+    warmUp();
+    final adapterReady = await _waitForAdapterOn(
+      timeout: const Duration(seconds: 10),
+    );
+    if (!adapterReady) {
+      _lastScanError = 'BLUETOOTH_NOT_READY';
+      _addLog('스캔 취소: 블루투스 어댑터가 준비되지 않았습니다.');
+      AppLogger.warn('ble.scan.not_ready', {
+        'adapter_state': FlutterBluePlus.adapterStateNow.name,
+      });
+      return const [];
+    }
+
     final found = <String, BleDeviceInfo>{};
     late final StreamSubscription<List<ScanResult>> sub;
     sub = FlutterBluePlus.scanResults.listen((results) {
       for (final result in results) {
         final id = result.device.remoteId.str;
-        final name = result.device.platformName.trim();
-        final candidateName = name.isNotEmpty ? name : 'Unknown BLE Device';
+        final advName = result.advertisementData.advName.trim();
+        final platformName = result.device.platformName.trim();
+        final candidateName = advName.isNotEmpty
+            ? advName
+            : (platformName.isNotEmpty ? platformName : 'Unknown BLE Device');
+
+        final serviceUuids = result.advertisementData.serviceUuids;
+        final matchesService = serviceUuids.contains(_serviceUuid);
+        final matchesName = _targetNameHints.any(
+          (hint) =>
+              candidateName.toLowerCase().contains(hint) ||
+              platformName.toLowerCase().contains(hint),
+        );
+
+        if (!matchesService && !matchesName) {
+          continue;
+        }
+
         found[id] = BleDeviceInfo(
           id: id,
           name: candidateName,
@@ -75,6 +126,7 @@ class BleService {
       await FlutterBluePlus.startScan(timeout: timeout);
       await Future<void>.delayed(timeout);
     } catch (e) {
+      _lastScanError = e.toString();
       _addLog('스캔 오류: $e');
       AppLogger.warn('ble.scan.error', {'error': e.toString()});
     } finally {
@@ -88,6 +140,25 @@ class BleService {
     return list;
   }
 
+  Future<bool> _waitForAdapterOn({required Duration timeout}) async {
+    final startedAt = DateTime.now();
+    while (DateTime.now().difference(startedAt) < timeout) {
+      final state = _adapterState == BluetoothAdapterState.unknown
+          ? FlutterBluePlus.adapterStateNow
+          : _adapterState;
+      if (state == BluetoothAdapterState.on) {
+        return true;
+      }
+      if (state == BluetoothAdapterState.off ||
+          state == BluetoothAdapterState.unavailable ||
+          state == BluetoothAdapterState.unauthorized) {
+        return false;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    }
+    return FlutterBluePlus.adapterStateNow == BluetoothAdapterState.on;
+  }
+
   Future<bool> connect(String deviceId) async {
     if (_connectOverride != null) {
       return _connectOverride!.call(deviceId);
@@ -97,11 +168,11 @@ class BleService {
     try {
       _addLog('기기 연결 시도: $deviceId');
       AppLogger.info('ble.connect.start', {'device_id': deviceId});
-      
+
       final target = BluetoothDevice.fromId(deviceId);
-      
+
       await disconnect();
-      
+
       // 연결 상태 모니터링 시작
       target.connectionState.listen((state) {
         _connectionStateController.add(state);
@@ -151,7 +222,10 @@ class BleService {
       return true;
     } catch (e) {
       _addLog('연결 실패: $e');
-      AppLogger.error('ble.connect.error', {'device_id': deviceId, 'error': e.toString()});
+      AppLogger.error('ble.connect.error', {
+        'device_id': deviceId,
+        'error': e.toString(),
+      });
       await disconnect();
       return false;
     }
@@ -171,7 +245,10 @@ class BleService {
     }
   }
 
-  Future<String> _sendAndWaitAck(Map<String, dynamic> payload, {Duration timeout = const Duration(seconds: 5)}) async {
+  Future<String> _sendAndWaitAck(
+    Map<String, dynamic> payload, {
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
     final c = _commandCharacteristic;
     if (c == null) return 'ERROR:NOT_CONNECTED';
 
@@ -191,7 +268,11 @@ class BleService {
     }
   }
 
-  Future<bool> sendPress({required int x, required int y, required String deviceId}) async {
+  Future<bool> sendPress({
+    required int x,
+    required int y,
+    required String deviceId,
+  }) async {
     final res = await _sendAndWaitAck({
       'action': HardwareProtocol.actionPress,
       'x': x,
@@ -239,9 +320,7 @@ class BleService {
   }
 
   Future<String> sendGetServo() async {
-    return await _sendAndWaitAck({
-      'action': HardwareProtocol.actionGetServo,
-    });
+    return await _sendAndWaitAck({'action': HardwareProtocol.actionGetServo});
   }
 
   Future<void> sendEmergencyStop(String deviceId) async {
@@ -268,7 +347,11 @@ class BleService {
 }
 
 class BleDeviceInfo {
-  const BleDeviceInfo({required this.id, required this.name, required this.rssi});
+  const BleDeviceInfo({
+    required this.id,
+    required this.name,
+    required this.rssi,
+  });
   final String id;
   final String name;
   final int rssi;

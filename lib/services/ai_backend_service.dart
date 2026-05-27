@@ -1,13 +1,26 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import 'app_logger.dart';
 
 class AiBackendService {
   AiBackendService._();
   static final AiBackendService instance = AiBackendService._();
+  late final http.Client _client = _buildClient();
+
+  http.Client _buildClient() {
+    if (kIsWeb) return http.Client();
+    final io = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 5)
+      ..idleTimeout = const Duration(seconds: 1)
+      ..maxConnectionsPerHost = 1;
+    io.findProxy = (_) => 'DIRECT';
+    return IOClient(io);
+  }
 
   String get _baseUrl {
     try {
@@ -19,18 +32,79 @@ class AiBackendService {
 
   bool get isConfigured => _baseUrl.isNotEmpty;
 
-  Uri _uri(String path) => Uri.parse('$_baseUrl$path');
+  Uri _uri(String path) {
+    final base = _validatedBaseUrl();
+    return Uri.parse('$base$path');
+  }
 
-  Future<Map<String, dynamic>> parseVoiceCommand(String text) async {
-    if (!isConfigured) {
+  String _validatedBaseUrl() {
+    final base = _baseUrl;
+    if (base.isEmpty) {
       throw StateError('AI_BACKEND_URL이 설정되지 않았습니다.');
     }
+
+    final uri = Uri.tryParse(base);
+    if (uri == null || uri.host.isEmpty) {
+      throw StateError('AI_BACKEND_URL 형식이 올바르지 않습니다: $base');
+    }
+
+    final isLoopback = uri.host == '127.0.0.1' || uri.host == 'localhost';
+    final isMobile =
+        !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.android);
+    if (isMobile && isLoopback) {
+      throw StateError(
+        '실기기에서는 AI_BACKEND_URL에 127.0.0.1/localhost를 사용할 수 없습니다. '
+        'Mac의 같은 Wi-Fi IP(예: http://192.168.x.x:8000)로 설정하세요.',
+      );
+    }
+    return base;
+  }
+
+  Future<Map<String, dynamic>> parseVoiceCommand(String text) async {
+    _validatedBaseUrl();
     AppLogger.info('ai.parse.request', {'text_len': text.length});
-    final res = await http.post(
-      _uri('/parse-command'),
-      headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode({'text': text}),
-    );
+    http.Response res;
+    try {
+      res = await _client
+          .post(
+            _uri('/parse-command'),
+            headers: const {
+              'Content-Type': 'application/json',
+              'Connection': 'close',
+            },
+            body: jsonEncode({'text': text}),
+          )
+          .timeout(const Duration(seconds: 6));
+    } on SocketException catch (e) {
+      AppLogger.warn('ai.parse.socket_retry', {'error': e.toString()});
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      res = await _client
+          .post(
+            _uri('/parse-command'),
+            headers: const {
+              'Content-Type': 'application/json',
+              'Connection': 'close',
+            },
+            body: jsonEncode({'text': text}),
+          )
+          .timeout(const Duration(seconds: 6));
+    } on http.ClientException catch (e) {
+      AppLogger.warn('ai.parse.client_retry', {'error': e.toString()});
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      res = await _client
+          .post(
+            _uri('/parse-command'),
+            headers: const {
+              'Content-Type': 'application/json',
+              'Connection': 'close',
+            },
+            body: jsonEncode({'text': text}),
+          )
+          .timeout(const Duration(seconds: 6));
+    }
+
     if (res.statusCode < 200 || res.statusCode >= 300) {
       AppLogger.warn('ai.parse.response_error', {'status': res.statusCode});
       throw StateError('명령 파싱 API 오류: ${res.statusCode}');
@@ -47,9 +121,7 @@ class AiBackendService {
       debugPrint('[AI_BACKEND] vision mime=$mimeType bytes=${imageBytes.length}');
     }
     AppLogger.info('ai.vision.request', {'mime': mimeType, 'bytes': imageBytes.length});
-    if (!isConfigured) {
-      throw StateError('AI_BACKEND_URL이 설정되지 않았습니다.');
-    }
+    _validatedBaseUrl();
 
     Future<http.Response> doRequest() async {
       final req = http.MultipartRequest('POST', _uri('/vision-mapping'))
@@ -81,9 +153,7 @@ class AiBackendService {
   }
 
   Future<Map<String, dynamic>> fetchDeviceProfile(String deviceId) async {
-    if (!isConfigured) {
-      throw StateError('AI_BACKEND_URL이 설정되지 않았습니다.');
-    }
+    _validatedBaseUrl();
     AppLogger.info('ai.cloud.fetch_profile', {'device_id': deviceId});
     final res = await http.get(_uri('/device-profile/$deviceId'));
     
