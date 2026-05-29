@@ -42,7 +42,7 @@ async def startup_event():
 
 # Gemini AI 설정
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-ai_model = genai.GenerativeModel(os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"))
+ai_model = genai.GenerativeModel(os.getenv("GEMINI_MODEL", "gemini-1.5-flash"))
 
 @app.middleware("http")
 async def request_logging_middleware(request, call_next):
@@ -91,10 +91,27 @@ def interpret_with_ai(text: str):
     
     try:
         response = ai_model.generate_content(prompt)
+        if not response.text:
+            raise ValueError("Empty response from AI")
+            
         json_str = response.text.strip().replace('```json', '').replace('```', '')
         return json.loads(json_str)
     except Exception as e:
-        logger.error(f"AI 해석 오류: {e}")
+        err_msg = str(e)
+        logger.error(f"AI 해석 오류: {err_msg}")
+        
+        # 할당량 초과 시 구체적인 메시지 제공
+        if "exhausted" in err_msg.lower() or "429" in err_msg:
+            return {
+                "action": "NONE",
+                "commands": [],
+                "target": None,
+                "inferred_seconds": 0,
+                "confidence": 0.0,
+                "needs_confirmation": False,
+                "message": "죄송합니다. 현재 AI 서비스 사용량이 많아 잠시 후 다시 이용해 주세요."
+            }
+            
         return {
             "action": "NONE",
             "commands": [],
@@ -102,7 +119,7 @@ def interpret_with_ai(text: str):
             "inferred_seconds": 0,
             "confidence": 0.0,
             "needs_confirmation": False,
-            "message": "명령을 분석하는 중 오류가 발생했습니다."
+            "message": "명령을 분석하는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
         }
 
 class CommandRequest(BaseModel):
@@ -137,6 +154,12 @@ async def parse_command(req: CommandRequest):
 @app.post("/vision-mapping")
 async def vision_mapping(image: UploadFile = File(...), save_as_id: str = None):
     image_bytes = await image.read()
+    
+    # MIME 타입이 명확하지 않은 경우 기본값으로 보정
+    mime_type = image.content_type
+    if not mime_type or mime_type == "application/octet-stream":
+        mime_type = "image/jpeg"
+        
     prompt = """
 이 이미지는 가전기기의 터치패드 사진입니다. 버튼들을 분석하여 rows×cols 그리드에 매핑해주세요.
 반드시 아래 JSON 형식으로만 응답하세요:
@@ -152,11 +175,20 @@ async def vision_mapping(image: UploadFile = File(...), save_as_id: str = None):
 """
     try:
         response = await asyncio.wait_for(
-            asyncio.to_thread(ai_model.generate_content, [{"mime_type": image.content_type, "data": image_bytes}, prompt]),
+            asyncio.to_thread(ai_model.generate_content, [{"mime_type": mime_type, "data": image_bytes}, prompt]),
             timeout=45
         )
+        
+        if not response.text:
+            logger.error("AI 응답이 비어있습니다.")
+            raise HTTPException(status_code=500, detail="AI가 이미지를 분석하지 못했습니다. (빈 응답)")
+
         text = response.text.strip().replace('```json', '').replace('```', '')
-        data = json.loads(text)
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            logger.error(f"JSON 파싱 실패: {text}")
+            raise HTTPException(status_code=500, detail="AI 응답 형식이 올바르지 않습니다.")
         
         # 만약 ID가 주어지면 DB에 저장
         if save_as_id:
@@ -169,9 +201,15 @@ async def vision_mapping(image: UploadFile = File(...), save_as_id: str = None):
             )
             
         return data
+    except asyncio.TimeoutError:
+        logger.error("Vision 분석 타임아웃")
+        raise HTTPException(status_code=504, detail="이미지 분석 시간이 초과되었습니다.")
     except Exception as e:
-        logger.error(f"Vision 오류: {e}")
-        raise HTTPException(status_code=500, detail="이미지 분석 실패")
+        err_msg = str(e)
+        logger.error(f"Vision 오류: {err_msg}")
+        if "exhausted" in err_msg.lower() or "429" in err_msg:
+            raise HTTPException(status_code=429, detail="AI 서비스 할당량을 모두 사용했습니다. 잠시 후 다시 시도해주세요.")
+        raise HTTPException(status_code=500, detail=f"이미지 분석 실패: {err_msg}")
 
 @app.post("/voice-command")
 async def process_voice(file: UploadFile = File(...)):

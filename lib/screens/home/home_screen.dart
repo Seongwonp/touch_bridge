@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_tts/flutter_tts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../services/tts_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../control/remote_control_screen.dart';
@@ -18,32 +20,49 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final FlutterTts _tts = FlutterTts();
+  final TtsService _tts = TtsService();
   final PageController _pageController = PageController(viewportFraction: 0.9);
 
   int _currentDeviceIndex = 0;
-
-  final List<({String name, String status, IconData icon})> _devices = const [
-    (name: '스마트 전자레인지', status: '작동 대기 중', icon: Icons.microwave_rounded),
-    (name: '스마트 공기청정기', status: '공기 질 분석 중', icon: Icons.air_rounded),
-    (name: '스마트 전등 허브', status: '원격 제어 가능', icon: Icons.light_mode_rounded),
-  ];
+  List<Map<String, dynamic>> _devices = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
+    _loadDevices();
     _announceScreen();
   }
 
+  Future<void> _loadDevices() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jsonStr = prefs.getString('home_devices');
+      if (jsonStr != null) {
+        final List<dynamic> decoded = jsonDecode(jsonStr);
+        setState(() {
+          _devices = decoded.cast<Map<String, dynamic>>();
+          _isLoading = false;
+        });
+      } else {
+        // Start with an empty list if no devices exist
+        _devices = [];
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading devices: $e');
+      setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _announceScreen() async {
-    await _tts.setLanguage('ko-KR');
-    await _tts.setSpeechRate(0.45);
-    await _tts.speak('홈 화면입니다. 기기를 선택하여 제어하세요.');
+    await _tts.speak('홈 화면입니다. 기기를 선택하여 제어하세요.', interrupt: true);
   }
 
   @override
   void dispose() {
-    _tts.stop();
     _pageController.dispose();
     super.dispose();
   }
@@ -56,8 +75,8 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (ctx) => _ControlModeSheet(
-        deviceName: device.name,
-        deviceIcon: device.icon,
+        deviceName: device['name'] as String,
+        deviceIcon: IconData(device['iconCodePoint'] as int, fontFamily: 'MaterialIcons'),
         onVoice: () {
           Navigator.of(ctx).pop();
           Navigator.of(context).push(
@@ -82,6 +101,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
     
+    if (_isLoading) {
+      return const Scaffold(backgroundColor: Colors.black, body: Center(child: CircularProgressIndicator(color: Color(0xFFFFEB00))));
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: const TopAppBar(title: 'Touch Bridge'),
@@ -151,9 +174,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           });
                           HapticFeedback.selectionClick();
                           if (index < _devices.length) {
-                            _tts.speak('${_devices[index].name}. ${_devices[index].status}. 선택하려면 누르세요.');
+                            _tts.speak('${_devices[index]['name']}. ${_devices[index]['status']}.', interrupt: true);
                           } else {
-                            _tts.speak('새 기기 추가하기. 버튼을 눌러 새로운 기기를 등록하세요.');
+                            _tts.speak('새 기기 추가하기.', interrupt: true);
                           }
                         },
                         itemCount: _devices.length + 1,
@@ -165,11 +188,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                 label: '새 기기 추가하기. 터치 브리지를 새로운 가전에 연결합니다.',
                                 button: true,
                                 child: GestureDetector(
-                                  onTap: () {
+                                  onTap: () async {
                                     HapticFeedback.mediumImpact();
-                                    Navigator.of(context).push(
+                                    await Navigator.of(context).push(
                                       MaterialPageRoute(builder: (_) => const ApplianceSelectionScreen()),
                                     );
+                                    _loadDevices(); // Refresh list after returning
                                   },
                                   child: Container(
                                     padding: EdgeInsets.all(28 * rs),
@@ -228,7 +252,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           return Padding(
                             padding: EdgeInsets.symmetric(horizontal: 6 * rs),
                             child: Semantics(
-                              label: '${device.name}. 현재 상태 ${device.status}. 선택하려면 두 번 누르세요.',
+                              label: '${device['name']}. 현재 상태 ${device['status']}. 선택하려면 두 번 누르세요.',
                               button: true,
                               child: GestureDetector(
                                 onTap: () => _openDeviceControl(index),
@@ -252,7 +276,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                         ),
                                         child: Center(
                                           child: Icon(
-                                            device.icon,
+                                            IconData(device['iconCodePoint'] as int, fontFamily: 'MaterialIcons'),
                                             color: const Color(0xFFFFEB00),
                                             size: 56 * rs,
                                           ),
@@ -260,7 +284,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       ),
                                       SizedBox(height: ResponsiveScale.v(context, 24)),
                                       Text(
-                                        device.name,
+                                        device['name'] as String,
                                         style: TextStyle(
                                           fontSize: 26 * rs,
                                           fontWeight: FontWeight.w800,
@@ -283,7 +307,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           ),
                                           SizedBox(width: 8 * rs),
                                           Text(
-                                            device.status,
+                                            device['status'] as String,
                                             style: TextStyle(
                                               fontSize: 15 * rs,
                                               fontWeight: FontWeight.w600,
