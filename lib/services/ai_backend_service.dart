@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
+import 'package:http_parser/http_parser.dart';
 import 'app_logger.dart';
 
 class AiBackendService {
@@ -130,6 +131,7 @@ class AiBackendService {
             'image',
             imageBytes,
             filename: 'device_image',
+            contentType: MediaType.parse(mimeType),
           ),
         );
       final streamed = await req.send().timeout(const Duration(seconds: 20));

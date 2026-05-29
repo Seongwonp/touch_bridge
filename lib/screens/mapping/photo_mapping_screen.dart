@@ -1,6 +1,8 @@
 import 'dart:io';
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/device_service.dart';
 import '../../services/device_mapping_service.dart';
 import '../../services/ai_backend_service.dart';
@@ -20,7 +22,16 @@ class ButtonPoint {
 class PhotoMappingScreen extends StatefulWidget {
   final String deviceId;
   final String? imagePath;
-  const PhotoMappingScreen({super.key, required this.deviceId, this.imagePath});
+  final String? applianceName;
+  final String? applianceType;
+
+  const PhotoMappingScreen({
+    super.key, 
+    required this.deviceId, 
+    this.imagePath,
+    this.applianceName,
+    this.applianceType,
+  });
 
   @override
   State<PhotoMappingScreen> createState() => _PhotoMappingScreenState();
@@ -37,6 +48,20 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
   void initState() {
     super.initState();
     _loadProfileAndConnect();
+  }
+
+  int _iconCodePointForType(String? type) {
+    if (type == null) return Icons.devices_rounded.codePoint;
+    return switch (type.toLowerCase()) {
+      'microwave' => Icons.microwave_rounded.codePoint,
+      'washer' || 'laundry' => Icons.local_laundry_service_rounded.codePoint,
+      'air' || 'air_purifier' => Icons.air_rounded.codePoint,
+      'ac' || 'aircon' || 'air_cond' => Icons.ac_unit_rounded.codePoint,
+      'light' || 'lamp' => Icons.light_mode_rounded.codePoint,
+      'tv' => Icons.tv_rounded.codePoint,
+      'fridge' || 'refrigerator' => Icons.kitchen_rounded.codePoint,
+      _ => Icons.devices_rounded.codePoint,
+    };
   }
 
   void _handleTap(TapUpDetails details) {
@@ -62,6 +87,8 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
     setState(() => _points.removeAt(index));
   }
 
+  bool _isAiAnalyzing = false;
+
   Future<void> _loadProfileAndConnect() async {
     try {
       final profile = await DeviceMappingService.instance.load(widget.deviceId);
@@ -74,7 +101,9 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
 
     // If an image path is provided and AI backend is configured, request auto-mapping
     if (widget.imagePath != null && AiBackendService.instance.isConfigured) {
+      setState(() => _isAiAnalyzing = true);
       try {
+        await _tts.speak('AI가 이미지 분석을 시작합니다. 잠시만 기다려주세요.', interrupt: true);
         if (!widget.imagePath!.startsWith('http')) {
           final file = File(widget.imagePath!);
           if (await file.exists()) {
@@ -86,11 +115,22 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
         }
       } catch (e) {
         debugPrint('AI mapping failed: $e');
+        String errMsg = 'AI 분석에 실패했습니다.';
+        if (e.toString().contains('429') || e.toString().contains('할당량')) {
+          errMsg = 'AI 사용량이 초과되었습니다. 잠시 후 다시 시도해주세요.';
+        }
+        await _tts.speak(errMsg, interrupt: true);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errMsg)));
+        }
+      } finally {
+        if (mounted) setState(() => _isAiAnalyzing = false);
       }
     }
   }
 
   Future<void> _onSavePressed() async {
+    // 1. Save Device Mapping Profile
     final profile = await DeviceMappingService.instance.load(widget.deviceId);
     final rows = profile.rows;
     final cols = profile.cols;
@@ -107,10 +147,8 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
       if (rowIdx < 0) rowIdx = 0;
       if (rowIdx >= rows) rowIdx = rows - 1;
 
-      // Prefer AI/user label -> button id mapping
       String? btId = DeviceMappingService.instance.labelToButtonId(point.label);
       if (btId == null || usedIds.contains(btId)) {
-        // find next available default BT-xx id
         for (var k = 1; k <= maxButtons; k++) {
           final cand = 'BT-${k.toString().padLeft(2, '0')}';
           if (!usedIds.contains(cand)) {
@@ -136,7 +174,31 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
 
     await DeviceMappingService.instance.save(widget.deviceId, newProfile);
 
-    // Try sending to BLE if connected (set grid + small verification presses)
+    // 2. Register Device to Home Devices List
+    if (widget.applianceName != null) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final jsonStr = prefs.getString('home_devices');
+        final devices = jsonStr != null
+            ? (jsonDecode(jsonStr) as List).cast<Map<String, dynamic>>()
+            : <Map<String, dynamic>>[];
+            
+        final exists = devices.any((d) => d['id'] == widget.deviceId);
+        if (!exists) {
+          devices.add({
+            'id': widget.deviceId,
+            'name': widget.applianceName,
+            'status': '작동 대기 중',
+            'iconCodePoint': _iconCodePointForType(widget.applianceType),
+          });
+          await prefs.setString('home_devices', jsonEncode(devices));
+        }
+      } catch (e) {
+        debugPrint('Error registering device: $e');
+      }
+    }
+
+    // 3. BLE Sync
     String snackText = '매핑 저장 완료';
     try {
       if (BleService.instance.isConnected) {
@@ -161,13 +223,14 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
             await Future<void>.delayed(const Duration(milliseconds: 300));
           }
           snackText += ' · BLE 전송 성공 (검증: $verified/${toVerify.length})';
-          try { await _tts.speak('BLE에 프로필 업로드 완료. ${verified}개 버튼을 확인했습니다.'); } catch (_) {}
+          try { await _tts.speak('매핑 저장 및 BLE 업로드 완료. ${verified}개 버튼을 확인했습니다.', interrupt: true); } catch (_) {}
         } else {
           snackText += ' · BLE 업로드 실패';
-          try { await _tts.speak('BLE 업로드에 실패했습니다.'); } catch (_) {}
+          try { await _tts.speak('매핑은 저장되었으나 BLE 업로드에 실패했습니다.', interrupt: true); } catch (_) {}
         }
       } else {
         snackText += ' · BLE 미연결';
+        try { await _tts.speak('매핑이 저장되었습니다.', interrupt: true); } catch (_) {}
       }
     } catch (e) {
       snackText += ' · BLE 오류';
@@ -224,7 +287,7 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
         _points.clear();
         _points.addAll(newPoints.take(9));
       });
-      try { _tts.speak('AI 자동 매핑이 완료되었습니다. 필요하면 위치를 조정하세요.'); } catch (_) {}
+      try { _tts.speak('AI 자동 매핑이 완료되었습니다. 위치를 확인하고 저장하세요.', interrupt: true); } catch (_) {}
     }
   }
 
@@ -274,6 +337,17 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
                                     ),
                             ),
                             IgnorePointer(child: Container(color: Colors.black.withValues(alpha: 0.3))),
+                            if (_isAiAnalyzing)
+                              Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const CircularProgressIndicator(color: Color(0xFFFFEB00)),
+                                    SizedBox(height: 16 * rs),
+                                    Text('AI 분석 중...', style: TextStyle(color: Colors.white, fontSize: 16 * rs, fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                              ),
                             LayoutBuilder(
                               builder: (context, constraints) => Stack(
                                 children: _points.asMap().entries.map((entry) {

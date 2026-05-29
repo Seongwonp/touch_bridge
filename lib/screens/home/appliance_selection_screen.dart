@@ -101,35 +101,20 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
             },
             onStartMapping: (sheetCtx, ap) async {
               Navigator.pop(sheetCtx);
-              final id = _newDeviceId(ap.name.replaceAll(' ', '_'));
-
-              // Register device to SharedPreferences
-              try {
-                final prefs = await SharedPreferences.getInstance();
-                final jsonStr = prefs.getString('home_devices');
-                final devices = jsonStr != null
-                    ? (jsonDecode(jsonStr) as List).cast<Map<String, dynamic>>()
-                    : <Map<String, dynamic>>[];
-                final exists = devices.any((d) => d['id'] == id || d['name'] == ap.name);
-                if (!exists) {
-                  devices.add({
-                    'id': id,
-                    'name': ap.name,
-                    'status': '작동 대기 중',
-                    'iconCodePoint': _iconCodePointForType(ap.type),
-                  });
-                  await prefs.setString('home_devices', jsonEncode(devices));
-                  _tts.speak('${ap.name} 기기가 홈에 추가되었습니다.');
-                } else {
-                  _tts.speak('${ap.name} 기기가 이미 존재합니다.');
-                }
-              } catch (e) {
-                debugPrint('device register failed: $e');
-              }
-
               final imagePath = await _chooseImageForMapping(context);
               if (!mounted) return;
-              Navigator.push(context, MaterialPageRoute(builder: (_) => PhotoMappingScreen(deviceId: id, imagePath: imagePath)));
+              
+              Navigator.push(
+                context, 
+                MaterialPageRoute(
+                  builder: (_) => PhotoMappingScreen(
+                    deviceId: _newDeviceId(ap.name.replaceAll(' ', '_')), 
+                    imagePath: imagePath,
+                    applianceName: ap.name,
+                    applianceType: ap.type.name,
+                  )
+                )
+              );
             },
           );
         },
