@@ -2,9 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_tts/flutter_tts.dart';
 
-enum MainTab { home, control, voice }
+import '../services/tts_service.dart';
+
+enum MainTab { home, control, voice, settings }
 
 extension MainTabX on MainTab {
   int get index {
@@ -15,6 +16,8 @@ extension MainTabX on MainTab {
         return 1;
       case MainTab.voice:
         return 2;
+      case MainTab.settings:
+        return 3;
     }
   }
 
@@ -26,6 +29,8 @@ extension MainTabX on MainTab {
         return MainTab.control;
       case 2:
         return MainTab.voice;
+      case 3:
+        return MainTab.settings;
       default:
         return MainTab.home;
     }
@@ -47,7 +52,7 @@ class BottomNavBar extends StatefulWidget {
 }
 
 class _BottomNavBarState extends State<BottomNavBar> {
-  final FlutterTts _tts = FlutterTts();
+  final TtsService _tts = TtsService();
   Timer? _confirmResetTimer;
   int? _armedIndex;
 
@@ -59,6 +64,8 @@ class _BottomNavBarState extends State<BottomNavBar> {
         return '원격 조작';
       case MainTab.voice:
         return '음성 도움';
+      case MainTab.settings:
+        return '설정';
     }
   }
 
@@ -81,11 +88,10 @@ class _BottomNavBarState extends State<BottomNavBar> {
         });
       });
 
-      await _tts.setLanguage('ko-KR');
-      await _tts.setSpeechRate(0.45);
-      await _tts.setPitch(1.0);
-      await _tts.stop();
-      await _tts.speak('${_tabLabel(selectedTab)} 탭입니다. 다시 한 번 누르면 이동합니다.');
+      await _tts.speak(
+        '${_tabLabel(selectedTab)} 탭입니다. 한 번 더 누르면 이동합니다.',
+        source: 'BottomNavBar',
+      );
       return;
     }
 
@@ -145,6 +151,7 @@ class _BottomNavBarState extends State<BottomNavBar> {
           label: '조작',
         ),
         _buildDestination(index: 2, icon: Icons.mic_none_outlined, label: '음성'),
+        _buildDestination(index: 3, icon: Icons.settings_outlined, label: '설정'),
       ],
     );
   }
