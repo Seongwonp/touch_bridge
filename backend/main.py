@@ -8,6 +8,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import google.generativeai as genai
+from fastapi.middleware.cors import CORSMiddleware
 
 # 모듈화된 로직 임포트
 from prompts import get_interpret_prompt
@@ -18,6 +19,15 @@ from database import init_db, get_device_profile, save_device_profile
 load_dotenv()
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 logger = logging.getLogger("touch_bridge.backend")
 logging.basicConfig(
     level=logging.INFO,

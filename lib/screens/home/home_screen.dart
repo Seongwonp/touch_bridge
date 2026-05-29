@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
+import '../../widgets/responsive_scale.dart';
+import '../../widgets/top_app_bar.dart';
 import '../control/remote_control_screen.dart';
 import '../voice/voice_listening_screen.dart';
 import 'appliance_selection_screen.dart';
@@ -17,7 +19,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final FlutterTts _tts = FlutterTts();
-  final PageController _pageController = PageController(viewportFraction: 0.92);
+  final PageController _pageController = PageController(viewportFraction: 0.9);
 
   int _currentDeviceIndex = 0;
 
@@ -78,81 +80,68 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final rs = ResponsiveScale.factor(context);
+    
     return Scaffold(
       backgroundColor: Colors.black,
+      appBar: const TopAppBar(title: 'Touch Bridge'),
       body: SafeArea(
         child: Column(
           children: [
-            // 상단 바
-            Container(
-              height: 64,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: Color(0xFF2A2A2A))),
-              ),
-              child: const Row(
-                children: [
-                  Text(
-                    'Touch Bridge',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0.5,
-                      color: Color(0xFFFFEB00),
-                    ),
-                  ),
-                ],
-              ),
-            ),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                padding: EdgeInsets.fromLTRB(
+                  ResponsiveScale.v(context, 20),
+                  ResponsiveScale.v(context, 20),
+                  ResponsiveScale.v(context, 20),
+                  0,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Column(
+                    Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           '내 기기',
                           style: TextStyle(
-                            fontSize: 28,
+                            fontSize: 28 * rs,
                             fontWeight: FontWeight.w800,
                             color: Colors.white,
                           ),
                         ),
-                        SizedBox(height: 4),
+                        SizedBox(height: ResponsiveScale.v(context, 4)),
                         Text(
                           '기기를 눌러 제어하세요',
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 14 * rs,
                             fontWeight: FontWeight.w500,
-                            color: Color(0xFF888888),
+                            color: const Color(0xFF888888),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    // 페이지 인디케이터 (추가 카드 포함하여 +1)
+                    SizedBox(height: ResponsiveScale.v(context, 16)),
+                    // 페이지 인디케이터
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: List.generate(_devices.length + 1, (index) {
                         final bool active = index == _currentDeviceIndex;
                         return AnimatedContainer(
                           duration: const Duration(milliseconds: 180),
-                          margin: const EdgeInsets.symmetric(horizontal: 4),
-                          width: active ? 32 : 8,
-                          height: 4,
+                          margin: EdgeInsets.symmetric(horizontal: 4 * rs),
+                          width: active ? 32 * rs : 8 * rs,
+                          height: 4 * rs,
                           decoration: BoxDecoration(
                             color: active
                                 ? const Color(0xFFFFEB00)
                                 : const Color(0xFF333333),
-                            borderRadius: BorderRadius.circular(2),
+                            borderRadius: BorderRadius.circular(2 * rs),
                           ),
                         );
                       }),
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: ResponsiveScale.v(context, 16)),
                     Expanded(
                       child: PageView.builder(
                         controller: _pageController,
@@ -162,7 +151,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           });
                           HapticFeedback.selectionClick();
                           if (index < _devices.length) {
-                            _tts.speak(_devices[index].name);
+                            _tts.speak('${_devices[index].name}. ${_devices[index].status}. 선택하려면 누르세요.');
                           } else {
                             _tts.speak('새 기기 추가하기. 버튼을 눌러 새로운 기기를 등록하세요.');
                           }
@@ -170,62 +159,65 @@ class _HomeScreenState extends State<HomeScreen> {
                         itemCount: _devices.length + 1,
                         itemBuilder: (context, index) {
                           if (index == _devices.length) {
-                            // 새 기기 추가 카드
                             return Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
-                              child: GestureDetector(
-                                onTap: () {
-                                  HapticFeedback.mediumImpact();
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(builder: (_) => const ApplianceSelectionScreen()),
-                                  );
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.all(28),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF1A1A1A), // 약간 다른 배경색으로 구분
-                                    borderRadius: BorderRadius.circular(24),
-                                    border: Border.all(color: const Color(0xFFFFEB00), width: 2), // 노란 테두리로 강조
-                                  ),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Container(
-                                        width: 100,
-                                        height: 100,
-                                        decoration: const BoxDecoration(
-                                          color: Color(0xFF2A2A2A),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: const Center(
-                                          child: Icon(
-                                            Icons.add_rounded,
-                                            color: Color(0xFFFFEB00),
-                                            size: 64,
+                              padding: EdgeInsets.symmetric(horizontal: 6 * rs),
+                              child: Semantics(
+                                label: '새 기기 추가하기. 터치 브리지를 새로운 가전에 연결합니다.',
+                                button: true,
+                                child: GestureDetector(
+                                  onTap: () {
+                                    HapticFeedback.mediumImpact();
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(builder: (_) => const ApplianceSelectionScreen()),
+                                    );
+                                  },
+                                  child: Container(
+                                    padding: EdgeInsets.all(28 * rs),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF1A1A1A),
+                                      borderRadius: BorderRadius.circular(24 * rs),
+                                      border: Border.all(color: const Color(0xFFFFEB00), width: 2 * rs),
+                                    ),
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Container(
+                                          width: 100 * rs,
+                                          height: 100 * rs,
+                                          decoration: const BoxDecoration(
+                                            color: Color(0xFF2A2A2A),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Center(
+                                            child: Icon(
+                                              Icons.add_rounded,
+                                              color: const Color(0xFFFFEB00),
+                                              size: 64 * rs,
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                      const SizedBox(height: 32),
-                                      const Text(
-                                        '새 기기 추가하기',
-                                        style: TextStyle(
-                                          fontSize: 26,
-                                          fontWeight: FontWeight.w900,
-                                          color: Color(0xFFFFEB00),
+                                        SizedBox(height: ResponsiveScale.v(context, 32)),
+                                        Text(
+                                          '새 기기 추가하기',
+                                          style: TextStyle(
+                                            fontSize: 24 * rs,
+                                            fontWeight: FontWeight.w900,
+                                            color: const Color(0xFFFFEB00),
+                                          ),
+                                          textAlign: TextAlign.center,
                                         ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                      const SizedBox(height: 12),
-                                      const Text(
-                                        '터치 브리지를 새로운 가전에\n연결하고 매핑을 시작합니다',
-                                        style: TextStyle(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w600,
-                                          color: Color(0xFF888888),
+                                        SizedBox(height: ResponsiveScale.v(context, 12)),
+                                        Text(
+                                          '터치 브리지를 새로운 가전에\n연결하고 매핑을 시작합니다',
+                                          style: TextStyle(
+                                            fontSize: 14 * rs,
+                                            fontWeight: FontWeight.w600,
+                                            color: const Color(0xFF888888),
+                                          ),
+                                          textAlign: TextAlign.center,
                                         ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
@@ -234,89 +226,93 @@ class _HomeScreenState extends State<HomeScreen> {
 
                           final device = _devices[index];
                           return Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            child: GestureDetector(
-                              onTap: () => _openDeviceControl(index),
-                              child: Container(
-                                padding: const EdgeInsets.all(28),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF111111),
-                                  borderRadius: BorderRadius.circular(24),
-                                  border: Border.all(color: const Color(0xFF2A2A2A)),
-                                ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Container(
-                                      width: 120,
-                                      height: 120,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF1A1A1A),
-                                        borderRadius: BorderRadius.circular(24),
-                                        border: Border.all(color: const Color(0xFF333333)),
-                                      ),
-                                      child: Center(
-                                        child: Icon(
-                                          device.icon,
-                                          color: const Color(0xFFFFEB00),
-                                          size: 56,
+                            padding: EdgeInsets.symmetric(horizontal: 6 * rs),
+                            child: Semantics(
+                              label: '${device.name}. 현재 상태 ${device.status}. 선택하려면 두 번 누르세요.',
+                              button: true,
+                              child: GestureDetector(
+                                onTap: () => _openDeviceControl(index),
+                                child: Container(
+                                  padding: EdgeInsets.all(28 * rs),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF111111),
+                                    borderRadius: BorderRadius.circular(24 * rs),
+                                    border: Border.all(color: const Color(0xFF2A2A2A)),
+                                  ),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Container(
+                                        width: 120 * rs,
+                                        height: 120 * rs,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF1A1A1A),
+                                          borderRadius: BorderRadius.circular(24 * rs),
+                                          border: Border.all(color: const Color(0xFF333333)),
                                         ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 24),
-                                    Text(
-                                      device.name,
-                                      style: const TextStyle(
-                                        fontSize: 26,
-                                        fontWeight: FontWeight.w800,
-                                        color: Colors.white,
-                                        height: 1.2,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                    const SizedBox(height: 10),
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Container(
-                                          width: 8,
-                                          height: 8,
-                                          decoration: const BoxDecoration(
-                                            color: Color(0xFF00FF88),
-                                            shape: BoxShape.circle,
+                                        child: Center(
+                                          child: Icon(
+                                            device.icon,
+                                            color: const Color(0xFFFFEB00),
+                                            size: 56 * rs,
                                           ),
                                         ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          device.status,
-                                          style: const TextStyle(
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w600,
-                                            color: Color(0xFFAAAAAA),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 28),
-                                    Container(
-                                      width: double.infinity,
-                                      padding: const EdgeInsets.symmetric(vertical: 14),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFFFEB00),
-                                        borderRadius: BorderRadius.circular(12),
                                       ),
-                                      child: const Text(
-                                        '눌러서 제어하기',
-                                        textAlign: TextAlign.center,
+                                      SizedBox(height: ResponsiveScale.v(context, 24)),
+                                      Text(
+                                        device.name,
                                         style: TextStyle(
-                                          fontSize: 15,
+                                          fontSize: 26 * rs,
                                           fontWeight: FontWeight.w800,
-                                          letterSpacing: 0.5,
-                                          color: Colors.black,
+                                          color: Colors.white,
+                                          height: 1.2,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                      SizedBox(height: ResponsiveScale.v(context, 10)),
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Container(
+                                            width: 8 * rs,
+                                            height: 8 * rs,
+                                            decoration: const BoxDecoration(
+                                              color: Color(0xFF00FF88),
+                                              shape: BoxShape.circle,
+                                            ),
+                                          ),
+                                          SizedBox(width: 8 * rs),
+                                          Text(
+                                            device.status,
+                                            style: TextStyle(
+                                              fontSize: 15 * rs,
+                                              fontWeight: FontWeight.w600,
+                                              color: const Color(0xFFAAAAAA),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      SizedBox(height: ResponsiveScale.v(context, 28)),
+                                      Container(
+                                        width: double.infinity,
+                                        padding: EdgeInsets.symmetric(vertical: 14 * rs),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFFFEB00),
+                                          borderRadius: BorderRadius.circular(12 * rs),
+                                        ),
+                                        child: Text(
+                                          '눌러서 제어하기',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontSize: 15 * rs,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 0.5,
+                                            color: Colors.black,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
@@ -326,7 +322,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     // 하단 스와이프 안내
                     Padding(
-                      padding: const EdgeInsets.only(top: 12, bottom: 8),
+                      padding: EdgeInsets.only(
+                        top: ResponsiveScale.v(context, 12),
+                        bottom: ResponsiveScale.v(context, 8),
+                      ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -337,19 +336,19 @@ class _HomeScreenState extends State<HomeScreen> {
                                 curve: Curves.easeOut,
                               );
                             },
-                            icon: const Icon(
+                            icon: Icon(
                               Icons.chevron_left_rounded,
-                              color: Color(0xFF555555),
-                              size: 28,
+                              color: const Color(0xFF555555),
+                              size: 28 * rs,
                             ),
                           ),
-                          const Text(
+                          Text(
                             '좌우로 밀어서 기기 전환',
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: 12 * rs,
                               fontWeight: FontWeight.w600,
                               letterSpacing: 0.3,
-                              color: Color(0xFF555555),
+                              color: const Color(0xFF555555),
                             ),
                           ),
                           IconButton(
@@ -359,10 +358,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                 curve: Curves.easeOut,
                               );
                             },
-                            icon: const Icon(
+                            icon: Icon(
                               Icons.chevron_right_rounded,
-                              color: Color(0xFF555555),
-                              size: 28,
+                              color: const Color(0xFF555555),
+                              size: 28 * rs,
                             ),
                           ),
                         ],
@@ -394,89 +393,91 @@ class _ControlModeSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final rs = ResponsiveScale.factor(context);
+    
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF111111),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        border: Border(top: BorderSide(color: Color(0xFF2A2A2A))),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111111),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28 * rs)),
+        border: const Border(top: BorderSide(color: Color(0xFF2A2A2A))),
       ),
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 40),
+      padding: EdgeInsets.fromLTRB(24 * rs, 16 * rs, 24 * rs, 40 * rs),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 40,
-            height: 4,
+            width: 40 * rs,
+            height: 4 * rs,
             decoration: BoxDecoration(
               color: const Color(0xFF444444),
-              borderRadius: BorderRadius.circular(2),
+              borderRadius: BorderRadius.circular(2 * rs),
             ),
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: ResponsiveScale.v(context, 24)),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(deviceIcon, color: const Color(0xFFFFEB00), size: 32),
-              const SizedBox(width: 12),
+              Icon(deviceIcon, color: const Color(0xFFFFEB00), size: 32 * rs),
+              SizedBox(width: 12 * rs),
               Text(
                 deviceName,
-                style: const TextStyle(
+                style: TextStyle(
                   color: Colors.white,
-                  fontSize: 22,
+                  fontSize: 22 * rs,
                   fontWeight: FontWeight.w800,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          const Text(
+          SizedBox(height: ResponsiveScale.v(context, 8)),
+          Text(
             '제어 방식을 선택하세요',
             style: TextStyle(
-              color: Color(0xFF888888),
-              fontSize: 14,
+              color: const Color(0xFF888888),
+              fontSize: 14 * rs,
               fontWeight: FontWeight.w500,
             ),
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: ResponsiveScale.v(context, 24)),
           SizedBox(
             width: double.infinity,
-            height: 72,
+            height: 72 * rs,
             child: ElevatedButton.icon(
               onPressed: onVoice,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFFEB00),
                 foregroundColor: Colors.black,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(16 * rs),
                 ),
                 elevation: 0,
               ),
-              icon: const Icon(Icons.mic_rounded, size: 28),
-              label: const Text(
+              icon: Icon(Icons.mic_rounded, size: 28 * rs),
+              label: Text(
                 '음성으로 제어',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                style: TextStyle(fontSize: 20 * rs, fontWeight: FontWeight.w900),
               ),
             ),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: ResponsiveScale.v(context, 12)),
           SizedBox(
             width: double.infinity,
-            height: 72,
+            height: 72 * rs,
             child: ElevatedButton.icon(
               onPressed: onManual,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.transparent,
                 foregroundColor: const Color(0xFFFFEB00),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: const BorderSide(color: Color(0xFFFFEB00), width: 2),
+                  borderRadius: BorderRadius.circular(16 * rs),
+                  side: BorderSide(color: const Color(0xFFFFEB00), width: 2 * rs),
                 ),
                 elevation: 0,
               ),
-              icon: const Icon(Icons.touch_app_rounded, size: 28),
-              label: const Text(
+              icon: Icon(Icons.touch_app_rounded, size: 28 * rs),
+              label: Text(
                 '수동으로 조작',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                style: TextStyle(fontSize: 20 * rs, fontWeight: FontWeight.w900),
               ),
             ),
           ),
