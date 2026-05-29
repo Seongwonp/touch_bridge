@@ -128,4 +128,7 @@ class DeviceMappingService {
     };
     return map[t];
   }
+
+  /// Public helper: convert a human label (from AI or user) into a logical button id (e.g. 'BT-02').
+  String? labelToButtonId(String label) => _labelToButtonId(label);
 }
