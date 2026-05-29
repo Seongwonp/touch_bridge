@@ -145,7 +145,7 @@ class _ApplianceCard extends StatelessWidget {
             SizedBox(
               width: double.infinity, height: 60 * rs,
               child: ElevatedButton(
-                onPressed: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => const PhotoMappingScreen())); },
+                onPressed: () { Navigator.pop(context); final id = 'appliance_${DateTime.now().microsecondsSinceEpoch}'; Navigator.push(context, MaterialPageRoute(builder: (_) => PhotoMappingScreen(deviceId: id))); },
                 style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFEB00), foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14 * rs))),
                 child: Text('매핑 시작', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17 * rs)),
               ),
