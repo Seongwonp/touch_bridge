@@ -58,6 +58,12 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
     }
   }
 
+  String _newDeviceId(String prefix) {
+    final safe = prefix.replaceAll(RegExp(r'\s+'), '_');
+    final ts = DateTime.now().microsecondsSinceEpoch;
+    return '${safe}_$ts';
+  }
+
   @override
   Widget build(BuildContext context) {
     final recommendations = RecommendationService.getRecommendations();
