@@ -1,5 +1,10 @@
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../../services/device_service.dart';
+import '../../services/device_mapping_service.dart';
+import '../../services/ai_backend_service.dart';
+import '../../services/tts_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 
@@ -12,7 +17,9 @@ class ButtonPoint {
 }
 
 class PhotoMappingScreen extends StatefulWidget {
-  const PhotoMappingScreen({super.key});
+  final String deviceId;
+  final String? imagePath;
+  const PhotoMappingScreen({super.key, required this.deviceId, this.imagePath});
 
   @override
   State<PhotoMappingScreen> createState() => _PhotoMappingScreenState();
@@ -22,11 +29,13 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
   final List<ButtonPoint> _points = [];
   final GlobalKey _imageKey = GlobalKey();
   final DeviceService _deviceService = MockDeviceService();
+  DeviceMappingProfile? _loadedProfile;
+  final TtsService _tts = TtsService();
 
   @override
   void initState() {
     super.initState();
-    _deviceService.connect('TEST_DEVICE');
+    _loadProfileAndConnect();
   }
 
   void _handleTap(TapUpDetails details) {
@@ -50,6 +59,114 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
 
   void _removePoint(int index) {
     setState(() => _points.removeAt(index));
+  }
+
+  Future<void> _loadProfileAndConnect() async {
+    try {
+      final profile = await DeviceMappingService.instance.load(widget.deviceId);
+      setState(() => _loadedProfile = profile);
+    } catch (_) {
+      // ignore
+    }
+    // connect to device (mock)
+    _deviceService.connect(widget.deviceId);
+
+    // If an image path is provided and AI backend is configured, request auto-mapping
+    if (widget.imagePath != null && AiBackendService.instance.isConfigured) {
+      try {
+        if (!widget.imagePath!.startsWith('http')) {
+          final file = File(widget.imagePath!);
+          if (await file.exists()) {
+            final bytes = await file.readAsBytes();
+            final mime = widget.imagePath!.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+            final res = await AiBackendService.instance.analyzeMappingImage(imageBytes: bytes, mimeType: mime);
+            _applyAiMappingResult(res);
+          }
+        }
+      } catch (e) {
+        debugPrint('AI mapping failed: $e');
+      }
+    }
+  }
+
+  Future<void> _onSavePressed() async {
+    final profile = await DeviceMappingService.instance.load(widget.deviceId);
+    final rows = profile.rows;
+    final cols = profile.cols;
+    final map = <String, ({int row, int col})>{};
+    for (var i = 0; i < _points.length; i++) {
+      final point = _points[i];
+      var colIdx = (point.position.dx * cols).floor();
+      if (colIdx < 0) colIdx = 0;
+      if (colIdx >= cols) colIdx = cols - 1;
+      var rowIdx = (point.position.dy * rows).floor();
+      if (rowIdx < 0) rowIdx = 0;
+      if (rowIdx >= rows) rowIdx = rows - 1;
+      final id = 'BT-${(i + 1).toString().padLeft(2, '0')}';
+      map[id] = (row: rowIdx, col: colIdx);
+    }
+    final newProfile = DeviceMappingProfile(
+      rows: rows,
+      cols: cols,
+      originX: profile.originX,
+      originY: profile.originY,
+      pitchX: profile.pitchX,
+      pitchY: profile.pitchY,
+      buttonMap: map,
+    );
+    await DeviceMappingService.instance.save(widget.deviceId, newProfile);
+    try {
+      await _deviceService.saveMappingData(_points.map((p) => p.position).toList());
+    } catch (_) {}
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('매핑 저장 완료')));
+      Navigator.of(context).pop();
+    }
+  }
+
+  void _applyAiMappingResult(Map<String, dynamic> res) {
+    final items = (res['buttons'] ?? res['items'] ?? res['detections']) as List<dynamic>?;
+    if (items == null) return;
+    final newPoints = <ButtonPoint>[];
+    for (final raw in items) {
+      if (raw is Map<String, dynamic>) {
+        double? nx;
+        double? ny;
+        String label = (raw['label'] ?? raw['text'] ?? '') as String;
+        if (raw.containsKey('x') && raw.containsKey('y')) {
+          final xv = raw['x'];
+          final yv = raw['y'];
+          if (xv is num && yv is num) {
+            nx = xv.toDouble();
+            ny = yv.toDouble();
+          }
+        } else if (raw.containsKey('box')) {
+          final box = raw['box'];
+          if (box is Map) {
+            final left = (box['x'] ?? box['left'] ?? box['l']) as num?;
+            final top = (box['y'] ?? box['top'] ?? box['t']) as num?;
+            final w = (box['w'] ?? box['width']) as num?;
+            final h = (box['h'] ?? box['height']) as num?;
+            if (left != null && top != null && w != null && h != null) {
+              nx = left.toDouble() + w.toDouble() / 2.0;
+              ny = top.toDouble() + h.toDouble() / 2.0;
+            }
+          }
+        }
+        if (nx != null && ny != null) {
+          nx = nx.clamp(0.0, 1.0);
+          ny = ny.clamp(0.0, 1.0);
+          newPoints.add(ButtonPoint(id: DateTime.now().toString(), position: Offset(nx, ny), label: label.isNotEmpty ? label : '버튼 ${newPoints.length + 1}'));
+        }
+      }
+    }
+    if (newPoints.isNotEmpty) {
+      setState(() {
+        _points.clear();
+        _points.addAll(newPoints.take(9));
+      });
+      try { _tts.speak('AI 자동 매핑이 완료되었습니다. 필요하면 위치를 조정하세요.'); } catch (_) {}
+    }
   }
 
   @override
@@ -88,10 +205,14 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
                           children: [
                             GestureDetector(
                               onTapUp: _handleTap,
-                              child: Image.network(
-                                'https://lh3.googleusercontent.com/aida-public/AB6AXuBnqtd9QhBxdz_JPVKIqregy0_eQ3-Kmm7GhJ8UoFacsWE5PEO-nYQkiuURtdw1a2Cs-HJLoqEIedm0jvg30rAPgKdOP31oZW5vxfMBJbKgF91uW3lKKboV4zYLwECV2iUnU_UEVKndaTiSpa38QlC_tjoqt7_M9_T9vRF0bU4s2DcqnJHCe6dAFIbehXzzPXMcudEPtJGpt2aY-AFAF4Mn3vw5n7xiaxpHljgqh7f0myzhl1b-copBdl6DRlJsKMDkY-1Pm1K4y8ZO',
-                                key: _imageKey, fit: BoxFit.cover, errorBuilder: (c, e, s) => Container(color: Colors.black26),
-                              ),
+                              child: (widget.imagePath != null)
+                                  ? (widget.imagePath!.startsWith('http')
+                                      ? Image.network(widget.imagePath!, key: _imageKey, fit: BoxFit.cover, errorBuilder: (c, e, s) => Container(color: Colors.black26))
+                                      : Image.file(File(widget.imagePath!), key: _imageKey, fit: BoxFit.cover, errorBuilder: (c, e, s) => Container(color: Colors.black26)))
+                                  : Image.network(
+                                      'https://lh3.googleusercontent.com/aida-public/AB6AXuBnqtd9QhBxdz_JPVKIqregy0_eQ3-Kmm7GhJ8UoFacsWE5PEO-nYQkiuURtdw1a2Cs-HJLoqEIedm0jvg30rAPgKdOP31oZW5vxfMBJbKgF91uW3lKKboV4zYLwECV2iUnU_UEVKndaTiSpa38QlC_tjoqt7_M9_T9vRF0bU4s2DcqnJHCe6dAFIbehXzzPXMcudEPtJGpt2aY-AFAF4Mn3vw5n7xiaxpHljgqh7f0myzhl1b-copBdl6DRlJsKMDkY-1Pm1K4y8ZO',
+                                      key: _imageKey, fit: BoxFit.cover, errorBuilder: (c, e, s) => Container(color: Colors.black26),
+                                    ),
                             ),
                             IgnorePointer(child: Container(color: Colors.black.withValues(alpha: 0.3))),
                             LayoutBuilder(
@@ -127,7 +248,7 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
             Container(
               padding: EdgeInsets.all(20 * rs),
               child: ElevatedButton(
-                onPressed: _points.isEmpty ? null : () {},
+                onPressed: _points.isEmpty ? null : _onSavePressed,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFFFEB00), foregroundColor: Colors.black,
                   minimumSize: Size(double.infinity, 60 * rs),
