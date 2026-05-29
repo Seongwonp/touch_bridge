@@ -77,7 +77,7 @@ class AiBackendService {
             },
             body: jsonEncode({'text': text}),
           )
-          .timeout(const Duration(seconds: 6));
+          .timeout(const Duration(seconds: 15));
     } on SocketException catch (e) {
       AppLogger.warn('ai.parse.socket_retry', {'error': e.toString()});
       await Future<void>.delayed(const Duration(milliseconds: 250));
@@ -90,7 +90,7 @@ class AiBackendService {
             },
             body: jsonEncode({'text': text}),
           )
-          .timeout(const Duration(seconds: 6));
+          .timeout(const Duration(seconds: 15));
     } on http.ClientException catch (e) {
       AppLogger.warn('ai.parse.client_retry', {'error': e.toString()});
       await Future<void>.delayed(const Duration(milliseconds: 250));
@@ -103,7 +103,7 @@ class AiBackendService {
             },
             body: jsonEncode({'text': text}),
           )
-          .timeout(const Duration(seconds: 6));
+          .timeout(const Duration(seconds: 15));
     }
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -134,7 +134,7 @@ class AiBackendService {
             contentType: MediaType.parse(mimeType),
           ),
         );
-      final streamed = await req.send().timeout(const Duration(seconds: 20));
+      final streamed = await req.send().timeout(const Duration(seconds: 60));
       return http.Response.fromStream(streamed).timeout(const Duration(seconds: 65));
     }
 

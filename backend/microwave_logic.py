@@ -140,4 +140,15 @@ def check_simple_rules(text: str):
             "confidence": 1.0,
             "message": "조리를 중단합니다."
         }
+    
+    # 단순 "시작" 또는 "돌려줘"인 경우 (기본 30초 설정)
+    if t in ["시작", "시작해", "시작해줘", "돌려줘", "데워줘", "작동"]:
+        return {
+            "action": "MICROWAVE_CONTROL",
+            "commands": ["BT-02", "BT-05"],
+            "inferred_seconds": 30,
+            "confidence": 0.95,
+            "message": "30초 기본 조리를 시작합니다."
+        }
+        
     return None

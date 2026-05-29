@@ -53,6 +53,8 @@ class BleService {
     'auth',
     'provision',
     HardwareProtocol.actionStop,
+    HardwareProtocol.actionSetGrid,
+    HardwareProtocol.actionPress,
   };
 
   bool get isConnected =>
@@ -318,11 +320,11 @@ class BleService {
   Future<String> _sendAndWaitAck(
     Map<String, dynamic> payload, {
     Duration timeout = const Duration(seconds: 5),
+    bool waitAck = true, // ACK 대기 여부 추가
   }) async {
     final c = _commandCharacteristic;
     if (c == null) return 'ERROR:NOT_CONNECTED';
 
-    // If action requires authentication and session is not authenticated, try to auth
     final action = payload['action'] as String?;
     if (action == null || !_nonAuthActions.contains(action)) {
       final ok = await _ensureSessionAuthenticated();
@@ -331,8 +333,18 @@ class BleService {
 
     final json = jsonEncode(payload);
     _addLog('SEND: $json');
-    _ackCompleter = Completer<String>();
+    
+    if (!waitAck) {
+      try {
+        await c.write(utf8.encode(json), withoutResponse: false);
+        return 'OK'; // 대기 없이 즉시 성공 반환
+      } catch (e) {
+        _addLog('전송 오류: $e');
+        return 'ERROR:WRITE_FAILED';
+      }
+    }
 
+    _ackCompleter = Completer<String>();
     try {
       await c.write(utf8.encode(json), withoutResponse: false);
       final res = await _ackCompleter!.future.timeout(timeout);
@@ -354,11 +366,9 @@ class BleService {
       'action': HardwareProtocol.actionPress,
       'x': x,
       'y': y,
-      'deviceId': deviceId,
-    });
-    final low = res.toLowerCase();
-    // Consider TOUCH_OK (TOUCH_OK:BTN_n) as success as well as generic ok
-    return low.contains('touch_ok') || low.contains('grid_config_updated') || low.contains('ok');
+      // deviceId 제거 (하드웨어 JSON 버퍼 절약)
+    }, waitAck: false);
+    return res == 'OK';
   }
 
   Future<bool> sendSetGrid({
@@ -370,7 +380,6 @@ class BleService {
     required double pitchY,
     required String deviceId,
   }) async {
-    // 하드웨어 mm*10 스케일 반영
     final res = await _sendAndWaitAck({
       'action': HardwareProtocol.actionSetGrid,
       'rows': rows,
@@ -379,11 +388,9 @@ class BleService {
       'oy10': (originY * 10).toInt(),
       'px10': (pitchX * 10).toInt(),
       'py10': (pitchY * 10).toInt(),
-      'deviceId': deviceId,
-    });
-    final low = res.toLowerCase();
-    // SET_GRID may reply with GRID_CONFIG_UPDATED (no 'ok'), accept that as success
-    return low.contains('grid_config_updated') || low.contains('ok');
+      // deviceId 제거
+    }, waitAck: false);
+    return res == 'OK';
   }
 
   Future<bool> sendSetServo({
