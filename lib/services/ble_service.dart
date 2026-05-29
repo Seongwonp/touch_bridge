@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'hardware_protocol.dart';
 import 'app_logger.dart';
+import 'package:crypto/crypto.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 // ESP32 GATT 스펙:
 // Service UUID   : 0000FFE0-0000-1000-8000-00805F9B34FB
@@ -39,6 +42,19 @@ class BleService {
   Future<List<BleDeviceInfo>> Function(Duration timeout)? _scanOverride;
   Future<bool> Function(String deviceId)? _connectOverride;
 
+  // Security/session
+  final _secureStorage = const FlutterSecureStorage();
+  String? _pairKey;
+  bool _sessionAuthenticated = false;
+  int _sessionAuthExpiryMs = 0;
+
+  static const _nonAuthActions = {
+    'challenge',
+    'auth',
+    'provision',
+    HardwareProtocol.actionStop,
+  };
+
   bool get isConnected =>
       _connectedDevice != null && _commandCharacteristic != null;
   String? get lastScanError => _lastScanError;
@@ -62,6 +78,58 @@ class BleService {
       _addLog('어댑터 상태: ${state.name}');
     });
     _adapterState = FlutterBluePlus.adapterStateNow;
+  }
+
+  Future<void> _loadPairKey() async {
+    if (_pairKey != null) return;
+    try {
+      _pairKey = await _secureStorage.read(key: 'ble_pair_key');
+      if (_pairKey != null) _addLog('SEC: pair key loaded');
+    } catch (e) {
+      _addLog('SEC: load key error $e');
+    }
+  }
+
+  String _bytesToHex(List<int> bytes) {
+    final sb = StringBuffer();
+    for (final b in bytes) {
+      sb.write(b.toRadixString(16).padLeft(2, '0'));
+    }
+    return sb.toString();
+  }
+
+  String _hmacHex(String key, String data) {
+    final hmac = Hmac(sha256, utf8.encode(key));
+    final digest = hmac.convert(utf8.encode(data));
+    return _bytesToHex(digest.bytes);
+  }
+
+  Future<bool> _ensureSessionAuthenticated({
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    if (_sessionAuthenticated && DateTime.now().millisecondsSinceEpoch < _sessionAuthExpiryMs) {
+      return true;
+    }
+
+    await _loadPairKey();
+    if (_pairKey == null) return false; // not provisioned
+
+    // Request nonce (challenge)
+    final nonceResp = await _sendAndWaitAck({'action': 'challenge'}, timeout: const Duration(seconds: 4));
+    if (!nonceResp.startsWith('NONCE:')) return false;
+    final nonce = nonceResp.substring(6);
+
+    final mac = _hmacHex(_pairKey!, nonce);
+    final authResp = await _sendAndWaitAck({'action': 'auth', 'mac': mac}, timeout: const Duration(seconds: 4));
+
+    if (authResp.toUpperCase().contains('AUTH_OK')) {
+      _sessionAuthenticated = true;
+      _sessionAuthExpiryMs = DateTime.now().millisecondsSinceEpoch + (5 * 60 * 1000); // 5 minutes
+      _addLog('SEC: session authenticated');
+      return true;
+    }
+    _addLog('SEC: authentication failed');
+    return false;
   }
 
   Future<List<BleDeviceInfo>> scan({
@@ -181,6 +249,7 @@ class BleService {
           _connectedDevice = null;
           _commandCharacteristic = null;
           _notifySub?.cancel();
+          _sessionAuthenticated = false;
         }
       });
 
@@ -242,6 +311,7 @@ class BleService {
       _connectedDevice = null;
       _commandCharacteristic = null;
       _notifySub = null;
+      _sessionAuthenticated = false;
     }
   }
 
@@ -251,6 +321,13 @@ class BleService {
   }) async {
     final c = _commandCharacteristic;
     if (c == null) return 'ERROR:NOT_CONNECTED';
+
+    // If action requires authentication and session is not authenticated, try to auth
+    final action = payload['action'] as String?;
+    if (action == null || !_nonAuthActions.contains(action)) {
+      final ok = await _ensureSessionAuthenticated();
+      if (!ok) return 'ERROR:AUTH_REQUIRED';
+    }
 
     final json = jsonEncode(payload);
     _addLog('SEND: $json');
@@ -279,7 +356,9 @@ class BleService {
       'y': y,
       'deviceId': deviceId,
     });
-    return res.toLowerCase().contains('ok');
+    final low = res.toLowerCase();
+    // Consider TOUCH_OK (TOUCH_OK:BTN_n) as success as well as generic ok
+    return low.contains('touch_ok') || low.contains('grid_config_updated') || low.contains('ok');
   }
 
   Future<bool> sendSetGrid({
@@ -302,7 +381,9 @@ class BleService {
       'py10': (pitchY * 10).toInt(),
       'deviceId': deviceId,
     });
-    return res.toLowerCase().contains('ok');
+    final low = res.toLowerCase();
+    // SET_GRID may reply with GRID_CONFIG_UPDATED (no 'ok'), accept that as success
+    return low.contains('grid_config_updated') || low.contains('ok');
   }
 
   Future<bool> sendSetServo({
@@ -328,6 +409,26 @@ class BleService {
       'action': HardwareProtocol.actionStop,
       'deviceId': deviceId,
     }, timeout: const Duration(seconds: 1));
+  }
+
+  /// Provision a device pairing key. The secret is stored in platform-secure storage
+  /// and also sent to the device for initial provisioning. This call does not require
+  /// an authenticated session.
+  Future<bool> provisionPairKey(String secret) async {
+    final c = _commandCharacteristic;
+    if (c == null) return false;
+    final res = await _sendAndWaitAck({'action': 'provision', 'secret': secret});
+    if (res.toUpperCase().contains('PROVISION_OK')) {
+      try {
+        await _secureStorage.write(key: 'ble_pair_key', value: secret);
+        _pairKey = secret;
+        _addLog('SEC: pair key stored');
+        return true;
+      } catch (e) {
+        _addLog('SEC: store key failed $e');
+      }
+    }
+    return false;
   }
 
   @visibleForTesting
