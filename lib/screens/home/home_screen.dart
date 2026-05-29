@@ -97,6 +97,66 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _deleteDevice(int index) async {
+    try {
+      final deviceName = _devices[index]['name'];
+      final prefs = await SharedPreferences.getInstance();
+      setState(() {
+        _devices.removeAt(index);
+        if (_currentDeviceIndex >= _devices.length && _devices.isNotEmpty) {
+          _currentDeviceIndex = _devices.length - 1;
+        }
+      });
+      await prefs.setString('home_devices', jsonEncode(_devices));
+      await _tts.speak('$deviceName 기기가 삭제되었습니다.', interrupt: true);
+    } catch (e) {
+      debugPrint('Error deleting device: $e');
+    }
+  }
+
+  void _showDeleteConfirmation(int index) {
+    HapticFeedback.heavyImpact();
+    final deviceName = _devices[index]['name'];
+    _tts.speak('$deviceName 기기를 삭제하시겠습니까? 삭제하려면 예 버튼을 누르세요.', interrupt: true);
+    
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: Text('기기 삭제', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Text('$deviceName 기기를 삭제하시겠습니까?', style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('아니오', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _deleteDevice(index);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            child: Text('예', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Timer? _deleteTimer;
+
+  void _onLongPressStart(int index) {
+    HapticFeedback.mediumImpact();
+    _tts.speak('삭제 확인 중... 5초간 더 누르면 삭제 창이 뜹니다.', interrupt: true);
+    _deleteTimer = Timer(const Duration(seconds: 5), () {
+      _showDeleteConfirmation(index);
+    });
+  }
+
+  void _onLongPressEnd() {
+    _deleteTimer?.cancel();
+  }
+
   @override
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
@@ -252,10 +312,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           return Padding(
                             padding: EdgeInsets.symmetric(horizontal: 6 * rs),
                             child: Semantics(
-                              label: '${device['name']}. 현재 상태 ${device['status']}. 선택하려면 두 번 누르세요.',
+                              label: '${device['name']}. 현재 상태 ${device['status']}. 선택하려면 두 번 누르세요. 삭제하려면 5초간 길게 누르세요.',
                               button: true,
                               child: GestureDetector(
                                 onTap: () => _openDeviceControl(index),
+                                onLongPressStart: (_) => _onLongPressStart(index),
+                                onLongPressEnd: (_) => _onLongPressEnd(),
+                                onLongPressCancel: () => _onLongPressEnd(),
                                 child: Container(
                                   padding: EdgeInsets.all(28 * rs),
                                   decoration: BoxDecoration(
