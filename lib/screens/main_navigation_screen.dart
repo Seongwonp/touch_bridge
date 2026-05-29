@@ -7,12 +7,10 @@ import 'connection/device_connect_screen.dart';
 import 'voice/voice_listening_screen.dart';
 import 'settings/settings_screen.dart';
 import '../services/tts_service.dart';
-import '../services/accessibility_experiment_service.dart';
 import '../widgets/responsive_scale.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
-
   @override
   State<MainNavigationScreen> createState() => _MainNavigationScreenState();
 }
@@ -24,7 +22,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int? _armedNavIndex;
 
   final List<Widget> _screens = const [
-    // const 추가
     HomeScreen(),
     DeviceConnectScreen(),
     VoiceListeningScreen(),
@@ -33,55 +30,39 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   final List<({IconData icon, String label})> _navItems = const [
     (icon: Icons.home_rounded, label: '홈'),
-    (icon: Icons.devices_rounded, label: '기기'),
+    (icon: Icons.devices_rounded, label: '연결'),
     (icon: Icons.mic_rounded, label: '음성'),
     (icon: Icons.settings_rounded, label: '설정'),
   ];
 
   Future<void> _handleBottomTap(int index) async {
     if (_currentIndex == index) {
-      // 현재 활성화된 탭을 다시 누른 경우, TTS로 현재 탭을 다시 안내
-      await _tts.speak('${_navItems[index].label} 탭이 이미 활성화되어 있습니다.');
+      await _tts.speak('${_navItems[index].label} 탭입니다.');
       return;
     }
 
     if (_armedNavIndex != index) {
-      setState(() {
-        _armedNavIndex = index;
-      });
+      setState(() => _armedNavIndex = index);
       HapticFeedback.mediumImpact();
-
       _navResetTimer?.cancel();
       _navResetTimer = Timer(const Duration(seconds: 4), () {
-        if (mounted) {
-          setState(() {
-            _armedNavIndex = null;
-          });
-          AccessibilityExperimentService.instance.recordDoubleTapTimeout();
-        }
+        if (mounted) setState(() => _armedNavIndex = null);
       });
-
-      await _tts.speak('${_navItems[index].label} 탭입니다. 한 번 더 누르면 이동합니다.');
+      await _tts.speak('${_navItems[index].label}. 이동하려면 한 번 더 누르세요.');
       return;
     }
 
     _navResetTimer?.cancel();
-    setState(() {
-      _currentIndex = index;
-      _armedNavIndex = null;
-    });
+    setState(() { _currentIndex = index; _armedNavIndex = null; });
     await _tts.stop();
     HapticFeedback.lightImpact();
-    await _tts.speak('${_navItems[index].label} 탭으로 이동합니다.'); // 이동 완료 TTS 추가
+    await _tts.speak('${_navItems[index].label} 이동.');
   }
 
   Widget _buildBottomBar(double rs, BuildContext context) {
     return Container(
       height: ResponsiveScale.v(context, 80),
-      decoration: const BoxDecoration(
-        color: Color(0xFF000000),
-        border: Border(top: BorderSide(color: Color(0xFF2A2A2A), width: 1)),
-      ),
+      decoration: const BoxDecoration(color: Colors.black, border: Border(top: BorderSide(color: Color(0xFF2A2A2A)))),
       child: Row(
         children: List.generate(_navItems.length, (index) {
           final item = _navItems[index];
@@ -90,49 +71,25 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
           return Expanded(
             child: Semantics(
-              // Semantics 위젯 추가
-              label:
-                  '${item.label} 탭. ${isActive ? '현재 선택됨' : ''} ${isArmed ? '활성화하려면 두 번 탭하세요.' : ''}',
+              label: '${item.label} 탭',
               selected: isActive,
               button: true,
               child: GestureDetector(
                 onTap: () => _handleBottomTap(index),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
-                  margin: EdgeInsets.symmetric(
-                    horizontal: ResponsiveScale.v(context, 6),
-                    vertical: ResponsiveScale.v(context, 8),
-                  ),
+                  margin: EdgeInsets.symmetric(horizontal: 6 * rs, vertical: 8 * rs),
                   decoration: BoxDecoration(
-                    color: isActive
-                        ? const Color(0xFFFFEB00)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
-                    border: isArmed
-                        ? Border.all(color: Colors.white, width: 2)
-                        : null,
+                    color: isActive ? const Color(0xFFFFEB00) : Colors.transparent,
+                    borderRadius: BorderRadius.circular(16 * rs),
+                    border: isArmed ? Border.all(color: Colors.white, width: 2.5 * rs) : null,
                   ),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        item.icon,
-                        color: isActive
-                            ? Colors.black
-                            : const Color(0xFF888888),
-                        size: 24 * rs,
-                      ),
-                      SizedBox(height: ResponsiveScale.v(context, 3)),
-                      Text(
-                        item.label,
-                        style: TextStyle(
-                          fontSize: 11 * rs,
-                          fontWeight: FontWeight.w700,
-                          color: isActive
-                              ? Colors.black
-                              : const Color(0xFF888888),
-                        ),
-                      ),
+                      Icon(item.icon, color: isActive ? Colors.black : const Color(0xFF888888), size: 24 * rs),
+                      SizedBox(height: ResponsiveScale.v(context, 4)),
+                      Text(item.label, style: TextStyle(fontSize: 11 * rs, fontWeight: FontWeight.w800, color: isActive ? Colors.black : const Color(0xFF888888))),
                     ],
                   ),
                 ),
@@ -145,11 +102,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 
   @override
-  void dispose() {
-    _navResetTimer?.cancel();
-    _tts.stop();
-    super.dispose();
-  }
+  void dispose() { _navResetTimer?.cancel(); _tts.stop(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
