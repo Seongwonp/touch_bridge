@@ -77,6 +77,13 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
               HapticFeedback.selectionClick();
               _tts.speak('${appliance.name} 선택.');
             },
+            onStartMapping: (sheetCtx, ap) async {
+              Navigator.pop(sheetCtx);
+              final id = _newDeviceId(ap.name.replaceAll(' ', '_'));
+              final imagePath = await _chooseImageForMapping(context);
+              if (!mounted) return;
+              Navigator.push(context, MaterialPageRoute(builder: (_) => PhotoMappingScreen(deviceId: id, imagePath: imagePath)));
+            },
           );
         },
       ),
@@ -87,8 +94,9 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
 class _ApplianceCard extends StatelessWidget {
   final ApplianceConfig appliance;
   final VoidCallback onTap;
+  final Future<void> Function(BuildContext, ApplianceConfig) onStartMapping;
   
-  const _ApplianceCard({required this.appliance, required this.onTap});
+  const _ApplianceCard({required this.appliance, required this.onTap, required this.onStartMapping});
 
   IconData _getIcon() {
     switch (appliance.type) {
@@ -175,11 +183,8 @@ class _ApplianceCard extends StatelessWidget {
               width: double.infinity, height: 60 * rs,
               child: ElevatedButton(
                 onPressed: () async {
-                  Navigator.pop(context);
-                  final id = _newDeviceId(appliance.name.replaceAll(' ', '_'));
-                  final imagePath = await _chooseImageForMapping(context);
-                  if (!mounted) return;
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => PhotoMappingScreen(deviceId: id, imagePath: imagePath)));
+                  // Delegate to parent to handle id generation, image choice and navigation.
+                  await onStartMapping(context, appliance);
                 },
                 style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFEB00), foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14 * rs))),
                 child: Text('매핑 시작', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17 * rs)),
