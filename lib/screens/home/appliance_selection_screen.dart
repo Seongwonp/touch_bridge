@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../models/appliance_config.dart';
 import '../../services/recommendation_service.dart';
 import '../../widgets/responsive_scale.dart';
@@ -64,6 +67,19 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
     return '${safe}_$ts';
   }
 
+  int _iconCodePointForType(String type) {
+    return switch (type.toLowerCase()) {
+      'microwave' => Icons.microwave_rounded.codePoint,
+      'washer' || 'laundry' => Icons.local_laundry_service_rounded.codePoint,
+      'air' || 'air_purifier' => Icons.air_rounded.codePoint,
+      'ac' || 'aircon' || 'air_cond' => Icons.ac_unit_rounded.codePoint,
+      'light' || 'lamp' => Icons.light_mode_rounded.codePoint,
+      'tv' => Icons.tv_rounded.codePoint,
+      'fridge' || 'refrigerator' => Icons.kitchen_rounded.codePoint,
+      _ => Icons.devices_rounded.codePoint,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final recommendations = RecommendationService.getRecommendations();
@@ -86,6 +102,31 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
             onStartMapping: (sheetCtx, ap) async {
               Navigator.pop(sheetCtx);
               final id = _newDeviceId(ap.name.replaceAll(' ', '_'));
+
+              // Register device to SharedPreferences
+              try {
+                final prefs = await SharedPreferences.getInstance();
+                final jsonStr = prefs.getString('home_devices');
+                final devices = jsonStr != null
+                    ? (jsonDecode(jsonStr) as List).cast<Map<String, dynamic>>()
+                    : <Map<String, dynamic>>[];
+                final exists = devices.any((d) => d['id'] == id || d['name'] == ap.name);
+                if (!exists) {
+                  devices.add({
+                    'id': id,
+                    'name': ap.name,
+                    'status': '작동 대기 중',
+                    'iconCodePoint': _iconCodePointForType(ap.type),
+                  });
+                  await prefs.setString('home_devices', jsonEncode(devices));
+                  _tts.speak('${ap.name} 기기가 홈에 추가되었습니다.');
+                } else {
+                  _tts.speak('${ap.name} 기기가 이미 존재합니다.');
+                }
+              } catch (e) {
+                debugPrint('device register failed: $e');
+              }
+
               final imagePath = await _chooseImageForMapping(context);
               if (!mounted) return;
               Navigator.push(context, MaterialPageRoute(builder: (_) => PhotoMappingScreen(deviceId: id, imagePath: imagePath)));
