@@ -5,6 +5,7 @@ import '../../services/device_service.dart';
 import '../../services/device_mapping_service.dart';
 import '../../services/ai_backend_service.dart';
 import '../../services/tts_service.dart';
+import '../../services/ble_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 
@@ -94,6 +95,9 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
     final rows = profile.rows;
     final cols = profile.cols;
     final map = <String, ({int row, int col})>{};
+    final usedIds = <String>{};
+    const int maxButtons = 9;
+
     for (var i = 0; i < _points.length; i++) {
       final point = _points[i];
       var colIdx = (point.position.dx * cols).floor();
@@ -102,9 +106,24 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
       var rowIdx = (point.position.dy * rows).floor();
       if (rowIdx < 0) rowIdx = 0;
       if (rowIdx >= rows) rowIdx = rows - 1;
-      final id = 'BT-${(i + 1).toString().padLeft(2, '0')}';
-      map[id] = (row: rowIdx, col: colIdx);
+
+      // Prefer AI/user label -> button id mapping
+      String? btId = DeviceMappingService.instance.labelToButtonId(point.label);
+      if (btId == null || usedIds.contains(btId)) {
+        // find next available default BT-xx id
+        for (var k = 1; k <= maxButtons; k++) {
+          final cand = 'BT-${k.toString().padLeft(2, '0')}';
+          if (!usedIds.contains(cand)) {
+            btId = cand;
+            break;
+          }
+        }
+      }
+      if (btId == null) continue;
+      usedIds.add(btId);
+      map[btId] = (row: rowIdx, col: colIdx);
     }
+
     final newProfile = DeviceMappingProfile(
       rows: rows,
       cols: cols,
@@ -114,12 +133,52 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
       pitchY: profile.pitchY,
       buttonMap: map,
     );
+
     await DeviceMappingService.instance.save(widget.deviceId, newProfile);
+
+    // Try sending to BLE if connected (set grid + small verification presses)
+    String snackText = '매핑 저장 완료';
+    try {
+      if (BleService.instance.isConnected) {
+        final ok = await BleService.instance.sendSetGrid(
+          rows: newProfile.rows,
+          cols: newProfile.cols,
+          originX: newProfile.originX,
+          originY: newProfile.originY,
+          pitchX: newProfile.pitchX,
+          pitchY: newProfile.pitchY,
+          deviceId: widget.deviceId,
+        );
+        if (ok) {
+          int verified = 0;
+          final entries = map.entries.toList();
+          final toVerify = entries.take(3).toList();
+          for (final e in toVerify) {
+            final r = e.value.row;
+            final c = e.value.col;
+            final pressOk = await BleService.instance.sendPress(x: c, y: r, deviceId: widget.deviceId);
+            if (pressOk) verified++;
+            await Future<void>.delayed(const Duration(milliseconds: 300));
+          }
+          snackText += ' · BLE 전송 성공 (검증: $verified/${toVerify.length})';
+          try { await _tts.speak('BLE에 프로필 업로드 완료. ${verified}개 버튼을 확인했습니다.'); } catch (_) {}
+        } else {
+          snackText += ' · BLE 업로드 실패';
+          try { await _tts.speak('BLE 업로드에 실패했습니다.'); } catch (_) {}
+        }
+      } else {
+        snackText += ' · BLE 미연결';
+      }
+    } catch (e) {
+      snackText += ' · BLE 오류';
+    }
+
     try {
       await _deviceService.saveMappingData(_points.map((p) => p.position).toList());
     } catch (_) {}
+
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('매핑 저장 완료')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(snackText)));
       Navigator.of(context).pop();
     }
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../models/appliance_config.dart';
 import '../../services/recommendation_service.dart';
 import '../../widgets/responsive_scale.dart';
@@ -17,6 +18,8 @@ class ApplianceSelectionScreen extends StatefulWidget {
 class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
   final FlutterTts _tts = FlutterTts();
 
+  final ImagePicker _picker = ImagePicker();
+
   @override
   void initState() {
     super.initState();
@@ -27,6 +30,32 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
   void dispose() {
     _tts.stop();
     super.dispose();
+  }
+
+  Future<String?> _chooseImageForMapping(BuildContext context) async {
+    final choice = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: const Color(0xFF111111),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(leading: const Icon(Icons.camera_alt, color: Colors.white), title: const Text('사진 촬영', style: TextStyle(color: Colors.white)), onTap: () => Navigator.of(ctx).pop(0)),
+          ListTile(leading: const Icon(Icons.photo_library, color: Colors.white), title: const Text('갤러리에서 선택', style: TextStyle(color: Colors.white)), onTap: () => Navigator.of(ctx).pop(1)),
+          ListTile(leading: const Icon(Icons.image, color: Colors.white), title: const Text('샘플 이미지 사용', style: TextStyle(color: Colors.white)), onTap: () => Navigator.of(ctx).pop(2)),
+          SizedBox(height: 12),
+        ]),
+      ),
+    );
+
+    if (choice == null) return null;
+    if (choice == 2) return null; // use built-in sample image
+
+    try {
+      final xfile = await _picker.pickImage(source: choice == 0 ? ImageSource.camera : ImageSource.gallery, maxWidth: 1600, imageQuality: 85);
+      return xfile?.path;
+    } catch (e) {
+      return null;
+    }
   }
 
   @override
@@ -145,7 +174,13 @@ class _ApplianceCard extends StatelessWidget {
             SizedBox(
               width: double.infinity, height: 60 * rs,
               child: ElevatedButton(
-                onPressed: () { Navigator.pop(context); final id = 'appliance_${DateTime.now().microsecondsSinceEpoch}'; Navigator.push(context, MaterialPageRoute(builder: (_) => PhotoMappingScreen(deviceId: id))); },
+                onPressed: () async {
+                  Navigator.pop(context);
+                  final id = _newDeviceId(appliance.name.replaceAll(' ', '_'));
+                  final imagePath = await _chooseImageForMapping(context);
+                  if (!mounted) return;
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => PhotoMappingScreen(deviceId: id, imagePath: imagePath)));
+                },
                 style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFEB00), foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14 * rs))),
                 child: Text('매핑 시작', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17 * rs)),
               ),
