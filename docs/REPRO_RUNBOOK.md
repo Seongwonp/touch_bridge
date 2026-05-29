@@ -16,7 +16,7 @@ AI_BACKEND_URL=http://bagseong-won-ui-MacBookPro.local:8001
 ### 백엔드 `.env` (`backend` 실행 환경)
 ```env
 GOOGLE_API_KEY=YOUR_REAL_KEY
-GEMINI_MODEL=gemini-3-flash-preview
+GEMINI_MODEL=gemini-1.5-flash
 MONGO_URI=mongodb://localhost:27017/
 ```
 (`backend/.env_ex` 참고)

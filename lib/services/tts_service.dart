@@ -32,7 +32,9 @@ class TtsService {
       } else {
         await _tts.setLanguage('ko-KR');
       }
-      await _tts.awaitSpeakCompletion(true);
+      // We don't use awaitSpeakCompletion(true) here because we want to handle interruption manually 
+      // and not block the execution flow of the app.
+      await _tts.awaitSpeakCompletion(false);
       _tts.setStartHandler(() => _isSpeaking = true);
       _tts.setCompletionHandler(() => _isSpeaking = false);
       _tts.setCancelHandler(() => _isSpeaking = false);
@@ -60,9 +62,8 @@ class TtsService {
     bool interrupt = false,
   }) async {
     if (!AccessibilitySettings.instance.voiceGuidanceEnabled) return;
-    // macOS 26 beta: AVSpeechSynthesisVoice triggers TCC abort (OS bug)
-    // kIsWeb: browser TTS works fine even on Mac host
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) return;
+    
     try {
       await _init;
       final now = DateTime.now();
@@ -71,11 +72,11 @@ class TtsService {
 
       if (!force) {
         final elapsed = now.difference(_lastSpokenAt).inMilliseconds;
-        // 동일 멘트 반복 억제
+        // 동일 멘트 반복 억제 (8초 이내)
         if (message == _lastSpokenText && elapsed < 8000) return;
-        // 너무 빠른 연속 안내 억제
-        if (elapsed < 700) return;
-        // 이미 말하고 있으면 기본 안내는 드롭
+        // 너무 빠른 연속 안내 억제 (500ms 이내)
+        if (elapsed < 500 && !interrupt) return;
+        // 이미 말하고 있는데 중단 요청이 없으면 드롭
         if (_isSpeaking && !interrupt) return;
         // 긴 문장은 축약
         message = _toConcise(message);
@@ -83,12 +84,16 @@ class TtsService {
 
       if (interrupt) {
         await _tts.stop();
+        _isSpeaking = false;
       }
+      
       _lastSpokenAt = now;
       _lastSpokenText = message;
-      await _tts.speak(message);
+      // Use fire-and-forget for speak unless we specifically need to wait
+      _tts.speak(message);
     } catch (e) {
       if (kDebugMode) debugPrint('TTS speak error: $e');
+      _isSpeaking = false;
     }
   }
 
