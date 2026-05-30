@@ -14,6 +14,39 @@ class _BleLogScreenState extends State<BleLogScreen> {
   final List<String> _logs = [];
   final ScrollController _scrollController = ScrollController();
 
+  ({String source, Color color, String text}) _parseLog(String log) {
+    final isSend = log.contains('SEND:');
+    final isRecv = log.contains('RECV:');
+    final isError = log.contains('오류') || log.contains('실패') || log.contains('TIMEOUT');
+
+    if (isSend) {
+      return (source: 'APP', color: Colors.lightBlueAccent, text: log);
+    }
+
+    if (isRecv) {
+      final body = log.substring(log.indexOf('RECV:') + 5).trim();
+      if (body.startsWith('AVR:')) {
+        return (source: 'AVR', color: Colors.greenAccent, text: body);
+      }
+      if (body.startsWith('ESP:')) {
+        return (source: 'ESP', color: Colors.cyanAccent, text: body);
+      }
+      if (body.startsWith('UART:') || body.startsWith('UART_RX:')) {
+        return (source: 'UART', color: Colors.tealAccent, text: body);
+      }
+      if (body.startsWith('ERROR:')) {
+        return (source: 'HW-ERR', color: Colors.redAccent, text: body);
+      }
+      return (source: 'HW', color: Colors.white70, text: body);
+    }
+
+    return (
+      source: isError ? 'ERR' : 'LOG',
+      color: isError ? Colors.redAccent : Colors.white70,
+      text: log,
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -48,12 +81,17 @@ class _BleLogScreenState extends State<BleLogScreen> {
             child: ListView.builder(
               controller: _scrollController, padding: EdgeInsets.all(16 * rs), itemCount: _logs.length,
               itemBuilder: (context, index) {
-                final log = _logs[index];
-                final isSend = log.contains('SEND:'); final isRecv = log.contains('RECV:');
-                final isError = log.contains('오류') || log.contains('실패') || log.contains('TIMEOUT');
+                final entry = _parseLog(_logs[index]);
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(log, style: TextStyle(color: isError ? Colors.redAccent : (isSend ? Colors.lightBlueAccent : (isRecv ? Colors.greenAccent : Colors.white70)), fontFamily: 'monospace', fontSize: 12 * rs)),
+                  child: Text(
+                    '[${entry.source}] ${entry.text}',
+                    style: TextStyle(
+                      color: entry.color,
+                      fontFamily: 'monospace',
+                      fontSize: 12 * rs,
+                    ),
+                  ),
                 );
               },
             ),

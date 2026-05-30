@@ -17,6 +17,9 @@ class TtsService {
   /// TTS 초기화 Future — speak() 첫 호출 전 완료 보장
   late final Future<void> _init;
 
+  /// TTS 로깅 - [무엇, 언제, 왜]를 기록 (최근 20개 유지)
+  final List<({String text, DateTime timestamp, String source})> _speakLog = [];
+
   Future<void> _initTts() async {
     try {
       final settings = AccessibilitySettings.instance;
@@ -56,10 +59,30 @@ class TtsService {
     return '${t.substring(0, 42)}...';
   }
 
+  /// TTS 로그 추가 및 유지 (최근 20개만)
+  void _addLog(String text, String source) {
+    _speakLog.add((text: text, timestamp: DateTime.now(), source: source));
+    if (_speakLog.length > 20) {
+      _speakLog.removeAt(0);
+    }
+    if (kDebugMode) {
+      final timestamp = DateTime.now().toIso8601String().split('T')[1].substring(0, 12);
+      debugPrint('[TTS_LOG] [$timestamp] $source: $text');
+    }
+  }
+
+  /// 최근 TTS 로그 반환 (디버깅용)
+  List<String> getRecentLog() {
+    return _speakLog
+        .map((e) => '${e.timestamp.toIso8601String().substring(11, 19)} | ${e.source} | ${e.text}')
+        .toList();
+  }
+
   Future<void> speak(
     String text, {
     bool force = false,
     bool interrupt = false,
+    String source = 'app',
   }) async {
     if (!AccessibilitySettings.instance.voiceGuidanceEnabled) return;
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) return;
@@ -73,11 +96,20 @@ class TtsService {
       if (!force) {
         final elapsed = now.difference(_lastSpokenAt).inMilliseconds;
         // 동일 멘트 반복 억제 (8초 이내)
-        if (message == _lastSpokenText && elapsed < 8000) return;
-        // 너무 빠른 연속 안내 억제 (500ms 이내)
-        if (elapsed < 500 && !interrupt) return;
+        if (message == _lastSpokenText && elapsed < 8000) {
+          _addLog('(DROPPED: 동일 멘트 반복)', source);
+          return;
+        }
+        // 너무 빠른 연속 안내 억제 (1000ms 이내 - 개선: 500ms → 1000ms)
+        if (elapsed < 1000 && !interrupt) {
+          _addLog('(DROPPED: 너무 빠른 연속)', source);
+          return;
+        }
         // 이미 말하고 있는데 중단 요청이 없으면 드롭
-        if (_isSpeaking && !interrupt) return;
+        if (_isSpeaking && !interrupt) {
+          _addLog('(DROPPED: 이미 말하는 중)', source);
+          return;
+        }
         // 긴 문장은 축약
         message = _toConcise(message);
       }
@@ -89,6 +121,7 @@ class TtsService {
       
       _lastSpokenAt = now;
       _lastSpokenText = message;
+      _addLog(message, source);
       // Use fire-and-forget for speak unless we specifically need to wait
       _tts.speak(message);
     } catch (e) {
@@ -97,9 +130,13 @@ class TtsService {
     }
   }
 
+  /// TTS 정지 및 상태 초기화
   Future<void> stop() async {
     try {
       await _tts.stop();
+      _isSpeaking = false;
+      _lastSpokenText = '';
+      _lastSpokenAt = DateTime.fromMillisecondsSinceEpoch(0);
     } catch (_) {}
   }
 

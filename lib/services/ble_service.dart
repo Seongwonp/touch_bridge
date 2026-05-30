@@ -74,6 +74,20 @@ class BleService {
     if (kDebugMode) debugPrint('[BLE] $formatted');
   }
 
+  String _normalizeHardwareLog(String line) {
+    final trimmed = line.trim();
+    if (trimmed.isEmpty) return 'UART_RX: <empty>';
+    if (trimmed.startsWith('AVR:') ||
+        trimmed.startsWith('ESP:') ||
+        trimmed.startsWith('UART:') ||
+        trimmed.startsWith('HW:') ||
+        trimmed.startsWith('TOUCH_OK') ||
+        trimmed.startsWith('ERROR:')) {
+      return trimmed;
+    }
+    return 'UART_RX: $trimmed';
+  }
+
   void warmUp() {
     _adapterStateSub ??= FlutterBluePlus.adapterState.listen((state) {
       _adapterState = state;
@@ -284,7 +298,7 @@ class BleService {
       _notifySub = characteristic.lastValueStream.listen((value) {
         if (value.isEmpty) return;
         final res = utf8.decode(value).trim();
-        _addLog('RECV: $res');
+        _addLog('RECV: ${_normalizeHardwareLog(res)}');
         _ackCompleter?.complete(res);
       });
 
@@ -362,12 +376,14 @@ class BleService {
     required int y,
     required String deviceId,
   }) async {
+    debugPrint('[BLE_HW] Sending PRESS command: x=$x, y=$y (device=$deviceId)');
     final res = await _sendAndWaitAck({
       'action': HardwareProtocol.actionPress,
       'x': x,
       'y': y,
       // deviceId 제거 (하드웨어 JSON 버퍼 절약)
     }, waitAck: false);
+    debugPrint('[BLE_HW] PRESS response: $res');
     return res == 'OK';
   }
 
@@ -380,16 +396,22 @@ class BleService {
     required double pitchY,
     required String deviceId,
   }) async {
+    final ox10 = (originX * 10).toInt();
+    final oy10 = (originY * 10).toInt();
+    final px10 = (pitchX * 10).toInt();
+    final py10 = (pitchY * 10).toInt();
+    debugPrint('[BLE_HW] Sending SET_GRID: rows=$rows, cols=$cols, ox10=$ox10, oy10=$oy10, px10=$px10, py10=$py10 (device=$deviceId)');
     final res = await _sendAndWaitAck({
       'action': HardwareProtocol.actionSetGrid,
       'rows': rows,
       'cols': cols,
-      'ox10': (originX * 10).toInt(),
-      'oy10': (originY * 10).toInt(),
-      'px10': (pitchX * 10).toInt(),
-      'py10': (pitchY * 10).toInt(),
+      'ox10': ox10,
+      'oy10': oy10,
+      'px10': px10,
+      'py10': py10,
       // deviceId 제거
     }, waitAck: false);
+    debugPrint('[BLE_HW] SET_GRID response: $res');
     return res == 'OK';
   }
 
