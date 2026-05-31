@@ -8,6 +8,7 @@ import '../../services/accessibility_experiment_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../safety/emergency_stop_screen.dart';
+import '../../theme/app_colors.dart';
 
 class RemoteControlScreen extends StatefulWidget {
   const RemoteControlScreen({super.key, this.deviceName = '스마트 기기'});
@@ -34,8 +35,8 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     _speak('${widget.deviceName} 제어 화면입니다. 숫자 버튼을 입력하여 시간을 설정하세요.');
   }
 
-  Future<void> _speak(String message) async {
-    await _tts.speak(message);
+  Future<void> _speak(String message, {String source = 'RemoteControlScreen'}) async {
+    await _tts.speak(message, source: source);
   }
 
   Future<void> _armAndRun({
@@ -241,7 +242,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     final rs = ResponsiveScale.factor(context);
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppColors.background,
       appBar: TopAppBar(title: widget.deviceName, showBack: true),
       body: SafeArea(
         child: Padding(

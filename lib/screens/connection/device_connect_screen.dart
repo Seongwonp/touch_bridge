@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../theme/app_colors.dart';
 import '../../services/tts_service.dart';
+import '../../services/active_device_service.dart';
 import '../../services/ble_service.dart';
 import '../../services/ai_backend_service.dart';
 import '../../services/device_mapping_service.dart';
@@ -84,7 +85,7 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
 
     if (devices.any((d) => d['id'] == candidateId || d['name'] == name)) {
       if (context.mounted) {
-        _tts.speak('$name 기기는 이미 등록되어 있습니다.');
+        _tts.speak('$name 기기는 이미 등록되어 있습니다.', source: 'DeviceConnectScreen');
       }
       return;
     }
@@ -96,18 +97,22 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
       'iconCodePoint': _iconCodePointForType(type),
     });
     await prefs.setString(_prefKeyDevices, jsonEncode(devices));
+    await ActiveDeviceService.instance.setActiveDevice(
+      deviceId: candidateId,
+      deviceName: name,
+    );
 
     if (context.mounted) {
-      _tts.speak('$name 기기가 홈에 추가되었습니다.');
+      _tts.speak('$name 기기가 홈에 추가되었습니다.', source: 'DeviceConnectScreen');
     }
   }
 
   Future<void> _processCloudDeviceId(String deviceId) async {
-    _tts.speak('기기 정보를 불러오는 중입니다.');
+    _tts.speak('기기 정보를 불러오는 중입니다.', source: 'DeviceConnectScreen');
 
     try {
       final profileData = await AiBackendService.instance.fetchDeviceProfile(deviceId);
-      final name = profileData['device_type'] ?? '새 기기';
+      final name = (profileData['device_type'] as String?) ?? '새 기기';
       if (!mounted) return;
 
       await _registerDevice(
@@ -119,10 +124,14 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
 
       final profile = DeviceMappingProfile.fromJson(profileData);
       await DeviceMappingService.instance.save(deviceId, profile);
+      await ActiveDeviceService.instance.setActiveDevice(
+        deviceId: deviceId,
+        deviceName: name,
+      );
 
-      _tts.speak('$name 정보 로드 완료.');
+      _tts.speak('$name 정보 로드 완료.', source: 'DeviceConnectScreen');
     } catch (e) {
-      _tts.speak('정보를 가져오지 못했습니다.');
+      _tts.speak('정보를 가져오지 못했습니다.', source: 'DeviceConnectScreen');
     }
   }
 
@@ -130,7 +139,7 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
     if (defaultTargetPlatform == TargetPlatform.iOS) {
       final status = await Permission.bluetooth.request();
       if (!status.isGranted) {
-        _tts.speak('블루투스 권한이 필요합니다.');
+        _tts.speak('블루투스 권한이 필요합니다.', source: 'DeviceConnectScreen');
         return false;
       }
       return true;
@@ -145,7 +154,7 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
     ].request();
 
     final granted = statuses.values.every((status) => status.isGranted);
-    if (!granted) _tts.speak('블루투스 권한이 필요합니다.');
+    if (!granted) _tts.speak('블루투스 권한이 필요합니다.', source: 'DeviceConnectScreen');
     return granted;
   }
 
@@ -159,7 +168,7 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
       _statusText = '검색 중...';
       _connected = false;
     });
-    _tts.speak('주변 기기를 검색합니다.');
+    _tts.speak('주변 기기를 검색합니다.', source: 'DeviceConnectScreen');
 
     final devices = await BleService.instance.scan(timeout: const Duration(seconds: 5));
 
@@ -167,7 +176,7 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
     setState(() => _isScanning = false);
 
     if (devices.isEmpty) {
-      _tts.speak('검색된 기기가 없습니다.');
+      _tts.speak('검색된 기기가 없습니다.', source: 'DeviceConnectScreen');
       return;
     }
 
@@ -200,7 +209,7 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
       _statusText = '연결 중...';
       _hubName = selected.name;
     });
-    _tts.speak('연결 중입니다.');
+    _tts.speak('연결 중입니다.', source: 'DeviceConnectScreen');
 
     final ok = await BleService.instance.connect(selected.id);
     if (!mounted) return;
@@ -209,7 +218,7 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
       _connected = ok;
       _statusText = ok ? '연결 완료' : '연결 실패';
     });
-    _tts.speak(ok ? '연결되었습니다.' : '연결 실패.');
+    _tts.speak(ok ? '연결되었습니다.' : '연결 실패.', source: 'DeviceConnectScreen');
   }
 
   @override
@@ -268,7 +277,7 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
                   subtitle: '허브의 QR을 촬영하여 연결',
                   highlighted: true,
                   onTap: () async {
-                    _tts.speak('QR 스캔 시작');
+                    _tts.speak('QR 스캔 시작', source: 'DeviceConnectScreen');
                     final result = await Navigator.push<Map<String, String>>(context, MaterialPageRoute(builder: (_) => const QrScanScreen()));
                     if (result != null && mounted) {
                       final id = (result['deviceId'] ?? result['raw'] ?? '').trim();
@@ -287,9 +296,9 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
                 SizedBox(height: ResponsiveScale.v(context, 10)),
                 Row(
                   children: [
-                    _SmallAction(title: 'NFC 태그', icon: Icons.nfc_rounded, onTap: () => _tts.speak('NFC 기능')),
+                    _SmallAction(title: 'NFC 태그', icon: Icons.nfc_rounded, onTap: () => _tts.speak('NFC 기능', source: 'DeviceConnectScreen')),
                     SizedBox(width: ResponsiveScale.v(context, 10)),
-                    _SmallAction(title: '수동 입력', icon: Icons.keyboard_rounded, onTap: () => _tts.speak('수동 입력')),
+                    _SmallAction(title: '수동 입력', icon: Icons.keyboard_rounded, onTap: () => _tts.speak('수동 입력', source: 'DeviceConnectScreen')),
                   ],
                 ),
                 SizedBox(height: ResponsiveScale.v(context, 40)),
