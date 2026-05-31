@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_tts/flutter_tts.dart';
 import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/appliance_config.dart';
 import '../../services/recommendation_service.dart';
+import '../../services/tts_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../mapping/photo_mapping_screen.dart';
@@ -19,14 +19,14 @@ class ApplianceSelectionScreen extends StatefulWidget {
 }
 
 class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
-  final FlutterTts _tts = FlutterTts();
+  final TtsService _tts = TtsService();
 
   final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
-    _tts.speak('가전 종류를 선택하세요.');
+    _tts.speak('가전 종류를 선택하세요.', source: 'ApplianceSelectionScreen');
   }
 
   @override
@@ -97,7 +97,7 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
             appliance: appliance,
             onTap: () {
               HapticFeedback.selectionClick();
-              _tts.speak('${appliance.name} 선택.');
+              _tts.speak('${appliance.name} 선택.', source: 'ApplianceSelectionScreen');
             },
             onStartMapping: (sheetCtx, ap) async {
               Navigator.pop(sheetCtx);

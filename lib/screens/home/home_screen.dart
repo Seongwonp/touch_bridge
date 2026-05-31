@@ -6,11 +6,13 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/tts_service.dart';
+import '../../services/active_device_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../control/remote_control_screen.dart';
 import '../voice/voice_listening_screen.dart';
 import 'appliance_selection_screen.dart';
+import '../../theme/app_colors.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -58,30 +60,42 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _announceScreen() async {
-    await _tts.speak('홈 화면입니다. 기기를 선택하여 제어하세요.', interrupt: true);
+    await _tts.speak('홈 화면입니다. 기기를 선택하여 제어하세요.', source: 'HomeScreen', interrupt: true);
   }
 
   @override
   void dispose() {
     _pageController.dispose();
+    _tts.stop();
     super.dispose();
   }
 
-  void _openDeviceControl(int index) {
+  Future<void> _openDeviceControl(int index) async {
     HapticFeedback.lightImpact();
     final device = _devices[index];
+    final deviceId = device['id'] as String? ?? '';
+    final deviceName = device['name'] as String? ?? '스마트 기기';
+    if (deviceId.isNotEmpty) {
+      await ActiveDeviceService.instance.setActiveDevice(
+        deviceId: deviceId,
+        deviceName: deviceName,
+      );
+    }
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (ctx) => _ControlModeSheet(
-        deviceName: device['name'] as String,
+        deviceName: deviceName,
         deviceIcon: IconData(device['iconCodePoint'] as int, fontFamily: 'MaterialIcons'),
         onVoice: () {
           Navigator.of(ctx).pop();
           Navigator.of(context).push(
             MaterialPageRoute<void>(
-              builder: (_) => const VoiceListeningScreen(),
+              builder: (_) => VoiceListeningScreen(
+                deviceId: deviceId,
+                deviceName: deviceName,
+              ),
             ),
           );
         },
@@ -89,7 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Navigator.of(ctx).pop();
           Navigator.of(context).push(
             MaterialPageRoute<void>(
-              builder: (_) => const RemoteControlScreen(),
+              builder: (_) => RemoteControlScreen(deviceName: deviceName),
             ),
           );
         },
@@ -108,7 +122,7 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       });
       await prefs.setString('home_devices', jsonEncode(_devices));
-      await _tts.speak('$deviceName 기기가 삭제되었습니다.', interrupt: true);
+      await _tts.speak('$deviceName 기기가 삭제되었습니다.', source: 'HomeScreen', interrupt: true);
     } catch (e) {
       debugPrint('Error deleting device: $e');
     }
@@ -117,7 +131,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showDeleteConfirmation(int index) {
     HapticFeedback.heavyImpact();
     final deviceName = _devices[index]['name'];
-    _tts.speak('$deviceName 기기를 삭제하시겠습니까? 삭제하려면 예 버튼을 누르세요.', interrupt: true);
+    _tts.speak('$deviceName 기기를 삭제하시겠습니까? 삭제하려면 예 버튼을 누르세요.', source: 'HomeScreen', interrupt: true);
     
     showDialog<void>(
       context: context,
@@ -147,7 +161,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onLongPressStart(int index) {
     HapticFeedback.mediumImpact();
-    _tts.speak('삭제 확인 중... 5초간 더 누르면 삭제 창이 뜹니다.', interrupt: true);
+    _tts.speak('삭제 확인 중... 5초간 더 누르면 삭제 창이 뜹니다.', source: 'HomeScreen', interrupt: true);
     _deleteTimer = Timer(const Duration(seconds: 5), () {
       _showDeleteConfirmation(index);
     });
@@ -162,11 +176,11 @@ class _HomeScreenState extends State<HomeScreen> {
     final rs = ResponsiveScale.factor(context);
     
     if (_isLoading) {
-      return const Scaffold(backgroundColor: Colors.black, body: Center(child: CircularProgressIndicator(color: Color(0xFFFFEB00))));
+      return const Scaffold(backgroundColor: AppColors.background, body: Center(child: CircularProgressIndicator(color: Color(0xFFFFEB00))));
     }
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppColors.background,
       appBar: const TopAppBar(title: 'Touch Bridge'),
       body: SafeArea(
         child: Column(
@@ -234,9 +248,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           });
                           HapticFeedback.selectionClick();
                           if (index < _devices.length) {
-                            _tts.speak('${_devices[index]['name']}. ${_devices[index]['status']}.', interrupt: true);
+                            _tts.speak('${_devices[index]['name']}. ${_devices[index]['status']}.', source: 'HomeScreen', interrupt: true);
                           } else {
-                            _tts.speak('새 기기 추가하기.', interrupt: true);
+                            _tts.speak('새 기기 추가하기.', source: 'HomeScreen', interrupt: true);
                           }
                         },
                         itemCount: _devices.length + 1,
