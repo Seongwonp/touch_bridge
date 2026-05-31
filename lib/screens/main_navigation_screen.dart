@@ -8,6 +8,7 @@ import 'voice/voice_listening_screen.dart';
 import 'settings/settings_screen.dart';
 import '../services/tts_service.dart';
 import '../widgets/responsive_scale.dart';
+import '../../theme/app_colors.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -108,7 +109,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppColors.background,
       body: IndexedStack(index: _currentIndex, children: _screens),
       bottomNavigationBar: _buildBottomBar(rs, context),
     );

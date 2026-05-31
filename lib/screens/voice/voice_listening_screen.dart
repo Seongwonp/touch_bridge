@@ -4,25 +4,30 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/tts_service.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../safety/emergency_stop_screen.dart';
-import '../connection/device_connect_screen.dart';
-import '../mapping/photo_mapping_screen.dart';
-import '../settings/settings_screen.dart';
 import '../../services/ai_backend_service.dart';
 import '../../services/app_logger.dart';
+import '../../services/active_device_service.dart';
 import '../../services/ble_service.dart';
 import '../../services/microwave_command_service.dart';
 import '../../services/accessibility_experiment_service.dart';
 import '../../services/device_mapping_service.dart';
+import '../../theme/app_colors.dart';
 
 class VoiceListeningScreen extends StatefulWidget {
-  const VoiceListeningScreen({super.key});
+  const VoiceListeningScreen({
+    super.key,
+    this.deviceId,
+    this.deviceName,
+  });
+
+  final String? deviceId;
+  final String? deviceName;
 
   @override
   State<VoiceListeningScreen> createState() => _VoiceListeningScreenState();
@@ -52,8 +57,8 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   bool _micArmed = false;
   bool _isStartingRecording = false;
   int _analysisRequestId = 0;
-  final Duration _maxRecordingDuration = const Duration(seconds: 8);
-  static const _silenceTimeout = Duration(seconds: 5);
+  final Duration _maxRecordingDuration = const Duration(seconds: 10);
+  static const _silenceTimeout = Duration(seconds: 8);
 
   @override
   void initState() {
@@ -64,6 +69,17 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     } else {
       _initSpeech();
     }
+  }
+
+  @override
+  void dispose() {
+    _waveTimer?.cancel();
+    _recordingTimeoutTimer?.cancel();
+    _silenceTimer?.cancel();
+    _actionResetTimer?.cancel();
+    _tts.stop();
+    _speech.stop();
+    super.dispose();
   }
 
   Future<void> _initSpeech() async {
@@ -108,8 +124,8 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     }
   }
 
-  Future<void> _speak(String message) async {
-    await _tts.speak(message);
+  Future<void> _speak(String message, {String source = 'voicelisteningScreen'}) async {
+    await _tts.speak(message, source: source);
   }
 
   void _resetSilenceTimer() {
@@ -234,7 +250,11 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
           _startWaveAnimation();
           HapticFeedback.mediumImpact();
           _speak('녹음을 시작합니다.');
-          _resetSilenceTimer();
+          
+          // 멘트가 끝날 때까지 기다린 후(약 1.5초) 침묵 감지 시작
+          Future.delayed(const Duration(milliseconds: 1500), () {
+            if (mounted && _isRecording) _resetSilenceTimer();
+          });
 
           _recordingTimeoutTimer = Timer(_maxRecordingDuration, () {
             if (_isRecording) {
@@ -313,6 +333,14 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     _speak('취소되었습니다.');
   }
 
+  Future<String?> _resolveMappingDeviceId() async {
+    final explicitId = widget.deviceId?.trim();
+    if (explicitId != null && explicitId.isNotEmpty) {
+      return explicitId;
+    }
+    return ActiveDeviceService.instance.getActiveDeviceId();
+  }
+
   Future<void> _sendBleSequence(List<dynamic> commands) async {
     final deviceId = BleService.instance.connectedDeviceId;
     if (!BleService.instance.isConnected || deviceId.isEmpty) {
@@ -320,8 +348,12 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       return;
     }
 
-    final prefs = await SharedPreferences.getInstance();
-    final activeDeviceId = prefs.getString('active_device_id') ?? deviceId;
+    final activeDeviceId = await _resolveMappingDeviceId();
+    if (activeDeviceId == null || activeDeviceId.isEmpty) {
+      _speak('먼저 홈 화면에서 제어할 기기를 선택해 주세요.');
+      return;
+    }
+
     final profile = await DeviceMappingService.instance.load(activeDeviceId);
     
     await BleService.instance.sendSetGrid(
@@ -333,6 +365,9 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       pitchY: profile.pitchY,
       deviceId: deviceId,
     );
+    
+    // ESP32가 첫 번째 명령(set_grid)을 처리할 시간을 충분히 줌 (DROP 방지)
+    await Future<void>.delayed(const Duration(milliseconds: 800));
 
     for (final dynamic raw in commands) {
       final btn = raw as String;
@@ -342,7 +377,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       if (pos != null) {
         await BleService.instance.sendPress(x: pos.$2, y: pos.$1, deviceId: deviceId);
       }
-      await Future<void>.delayed(const Duration(milliseconds: 500));
+      await Future<void>.delayed(const Duration(milliseconds: 800));
     }
   }
 
@@ -402,7 +437,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     final bool isIdle = !_isRecording && !_isProcessing;
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppColors.background,
       appBar: const TopAppBar(title: 'Touch Bridge AI'),
       body: SafeArea(
         child: Column(
