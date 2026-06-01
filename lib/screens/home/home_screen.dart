@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/tts_service.dart';
+import '../../services/accessibility_settings.dart';
 import '../../services/active_device_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
@@ -33,7 +34,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadDevices();
-    _announceScreen();
   }
 
   Future<void> _loadDevices() async {
@@ -41,26 +41,50 @@ class _HomeScreenState extends State<HomeScreen> {
       final prefs = await SharedPreferences.getInstance();
       final jsonStr = prefs.getString('home_devices');
       if (jsonStr != null) {
+        if (!mounted) return;
         final List<dynamic> decoded = jsonDecode(jsonStr);
         setState(() {
           _devices = decoded.cast<Map<String, dynamic>>();
           _isLoading = false;
         });
+        await _announceScreen();
       } else {
         // Start with an empty list if no devices exist
         _devices = [];
+        if (!mounted) return;
         setState(() {
           _isLoading = false;
         });
+        await _announceScreen();
       }
     } catch (e) {
       debugPrint('Error loading devices: $e');
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   Future<void> _announceScreen() async {
-    await _tts.speak('홈 화면입니다. 기기를 선택하여 제어하세요.', source: 'HomeScreen', interrupt: true);
+    final guardianMode = AccessibilitySettings.instance.guardianModeEnabled;
+    if (_devices.isEmpty) {
+      await _tts.speak(
+        guardianMode
+            ? '홈 화면입니다. 등록된 기기가 없습니다. 보호자께서는 연결 탭에서 먼저 기기를 추가해 주세요.'
+            : '홈 화면입니다. 등록된 기기가 없습니다. 연결 탭에서 기기를 추가해 주세요.',
+        source: 'HomeScreen',
+        interrupt: true,
+      );
+      return;
+    }
+
+    await _tts.speak(
+      guardianMode
+          ? '홈 화면입니다. 등록된 기기 ${_devices.length}개가 있습니다. 기기를 두 번 눌러 제어하고, 음성 탭에서 만두 데워줘처럼 말씀하실 수 있습니다.'
+          : '홈 화면입니다. 등록된 기기 ${_devices.length}개가 있습니다.',
+      source: 'HomeScreen',
+      interrupt: true,
+    );
   }
 
   @override
@@ -81,13 +105,17 @@ class _HomeScreenState extends State<HomeScreen> {
         deviceName: deviceName,
       );
     }
+    if (!mounted) return;
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (ctx) => _ControlModeSheet(
         deviceName: deviceName,
-        deviceIcon: IconData(device['iconCodePoint'] as int, fontFamily: 'MaterialIcons'),
+        deviceIcon: IconData(
+          device['iconCodePoint'] as int,
+          fontFamily: 'MaterialIcons',
+        ),
         onVoice: () {
           Navigator.of(ctx).pop();
           Navigator.of(context).push(
@@ -122,7 +150,11 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       });
       await prefs.setString('home_devices', jsonEncode(_devices));
-      await _tts.speak('$deviceName 기기가 삭제되었습니다.', source: 'HomeScreen', interrupt: true);
+      await _tts.speak(
+        '$deviceName 기기가 삭제되었습니다.',
+        source: 'HomeScreen',
+        interrupt: true,
+      );
     } catch (e) {
       debugPrint('Error deleting device: $e');
     }
@@ -131,14 +163,24 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showDeleteConfirmation(int index) {
     HapticFeedback.heavyImpact();
     final deviceName = _devices[index]['name'];
-    _tts.speak('$deviceName 기기를 삭제하시겠습니까? 삭제하려면 예 버튼을 누르세요.', source: 'HomeScreen', interrupt: true);
-    
+    _tts.speak(
+      '$deviceName 기기를 삭제하시겠습니까? 삭제하려면 예 버튼을 누르세요.',
+      source: 'HomeScreen',
+      interrupt: true,
+    );
+
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
-        title: Text('기기 삭제', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        content: Text('$deviceName 기기를 삭제하시겠습니까?', style: TextStyle(color: Colors.white70)),
+        title: Text(
+          '기기 삭제',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          '$deviceName 기기를 삭제하시겠습니까?',
+          style: TextStyle(color: Colors.white70),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
@@ -150,7 +192,13 @@ class _HomeScreenState extends State<HomeScreen> {
               _deleteDevice(index);
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            child: Text('예', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            child: Text(
+              '예',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
@@ -161,7 +209,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onLongPressStart(int index) {
     HapticFeedback.mediumImpact();
-    _tts.speak('삭제 확인 중... 5초간 더 누르면 삭제 창이 뜹니다.', source: 'HomeScreen', interrupt: true);
+    _tts.speak(
+      '삭제 확인 중... 5초간 더 누르면 삭제 창이 뜹니다.',
+      source: 'HomeScreen',
+      interrupt: true,
+    );
     _deleteTimer = Timer(const Duration(seconds: 5), () {
       _showDeleteConfirmation(index);
     });
@@ -174,9 +226,14 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
-    
+
     if (_isLoading) {
-      return const Scaffold(backgroundColor: AppColors.background, body: Center(child: CircularProgressIndicator(color: Color(0xFFFFEB00))));
+      return const Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(
+          child: CircularProgressIndicator(color: Color(0xFFFFEB00)),
+        ),
+      );
     }
 
     return Scaffold(
@@ -219,6 +276,39 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                     SizedBox(height: ResponsiveScale.v(context, 16)),
+                    if (_devices.isEmpty) ...[
+                      Container(
+                        padding: EdgeInsets.all(ResponsiveScale.v(context, 16)),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF111111),
+                          borderRadius: BorderRadius.circular(20 * rs),
+                          border: Border.all(color: const Color(0xFF2A2A2A)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '초기 설정 안내',
+                              style: TextStyle(
+                                color: const Color(0xFFFFEB00),
+                                fontSize: 16 * rs,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            SizedBox(height: ResponsiveScale.v(context, 10)),
+                            Text(
+                              '1. 연결 탭에서 기기를 등록하세요\n2. 홈에서 기기를 선택하세요\n3. 음성 탭에서 "만두 데워줘"처럼 말씀하세요',
+                              style: TextStyle(
+                                color: const Color(0xFFD1D5DB),
+                                fontSize: 14 * rs,
+                                height: 1.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(height: ResponsiveScale.v(context, 16)),
+                    ],
                     // 페이지 인디케이터
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -248,9 +338,17 @@ class _HomeScreenState extends State<HomeScreen> {
                           });
                           HapticFeedback.selectionClick();
                           if (index < _devices.length) {
-                            _tts.speak('${_devices[index]['name']}. ${_devices[index]['status']}.', source: 'HomeScreen', interrupt: true);
+                            _tts.speak(
+                              '${_devices[index]['name']}. ${_devices[index]['status']}.',
+                              source: 'HomeScreen',
+                              interrupt: true,
+                            );
                           } else {
-                            _tts.speak('새 기기 추가하기.', source: 'HomeScreen', interrupt: true);
+                            _tts.speak(
+                              '새 기기 추가하기.',
+                              source: 'HomeScreen',
+                              interrupt: true,
+                            );
                           }
                         },
                         itemCount: _devices.length + 1,
@@ -265,7 +363,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                   onTap: () async {
                                     HapticFeedback.mediumImpact();
                                     await Navigator.of(context).push(
-                                      MaterialPageRoute(builder: (_) => const ApplianceSelectionScreen()),
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const ApplianceSelectionScreen(),
+                                      ),
                                     );
                                     _loadDevices(); // Refresh list after returning
                                   },
@@ -273,11 +374,17 @@ class _HomeScreenState extends State<HomeScreen> {
                                     padding: EdgeInsets.all(28 * rs),
                                     decoration: BoxDecoration(
                                       color: const Color(0xFF1A1A1A),
-                                      borderRadius: BorderRadius.circular(24 * rs),
-                                      border: Border.all(color: const Color(0xFFFFEB00), width: 2 * rs),
+                                      borderRadius: BorderRadius.circular(
+                                        24 * rs,
+                                      ),
+                                      border: Border.all(
+                                        color: const Color(0xFFFFEB00),
+                                        width: 2 * rs,
+                                      ),
                                     ),
                                     child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       children: [
                                         Container(
                                           width: 100 * rs,
@@ -294,7 +401,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                             ),
                                           ),
                                         ),
-                                        SizedBox(height: ResponsiveScale.v(context, 32)),
+                                        SizedBox(
+                                          height: ResponsiveScale.v(
+                                            context,
+                                            32,
+                                          ),
+                                        ),
                                         Text(
                                           '새 기기 추가하기',
                                           style: TextStyle(
@@ -304,7 +416,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                           ),
                                           textAlign: TextAlign.center,
                                         ),
-                                        SizedBox(height: ResponsiveScale.v(context, 12)),
+                                        SizedBox(
+                                          height: ResponsiveScale.v(
+                                            context,
+                                            12,
+                                          ),
+                                        ),
                                         Text(
                                           '터치 브리지를 새로운 가전에\n연결하고 매핑을 시작합니다',
                                           style: TextStyle(
@@ -326,19 +443,25 @@ class _HomeScreenState extends State<HomeScreen> {
                           return Padding(
                             padding: EdgeInsets.symmetric(horizontal: 6 * rs),
                             child: Semantics(
-                              label: '${device['name']}. 현재 상태 ${device['status']}. 선택하려면 두 번 누르세요. 삭제하려면 5초간 길게 누르세요.',
+                              label:
+                                  '${device['name']}. 현재 상태 ${device['status']}. 선택하려면 두 번 누르세요. 삭제하려면 5초간 길게 누르세요.',
                               button: true,
                               child: GestureDetector(
                                 onTap: () => _openDeviceControl(index),
-                                onLongPressStart: (_) => _onLongPressStart(index),
+                                onLongPressStart: (_) =>
+                                    _onLongPressStart(index),
                                 onLongPressEnd: (_) => _onLongPressEnd(),
                                 onLongPressCancel: () => _onLongPressEnd(),
                                 child: Container(
                                   padding: EdgeInsets.all(28 * rs),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFF111111),
-                                    borderRadius: BorderRadius.circular(24 * rs),
-                                    border: Border.all(color: const Color(0xFF2A2A2A)),
+                                    borderRadius: BorderRadius.circular(
+                                      24 * rs,
+                                    ),
+                                    border: Border.all(
+                                      color: const Color(0xFF2A2A2A),
+                                    ),
                                   ),
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
@@ -348,18 +471,27 @@ class _HomeScreenState extends State<HomeScreen> {
                                         height: 120 * rs,
                                         decoration: BoxDecoration(
                                           color: const Color(0xFF1A1A1A),
-                                          borderRadius: BorderRadius.circular(24 * rs),
-                                          border: Border.all(color: const Color(0xFF333333)),
+                                          borderRadius: BorderRadius.circular(
+                                            24 * rs,
+                                          ),
+                                          border: Border.all(
+                                            color: const Color(0xFF333333),
+                                          ),
                                         ),
                                         child: Center(
                                           child: Icon(
-                                            IconData(device['iconCodePoint'] as int, fontFamily: 'MaterialIcons'),
+                                            IconData(
+                                              device['iconCodePoint'] as int,
+                                              fontFamily: 'MaterialIcons',
+                                            ),
                                             color: const Color(0xFFFFEB00),
                                             size: 56 * rs,
                                           ),
                                         ),
                                       ),
-                                      SizedBox(height: ResponsiveScale.v(context, 24)),
+                                      SizedBox(
+                                        height: ResponsiveScale.v(context, 24),
+                                      ),
                                       Text(
                                         device['name'] as String,
                                         style: TextStyle(
@@ -370,9 +502,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                         ),
                                         textAlign: TextAlign.center,
                                       ),
-                                      SizedBox(height: ResponsiveScale.v(context, 10)),
+                                      SizedBox(
+                                        height: ResponsiveScale.v(context, 10),
+                                      ),
                                       Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
                                         children: [
                                           Container(
                                             width: 8 * rs,
@@ -393,13 +528,19 @@ class _HomeScreenState extends State<HomeScreen> {
                                           ),
                                         ],
                                       ),
-                                      SizedBox(height: ResponsiveScale.v(context, 28)),
+                                      SizedBox(
+                                        height: ResponsiveScale.v(context, 28),
+                                      ),
                                       Container(
                                         width: double.infinity,
-                                        padding: EdgeInsets.symmetric(vertical: 14 * rs),
+                                        padding: EdgeInsets.symmetric(
+                                          vertical: 14 * rs,
+                                        ),
                                         decoration: BoxDecoration(
                                           color: const Color(0xFFFFEB00),
-                                          borderRadius: BorderRadius.circular(12 * rs),
+                                          borderRadius: BorderRadius.circular(
+                                            12 * rs,
+                                          ),
                                         ),
                                         child: Text(
                                           '눌러서 제어하기',
@@ -495,7 +636,7 @@ class _ControlModeSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
-    
+
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF111111),
@@ -556,7 +697,10 @@ class _ControlModeSheet extends StatelessWidget {
               icon: Icon(Icons.mic_rounded, size: 28 * rs),
               label: Text(
                 '음성으로 제어',
-                style: TextStyle(fontSize: 20 * rs, fontWeight: FontWeight.w900),
+                style: TextStyle(
+                  fontSize: 20 * rs,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
             ),
           ),
@@ -571,14 +715,20 @@ class _ControlModeSheet extends StatelessWidget {
                 foregroundColor: const Color(0xFFFFEB00),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16 * rs),
-                  side: BorderSide(color: const Color(0xFFFFEB00), width: 2 * rs),
+                  side: BorderSide(
+                    color: const Color(0xFFFFEB00),
+                    width: 2 * rs,
+                  ),
                 ),
                 elevation: 0,
               ),
               icon: Icon(Icons.touch_app_rounded, size: 28 * rs),
               label: Text(
                 '수동으로 조작',
-                style: TextStyle(fontSize: 20 * rs, fontWeight: FontWeight.w900),
+                style: TextStyle(
+                  fontSize: 20 * rs,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
             ),
           ),

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/tts_service.dart';
 import '../../services/accessibility_experiment_service.dart';
+import '../../services/feedback_service.dart';
 
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
@@ -48,7 +49,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
       setState(() {
         _armedActionId = id;
       });
-      HapticFeedback.mediumImpact();
+      FeedbackService.instance.vibrateSuccess();
 
       _actionResetTimer?.cancel();
       _actionResetTimer = Timer(const Duration(seconds: 4), () {
@@ -67,7 +68,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     setState(() {
       _armedActionId = null;
     });
-    HapticFeedback.selectionClick();
+    FeedbackService.instance.vibrateSuccess();
     onConfirmed();
   }
 
@@ -245,82 +246,90 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
       backgroundColor: AppColors.background,
       appBar: TopAppBar(title: widget.deviceName, showBack: true),
       body: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 20 * rs, vertical: 12 * rs),
-          child: Column(
-            children: [
-              Text(
-                '남은 시간',
-                style: TextStyle(
-                  color: const Color(0xFF888888),
-                  fontSize: 13 * rs,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.5,
-                ),
-              ),
-              SizedBox(height: ResponsiveScale.v(context, 8)),
-              Semantics(
-                label: '현재 시간 ${_formatMMSS(_secondsLeft)}',
-                child: Text(
-                  _formatMMSS(_secondsLeft),
-                  style: TextStyle(
-                    color: const Color(0xFFFFEB00),
-                    fontSize: 72 * rs,
-                    fontWeight: FontWeight.w900,
-                    height: 1.1,
-                  ),
-                ),
-              ),
-              SizedBox(height: ResponsiveScale.v(context, 16)),
-              Expanded(
-                child: GridView.count(
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 12 * rs,
-                  mainAxisSpacing: 12 * rs,
-                  childAspectRatio: 1.1,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: EdgeInsets.symmetric(horizontal: 20 * rs, vertical: 12 * rs),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight - (24 * rs)),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    _numberKey(1, rs), _numberKey(2, rs), _numberKey(3, rs),
-                    _numberKey(4, rs), _numberKey(5, rs), _numberKey(6, rs),
-                    _numberKey(7, rs), _numberKey(8, rs), _numberKey(9, rs),
-                    _cancelKey(rs), _numberKey(0, rs), _backspaceKey(rs),
+                    Text(
+                      '남은 시간',
+                      style: TextStyle(
+                        color: const Color(0xFF888888),
+                        fontSize: 13 * rs,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                    SizedBox(height: ResponsiveScale.v(context, 8)),
+                    Semantics(
+                      label: '현재 시간 ${_formatMMSS(_secondsLeft)}',
+                      child: Text(
+                        _formatMMSS(_secondsLeft),
+                        style: TextStyle(
+                          color: const Color(0xFFFFEB00),
+                          fontSize: 72 * rs,
+                          fontWeight: FontWeight.w900,
+                          height: 1.1,
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: ResponsiveScale.v(context, 16)),
+                    GridView.count(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: 3,
+                      crossAxisSpacing: 12 * rs,
+                      mainAxisSpacing: 12 * rs,
+                      childAspectRatio: 1.3, // 명도와 크기를 위해 비율 조정
+                      children: [
+                        _numberKey(1, rs), _numberKey(2, rs), _numberKey(3, rs),
+                        _numberKey(4, rs), _numberKey(5, rs), _numberKey(6, rs),
+                        _numberKey(7, rs), _numberKey(8, rs), _numberKey(9, rs),
+                        _cancelKey(rs), _numberKey(0, rs), _backspaceKey(rs),
+                      ],
+                    ),
+                    SizedBox(height: ResponsiveScale.v(context, 24)),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 72 * rs,
+                      child: Semantics(
+                        label: '시작 버튼',
+                        button: true,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            _armAndRun(
+                              id: 'start',
+                              guide: '시작',
+                              onConfirmed: _toggleStart,
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFFEB00),
+                            foregroundColor: Colors.black,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16 * rs),
+                              side: _armedActionId == 'start' ? const BorderSide(color: Colors.white, width: 3) : BorderSide.none,
+                            ),
+                            elevation: 0,
+                          ),
+                          icon: Icon(Icons.play_arrow_rounded, size: 32 * rs),
+                          label: Text(
+                            '조리 시작',
+                            style: TextStyle(fontSize: 22 * rs, fontWeight: FontWeight.w900),
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 16 * rs), // 하단 여백 추가
                   ],
                 ),
               ),
-              SizedBox(height: ResponsiveScale.v(context, 16)),
-              SizedBox(
-                width: double.infinity,
-                height: 64 * rs,
-                child: Semantics(
-                  label: '시작 버튼',
-                  button: true,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      _armAndRun(
-                        id: 'start',
-                        guide: '시작',
-                        onConfirmed: _toggleStart,
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFFEB00),
-                      foregroundColor: Colors.black,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16 * rs),
-                        side: _armedActionId == 'start' ? const BorderSide(color: Colors.white, width: 3) : BorderSide.none,
-                      ),
-                      elevation: 0,
-                    ),
-                    icon: Icon(Icons.play_arrow_rounded, size: 28 * rs),
-                    label: Text(
-                      '조리 시작',
-                      style: TextStyle(fontSize: 20 * rs, fontWeight: FontWeight.w900),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );

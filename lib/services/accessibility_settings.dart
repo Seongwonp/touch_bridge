@@ -8,6 +8,7 @@ class AccessibilitySettings extends ChangeNotifier {
   static const _kVoiceGuidance = 'voice_guidance';
   static const _kLargeText = 'large_text';
   static const _kHighContrast = 'high_contrast';
+  static const _kGuardianMode = 'guardian_mode';
   static const _kTtsSpeed = 'tts_speed';
   static const _kTtsVolume = 'tts_volume';
   static const _kContactName = 'contact_name';
@@ -16,6 +17,7 @@ class AccessibilitySettings extends ChangeNotifier {
   bool _voiceGuidanceEnabled = true;
   bool _largeTextEnabled = false;
   bool _highContrastEnabled = false;
+  bool _guardianModeEnabled = true;
   double _ttsSpeed = 1.0;
   double _ttsVolume = 1.0;
   String _contactName = '';
@@ -24,6 +26,7 @@ class AccessibilitySettings extends ChangeNotifier {
   bool get voiceGuidanceEnabled => _voiceGuidanceEnabled;
   bool get largeTextEnabled => _largeTextEnabled;
   bool get highContrastEnabled => _highContrastEnabled;
+  bool get guardianModeEnabled => _guardianModeEnabled;
   double get ttsSpeed => _ttsSpeed;
   double get ttsVolume => _ttsVolume;
   String get contactName => _contactName;
@@ -36,6 +39,7 @@ class AccessibilitySettings extends ChangeNotifier {
       _voiceGuidanceEnabled = prefs.getBool(_kVoiceGuidance) ?? true;
       _largeTextEnabled = prefs.getBool(_kLargeText) ?? false;
       _highContrastEnabled = prefs.getBool(_kHighContrast) ?? false;
+      _guardianModeEnabled = prefs.getBool(_kGuardianMode) ?? true;
       _ttsSpeed = prefs.getDouble(_kTtsSpeed) ?? 1.0;
       _ttsVolume = prefs.getDouble(_kTtsVolume) ?? 1.0;
       _contactName = prefs.getString(_kContactName) ?? '';
@@ -63,6 +67,13 @@ class AccessibilitySettings extends ChangeNotifier {
     if (_highContrastEnabled == value) return;
     _highContrastEnabled = value;
     _saveBool(_kHighContrast, value);
+    notifyListeners();
+  }
+
+  void setGuardianModeEnabled(bool value) {
+    if (_guardianModeEnabled == value) return;
+    _guardianModeEnabled = value;
+    _saveBool(_kGuardianMode, value);
     notifyListeners();
   }
 
