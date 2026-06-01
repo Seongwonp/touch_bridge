@@ -5,6 +5,7 @@ import '../../services/tts_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import 'ble_log_screen.dart';
+import '../../theme/app_colors.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -35,7 +36,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _highContrastEnabled = s.highContrastEnabled;
     _contactName = s.contactName;
     _contactPhone = s.contactPhone;
-    _tts.speak('설정 화면입니다.');
+    _tts.speak('설정 화면입니다.', source: 'SettingsScreen');
   }
 
   @override
@@ -71,7 +72,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               AccessibilitySettings.instance.setContact(name, phone);
               setState(() { _contactName = name; _contactPhone = phone; });
               Navigator.pop(ctx);
-              _tts.speak('저장되었습니다.');
+              _tts.speak('저장되었습니다.', source: 'SettingsScreen');
             },
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFEB00), foregroundColor: Colors.black),
             child: const Text('저장', style: TextStyle(fontWeight: FontWeight.w800)),
@@ -85,7 +86,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppColors.background,
       appBar: const TopAppBar(title: 'Touch Bridge'),
       body: SafeArea(
         child: ListView(
@@ -141,7 +142,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 padding: EdgeInsets.all(ResponsiveScale.v(context, 16)),
                 child: _contactName.isEmpty
                   ? _EmptyContactRow(onTap: _showContactEditDialog)
-                  : _ContactRow(name: _contactName, phone: _contactPhone, onCall: () => _tts.speak('연결합니다.'), onEdit: _showContactEditDialog),
+                  : _ContactRow(name: _contactName, phone: _contactPhone, onCall: () => _tts.speak('연결합니다.', source: 'SettingsScreen'), onEdit: _showContactEditDialog),
               ),
             ]),
             SizedBox(height: ResponsiveScale.v(context, 40)),
