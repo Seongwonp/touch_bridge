@@ -120,8 +120,8 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
-  Future<void> _speak(String message) async {
-    await _tts.speak(message);
+  Future<void> _speak(String message, {String source = 'emergencystopScreen'}) async {
+    await _tts.speak(message, source: source);
   }
 
   void _onHoldStart() {

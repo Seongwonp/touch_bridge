@@ -5,11 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/device_service.dart';
 import '../../services/device_mapping_service.dart';
+import '../../services/active_device_service.dart';
 import '../../services/ai_backend_service.dart';
 import '../../services/tts_service.dart';
 import '../../services/ble_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
+import '../../widgets/ble_loading_overlay.dart';
 
 class ButtonPoint {
   final String id;
@@ -50,6 +52,12 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
     _loadProfileAndConnect();
   }
 
+  @override
+  void dispose() {
+    _tts.stop();
+    super.dispose();
+  }
+
   int _iconCodePointForType(String? type) {
     if (type == null) return Icons.devices_rounded.codePoint;
     return switch (type.toLowerCase()) {
@@ -87,6 +95,53 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
     setState(() => _points.removeAt(index));
   }
 
+  /// BLE 업로드 실행 (로딩 다이얼로그와 함께)
+  Future<Map<String, dynamic>> _executeBleUpload(
+    DeviceMappingProfile newProfile,
+    Map<String, ({int row, int col})> map,
+    int rows,
+    int cols,
+    String deviceId,
+  ) async {
+    String message = '매핑 저장 완료';
+    try {
+      debugPrint('[BLE_DEBUG] Sending SET_GRID to device: rows=$rows, cols=$cols, ox=${newProfile.originX}, oy=${newProfile.originY}, px=${newProfile.pitchX}, py=${newProfile.pitchY}');
+      final ok = await BleService.instance.sendSetGrid(
+        rows: newProfile.rows,
+        cols: newProfile.cols,
+        originX: newProfile.originX,
+        originY: newProfile.originY,
+        pitchX: newProfile.pitchX,
+        pitchY: newProfile.pitchY,
+        deviceId: deviceId,
+      );
+      if (ok) {
+        int verified = 0;
+        final entries = map.entries.toList();
+        final toVerify = entries.take(3).toList();
+        for (final e in toVerify) {
+          final r = e.value.row;
+          final c = e.value.col;
+          debugPrint('[BLE_DEBUG] Sending PRESS: ${e.key} at (x=$c, y=$r)');
+          final pressOk = await BleService.instance.sendPress(x: c, y: r, deviceId: deviceId);
+          if (pressOk) verified++;
+          await Future<void>.delayed(const Duration(milliseconds: 500));
+        }
+        message += ' · BLE 전송 성공 (검증: $verified/${toVerify.length})';
+        debugPrint('[BLE_DEBUG] Verification complete: $verified/${toVerify.length} presses confirmed');
+        try { await _tts.speak('매핑 저장 및 BLE 업로드 완료. ${verified}개 버튼을 확인했습니다.', source: 'PhotoMappingScreen', interrupt: true); } catch (_) {}
+      } else {
+        message += ' · BLE 업로드 실패';
+        debugPrint('[BLE_DEBUG] SET_GRID failed');
+        try { await _tts.speak('매핑은 저장되었으나 BLE 업로드에 실패했습니다.', source: 'PhotoMappingScreen', interrupt: true); } catch (_) {}
+      }
+    } catch (e) {
+      message += ' · BLE 오류: $e';
+      debugPrint('[BLE_DEBUG] BLE error: $e');
+    }
+    return {'message': message};
+  }
+
   bool _isAiAnalyzing = false;
 
   Future<void> _loadProfileAndConnect() async {
@@ -103,7 +158,7 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
     if (widget.imagePath != null && AiBackendService.instance.isConfigured) {
       setState(() => _isAiAnalyzing = true);
       try {
-        await _tts.speak('AI가 이미지 분석을 시작합니다. 잠시만 기다려주세요.', interrupt: true);
+        await _tts.speak('AI가 이미지 분석을 시작합니다. 잠시만 기다려주세요.', source: 'PhotoMappingScreen', interrupt: true);
         if (!widget.imagePath!.startsWith('http')) {
           final file = File(widget.imagePath!);
           if (await file.exists()) {
@@ -119,7 +174,7 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
         if (e.toString().contains('429') || e.toString().contains('할당량')) {
           errMsg = 'AI 사용량이 초과되었습니다. 잠시 후 다시 시도해주세요.';
         }
-        await _tts.speak(errMsg, interrupt: true);
+        await _tts.speak(errMsg, source: 'PhotoMappingScreen', interrupt: true);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errMsg)));
         }
@@ -172,7 +227,17 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
       buttonMap: map,
     );
 
+    // Debug logging: Button mapping details
+    debugPrint('[MAPPING_DEBUG] Grid: $rows x $cols | Origin: (${profile.originX}, ${profile.originY}) | Pitch: (${profile.pitchX}, ${profile.pitchY})');
+    for (final entry in map.entries) {
+      debugPrint('[MAPPING_DEBUG]   ${entry.key}: (row=${entry.value.row}, col=${entry.value.col})');
+    }
+
     await DeviceMappingService.instance.save(widget.deviceId, newProfile);
+    await ActiveDeviceService.instance.setActiveDevice(
+      deviceId: widget.deviceId,
+      deviceName: widget.applianceName ?? widget.deviceId,
+    );
 
     // 2. Register Device to Home Devices List
     if (widget.applianceName != null) {
@@ -198,39 +263,34 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
       }
     }
 
-    // 3. BLE Sync
+    // 3. BLE Sync with Loading Indicator
     String snackText = '매핑 저장 완료';
     try {
       if (BleService.instance.isConnected) {
-        final ok = await BleService.instance.sendSetGrid(
-          rows: newProfile.rows,
-          cols: newProfile.cols,
-          originX: newProfile.originX,
-          originY: newProfile.originY,
-          pitchX: newProfile.pitchX,
-          pitchY: newProfile.pitchY,
-          deviceId: widget.deviceId,
+        // 로딩 다이얼로그 표시
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => StatefulBuilder(
+            builder: (_, setState) {
+              // BLE 업로드 실행
+              _executeBleUpload(newProfile, map, rows, cols, widget.deviceId)
+                  .then((result) {
+                snackText = result['message'];
+                Navigator.pop(ctx);
+              });
+
+              return BleLoadingOverlay(
+                progress: 0.5, // 실제로는 진행률 업데이트 필요
+                message: 'BLE 업로드 진행 중...\n잠시만 기다려주세요.',
+                isCompleted: false,
+              );
+            },
+          ),
         );
-        if (ok) {
-          int verified = 0;
-          final entries = map.entries.toList();
-          final toVerify = entries.take(3).toList();
-          for (final e in toVerify) {
-            final r = e.value.row;
-            final c = e.value.col;
-            final pressOk = await BleService.instance.sendPress(x: c, y: r, deviceId: widget.deviceId);
-            if (pressOk) verified++;
-            await Future<void>.delayed(const Duration(milliseconds: 300));
-          }
-          snackText += ' · BLE 전송 성공 (검증: $verified/${toVerify.length})';
-          try { await _tts.speak('매핑 저장 및 BLE 업로드 완료. ${verified}개 버튼을 확인했습니다.', interrupt: true); } catch (_) {}
-        } else {
-          snackText += ' · BLE 업로드 실패';
-          try { await _tts.speak('매핑은 저장되었으나 BLE 업로드에 실패했습니다.', interrupt: true); } catch (_) {}
-        }
       } else {
         snackText += ' · BLE 미연결';
-        try { await _tts.speak('매핑이 저장되었습니다.', interrupt: true); } catch (_) {}
+        try { await _tts.speak('매핑이 저장되었습니다.', source: 'PhotoMappingScreen', interrupt: true); } catch (_) {}
       }
     } catch (e) {
       snackText += ' · BLE 오류';
@@ -287,7 +347,7 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
         _points.clear();
         _points.addAll(newPoints.take(9));
       });
-      try { _tts.speak('AI 자동 매핑이 완료되었습니다. 위치를 확인하고 저장하세요.', interrupt: true); } catch (_) {}
+      try { _tts.speak('AI 자동 매핑이 완료되었습니다. 위치를 확인하고 저장하세요.', source: 'PhotoMappingScreen', interrupt: true); } catch (_) {}
     }
   }
 
