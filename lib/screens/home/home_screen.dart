@@ -11,7 +11,10 @@ import '../../services/active_device_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../control/remote_control_screen.dart';
+import '../control/image_control_screen.dart';
+import '../control/course_control_screen.dart';
 import '../voice/voice_listening_screen.dart';
+import '../mapping/manual_mapping_screen.dart';
 import 'appliance_selection_screen.dart';
 import '../../theme/app_colors.dart';
 
@@ -132,6 +135,37 @@ class _HomeScreenState extends State<HomeScreen> {
           Navigator.of(context).push(
             MaterialPageRoute<void>(
               builder: (_) => RemoteControlScreen(deviceName: deviceName),
+            ),
+          );
+        },
+        onImage: () {
+          Navigator.of(ctx).pop();
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => ImageControlScreen(
+                deviceId: deviceId,
+                deviceName: deviceName,
+                // 기기 설정에 저장된 이미지 경로가 있다면 전달 (추후 보강 가능)
+              ),
+            ),
+          );
+        },
+        onCourse: () {
+          Navigator.of(ctx).pop();
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => CourseControlScreen(
+                deviceId: deviceId,
+                deviceName: deviceName,
+              ),
+            ),
+          );
+        },
+        onMapping: () {
+          Navigator.of(ctx).pop();
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const ManualMappingScreen(),
             ),
           );
         },
@@ -626,12 +660,18 @@ class _ControlModeSheet extends StatelessWidget {
     required this.deviceIcon,
     required this.onVoice,
     required this.onManual,
+    required this.onImage,
+    required this.onCourse,
+    required this.onMapping,
   });
 
   final String deviceName;
   final IconData deviceIcon;
   final VoidCallback onVoice;
   final VoidCallback onManual;
+  final VoidCallback onImage;
+  final VoidCallback onCourse;
+  final VoidCallback onMapping;
 
   @override
   Widget build(BuildContext context) {
@@ -683,7 +723,7 @@ class _ControlModeSheet extends StatelessWidget {
           SizedBox(height: ResponsiveScale.v(context, 24)),
           SizedBox(
             width: double.infinity,
-            height: 72 * rs,
+            height: 64 * rs,
             child: ElevatedButton.icon(
               onPressed: onVoice,
               style: ElevatedButton.styleFrom(
@@ -694,11 +734,11 @@ class _ControlModeSheet extends StatelessWidget {
                 ),
                 elevation: 0,
               ),
-              icon: Icon(Icons.mic_rounded, size: 28 * rs),
+              icon: Icon(Icons.mic_rounded, size: 24 * rs),
               label: Text(
                 '음성으로 제어',
                 style: TextStyle(
-                  fontSize: 20 * rs,
+                  fontSize: 18 * rs,
                   fontWeight: FontWeight.w900,
                 ),
               ),
@@ -707,30 +747,98 @@ class _ControlModeSheet extends StatelessWidget {
           SizedBox(height: ResponsiveScale.v(context, 12)),
           SizedBox(
             width: double.infinity,
-            height: 72 * rs,
+            height: 64 * rs,
             child: ElevatedButton.icon(
-              onPressed: onManual,
+              onPressed: onImage,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.transparent,
+                backgroundColor: const Color(0xFF1A1A1A),
                 foregroundColor: const Color(0xFFFFEB00),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16 * rs),
                   side: BorderSide(
                     color: const Color(0xFFFFEB00),
-                    width: 2 * rs,
+                    width: 1.5 * rs,
                   ),
                 ),
                 elevation: 0,
               ),
-              icon: Icon(Icons.touch_app_rounded, size: 28 * rs),
+              icon: Icon(Icons.image_search_rounded, size: 24 * rs),
               label: Text(
-                '수동으로 조작',
+                '이미지로 제어 (직관적)',
                 style: TextStyle(
-                  fontSize: 20 * rs,
+                  fontSize: 18 * rs,
                   fontWeight: FontWeight.w900,
                 ),
               ),
             ),
+          ),
+          SizedBox(height: ResponsiveScale.v(context, 12)),
+          SizedBox(
+            width: double.infinity,
+            height: 64 * rs,
+            child: ElevatedButton.icon(
+              onPressed: onCourse,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1A1A1A),
+                foregroundColor: const Color(0xFFFFEB00),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16 * rs),
+                  side: BorderSide(
+                    color: const Color(0xFFFFEB00),
+                    width: 1.5 * rs,
+                  ),
+                ),
+                elevation: 0,
+              ),
+              icon: Icon(Icons.auto_awesome_motion_rounded, size: 24 * rs),
+              label: Text(
+                '간편 코스로 제어 (자동)',
+                style: TextStyle(
+                  fontSize: 18 * rs,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ),
+          SizedBox(height: ResponsiveScale.v(context, 12)),
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 56 * rs,
+                  child: TextButton.icon(
+                    onPressed: onManual,
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      backgroundColor: const Color(0xFF1A1A1A),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12 * rs),
+                      ),
+                    ),
+                    icon: Icon(Icons.numbers_rounded, size: 20 * rs),
+                    label: Text('숫자 패드', style: TextStyle(fontSize: 15 * rs, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ),
+              SizedBox(width: 12 * rs),
+              Expanded(
+                child: SizedBox(
+                  height: 56 * rs,
+                  child: TextButton.icon(
+                    onPressed: onMapping,
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      backgroundColor: const Color(0xFF1A1A1A),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12 * rs),
+                      ),
+                    ),
+                    icon: Icon(Icons.settings_overscan_rounded, size: 20 * rs),
+                    label: Text('좌표 매핑', style: TextStyle(fontSize: 15 * rs, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
