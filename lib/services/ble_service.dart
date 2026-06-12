@@ -390,14 +390,9 @@ class BleService {
     required String deviceId,
   }) async {
     debugPrint('[BLE_HW] Sending PRESS command: x=$x, y=$y (device=$deviceId)');
-    final res = await _sendAndWaitAck({
-      'action': HardwareProtocol.actionPress,
-      'x': x,
-      'y': y,
-      // deviceId 제거 (하드웨어 JSON 버퍼 절약)
-    }, waitAck: false);
-    debugPrint('[BLE_HW] PRESS response: $res');
-    return res == 'OK';
+    // JSON 대신 하드웨어가 직접 인식하는 텍스트 명령 전송
+    final cmd = '${HardwareProtocol.uartPressPrefix} $x $y';
+    return await sendRaw(cmd);
   }
 
   Future<bool> sendSetGrid({
@@ -414,18 +409,10 @@ class BleService {
     final px10 = (pitchX * 10).toInt();
     final py10 = (pitchY * 10).toInt();
     debugPrint('[BLE_HW] Sending SET_GRID: rows=$rows, cols=$cols, ox10=$ox10, oy10=$oy10, px10=$px10, py10=$py10 (device=$deviceId)');
-    final res = await _sendAndWaitAck({
-      'action': HardwareProtocol.actionSetGrid,
-      'rows': rows,
-      'cols': cols,
-      'ox10': ox10,
-      'oy10': oy10,
-      'px10': px10,
-      'py10': py10,
-      // deviceId 제거
-    }, waitAck: false);
-    debugPrint('[BLE_HW] SET_GRID response: $res');
-    return res == 'OK';
+    
+    // JSON 대신 하드웨어가 직접 인식하는 텍스트 명령 전송
+    final cmd = '${HardwareProtocol.uartSetGridPrefix} $rows $cols $ox10 $oy10 $px10 $py10';
+    return await sendRaw(cmd);
   }
 
   Future<bool> sendSetServo({
