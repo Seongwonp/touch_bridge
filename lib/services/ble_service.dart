@@ -371,6 +371,19 @@ class BleService {
     }
   }
 
+  Future<bool> sendRaw(String command) async {
+    _addLog('SEND_RAW: $command');
+    final c = _commandCharacteristic;
+    if (c == null) return false;
+    try {
+      await c.write(utf8.encode(command + '\r\n'), withoutResponse: false);
+      return true;
+    } catch (e) {
+      _addLog('RAW 전송 오류: $e');
+      return false;
+    }
+  }
+
   Future<bool> sendPress({
     required int x,
     required int y,
