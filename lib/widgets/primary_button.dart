@@ -128,7 +128,7 @@ class _PrimaryButtonState extends State<PrimaryButton> with SingleTickerProvider
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(_armed ? 0.1 : 0.3),
+                  color: Colors.black.withValues(alpha: _armed ? 0.1 : 0.3),
                   blurRadius: _armed ? 4 : 12,
                   spreadRadius: _armed ? 0 : 2,
                 ),
