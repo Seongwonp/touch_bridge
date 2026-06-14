@@ -77,6 +77,7 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
     final ok = await BleService.instance.sendPress(
       x: col,
       y: row,
+      cols: _profile?.cols ?? 3,
       deviceId: widget.deviceId,
     );
 
@@ -113,66 +114,91 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: TopAppBar(title: widget.deviceName, showBack: true),
-      body: Column(
-        children: [
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.all(16 * rs),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(24 * rs),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    // 배경 이미지
-                    _buildImage(),
-                    
-                    // 반투명 오버레이
-                    Container(color: Colors.black.withValues(alpha: 0.2)),
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: IntrinsicHeight(
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: Padding(
+                          padding: EdgeInsets.all(16 * rs),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(24 * rs),
+                            child: AspectRatio(
+                              aspectRatio: 3 / 4, // 일반적인 사진 비율 유지
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  // 배경 이미지
+                                  _buildImage(),
 
-                    // 매핑된 버튼들
-                    if (_profile != null)
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          return Stack(
-                            children: buttonPoints.map((entry) {
-                              final btId = entry.key;
-                              final row = entry.value.row;
-                              final col = entry.value.col;
-                              
-                              // 버튼 위치 계산 (그리드 중심점)
-                              final xRatio = (col + 0.5) / _profile!.cols;
-                              final yRatio = (row + 0.5) / _profile!.rows;
+                                  // 반투명 오버레이
+                                  Container(
+                                      color: Colors.black.withValues(alpha: 0.2)),
 
-                              return Positioned(
-                                left: xRatio * constraints.maxWidth - (24 * rs),
-                                top: yRatio * constraints.maxHeight - (24 * rs),
-                                child: _buildButtonMarker(btId, row, col, rs),
-                              );
-                            }).toList(),
-                          );
-                        },
+                                  // 매핑된 버튼들
+                                  if (_profile != null)
+                                    LayoutBuilder(
+                                      builder: (context, stackConstraints) {
+                                        return Stack(
+                                          children: buttonPoints.map((entry) {
+                                            final btId = entry.key;
+                                            final row = entry.value.row;
+                                            final col = entry.value.col;
+
+                                            // 버튼 위치 계산 (그리드 중심점)
+                                            final xRatio =
+                                                (col + 0.5) / _profile!.cols;
+                                            final yRatio =
+                                                (row + 0.5) / _profile!.rows;
+
+                                            return Positioned(
+                                              left: xRatio *
+                                                      stackConstraints.maxWidth -
+                                                  (24 * rs),
+                                              top: yRatio *
+                                                      stackConstraints
+                                                          .maxHeight -
+                                                  (24 * rs),
+                                              child: _buildButtonMarker(
+                                                  btId, row, col, rs),
+                                            );
+                                          }).toList(),
+                                        );
+                                      },
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
-                  ],
+
+                      // 하단 안내
+                      Container(
+                        padding: EdgeInsets.all(20 * rs),
+                        child: Text(
+                          '이미지의 노란 버튼을 눌러 하드웨어를 제어하세요',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14 * rs,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: 10 * rs),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ),
-          
-          // 하단 안내
-          Container(
-            padding: EdgeInsets.all(20 * rs),
-            child: Text(
-              '이미지의 노란 버튼을 눌러 하드웨어를 제어하세요',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white70,
-                fontSize: 14 * rs,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          SizedBox(height: 10 * rs),
-        ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -181,14 +207,41 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
     if (widget.imagePath != null && widget.imagePath!.isNotEmpty) {
       final file = File(widget.imagePath!);
       if (file.existsSync()) {
-        return Image.file(file, fit: BoxFit.cover);
+        return Image.file(
+          file,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return _buildPlaceholder(rs: 1.0, error: '이미지를 불러올 수 없습니다.');
+          },
+        );
       }
     }
-    // 기본 이미지 (Placeholder)
+    return _buildPlaceholder(rs: 1.0);
+  }
+
+  Widget _buildPlaceholder({required double rs, String? error}) {
     return Container(
       color: const Color(0xFF1A1A1A),
-      child: const Center(
-        child: Icon(Icons.image_not_supported_rounded, color: Colors.white24, size: 64),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              error != null
+                  ? Icons.error_outline_rounded
+                  : Icons.image_not_supported_rounded,
+              color: Colors.white24,
+              size: 64 * rs,
+            ),
+            if (error != null) ...[
+              SizedBox(height: 12 * rs),
+              Text(
+                error,
+                style: TextStyle(color: Colors.white24, fontSize: 14 * rs),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
