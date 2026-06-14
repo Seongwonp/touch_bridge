@@ -1,9 +1,38 @@
 # Touch Bridge 작업 로그
 
-> 담당: 박성원 | AI 협업: Claude Sonnet 4.6  
+> 담당: 박성원 | AI 협업: Gemini CLI (Auto-Edit)
 > 프로젝트: 2026 한이음 드림업 — 시각장애인용 가전 터치패드 자동 입력 시스템  
 > 팀: 3팀 멜론머스크 (차아미 · 박성원 · 서예솔)  
 > 기간: 2026.03 ~ 2026.10
+
+---
+
+## 2026-06-14 — 하드웨어 프로토콜 정렬 및 AI 고도화
+
+### 하드웨어 통신 프로토콜 정렬
+- **목적**: 하드웨어(GRBL 커스텀 펌웨어)가 인식하는 `BTN_n` 인덱스 기반 명령으로 앱의 전송 방식을 일치시킴.
+- **변경 내용**:
+  - `lib/services/ble_service.dart`: `sendPress` 메서드 수정. `(y * cols) + x + 1` 공식을 통해 버튼 번호를 계산하여 `BTN_n` 텍스트 명령 전송.
+  - `lib/services/hardware_protocol.dart`: `uartBtnPrefix`('BTN_') 및 `uartSetGridPrefix`('SET_GRID') 상수를 하드웨어 규격에 맞춰 정리.
+  - 모든 제어 화면(`VoiceListeningScreen`, `CourseControlScreen`, `ImageControlScreen`, `ManualMappingScreen`, `PhotoMappingScreen`)에서 `sendPress` 호출 시 `cols` 파라미터를 추가하여 인덱스 계산이 가능하도록 수정.
+
+### AI 백엔드 고도화
+- **모델 업그레이드**: Gemini 1.5 Flash에서 **Gemini 3 Flash Preview** 모델로 업그레이드하여 추론 성능 및 응답 속도 향상.
+- **프롬프트 개선**: `system_instruction` 기능을 도입하여 "20년 경력의 주방 보조" 페르소나를 강화하고, 음식 데이터베이스(고구마, 감자, 냉동 피자 등)를 20종 이상으로 확장.
+- **현실적인 추론**: Gemini 3의 에이전틱(Agentic) 워크플로우 최적화를 활용하여, 구체적인 시간이 없어도 상황에 맞는 조리 시간을 자연스럽게 제안하도록 로직 보강.
+
+### 버그 수정 및 UX 개선
+- **TTS 중복 안내 수정**: 음성 분석 중 침묵 타이머가 작동하여 "인식된 음성이 없습니다"가 중복 출력되던 이슈 해결.
+- **로깅 시스템 강화**: `AppLogger`를 전면 도입하여 BLE 전송, AI 분석 요청, 음성 인식 상태 등을 상세히 추적할 수 있도록 개선.
+- **컴파일 오류 해결**: `sendPress` 파라미터 변경에 따른 모든 호출부 정렬 및 미비했던 `AppLogger` 임포트 추가.
+
+### 문서 최신화
+- `README.md`: 하드웨어 연동 섹션에 `BTN_n` 및 `SET_GRID` 상세 규격 반영.
+- `docs/HW_APP_INTEGRATION_CONTRACT_KO.md`: 최신 텍스트 기반 직접 명령 규격으로 계약서 업데이트.
+
+### 검증
+- `flutter analyze` : 통과 (No issues found)
+- 하드웨어 소스(`Touch_bridge_HW_code`) 분석을 통한 프로토콜 정합성 확인.
 
 ---
 
