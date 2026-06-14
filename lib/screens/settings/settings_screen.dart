@@ -4,6 +4,7 @@ import '../../services/tts_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import 'ble_log_screen.dart';
+import 'developer_console_screen.dart';
 import '../../theme/app_colors.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -243,6 +244,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const BleLogScreen()),
+                  ),
+                ),
+                const _Divider(),
+                ListTile(
+                  leading: const Icon(
+                    Icons.terminal_rounded,
+                    color: Color(0xFFFFEB00),
+                  ),
+                  title: Text(
+                    '개발자 콘솔',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16 * rs,
+                    ),
+                  ),
+                  trailing: const Icon(
+                    Icons.chevron_right_rounded,
+                    color: Color(0xFF555555),
+                  ),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const DeveloperConsoleScreen()),
                   ),
                 ),
               ],

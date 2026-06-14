@@ -46,12 +46,10 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
             color: const Color(0xFFFFEB00),
           ),
         ),
-        actions: actions != null 
-          ? actions!.map((a) => Padding(
+        actions: actions?.map((a) => Padding(
               padding: EdgeInsets.only(right: 8 * rs),
               child: a,
-            )).toList()
-          : null,
+            )).toList(),
         centerTitle: false,
       ),
     );

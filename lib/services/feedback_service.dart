@@ -1,5 +1,4 @@
 import 'package:flutter/services.dart';
-import 'package:audioplayers/audioplayers.dart';
 import 'package:vibration/vibration.dart';
 import 'dart:io';
 
@@ -7,11 +6,10 @@ class FeedbackService {
   FeedbackService._();
   static final FeedbackService instance = FeedbackService._();
 
-  final AudioPlayer _audioPlayer = AudioPlayer();
-
   /// 짧고 강한 진동 (성공/확인)
   Future<void> vibrateSuccess() async {
-    if (await Vibration.hasVibrator() ?? false) {
+    final hasVib = await Vibration.hasVibrator();
+    if (hasVib == true) {
       Vibration.vibrate(duration: 100, amplitude: 255);
     } else {
       HapticFeedback.mediumImpact();
@@ -20,7 +18,8 @@ class FeedbackService {
 
   /// 긴 진동 (경고/오류)
   Future<void> vibrateError() async {
-    if (await Vibration.hasVibrator() ?? false) {
+    final hasVib = await Vibration.hasVibrator();
+    if (hasVib == true) {
       Vibration.vibrate(duration: 400, amplitude: 255);
     } else {
       HapticFeedback.heavyImpact();
