@@ -146,6 +146,21 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
               ],
             ),
             SizedBox(height: 20 * rs),
+            Text('모터 테스트 (10mm 이동)', style: TextStyle(color: Colors.white, fontSize: 18 * rs, fontWeight: FontWeight.bold)),
+            SizedBox(height: 12 * rs),
+            Wrap(
+              spacing: 8 * rs,
+              runSpacing: 8 * rs,
+              children: [
+                _buildTestButton('X+10', () => _jog('X', 10), rs),
+                _buildTestButton('X-10', () => _jog('X', -10), rs),
+                _buildTestButton('Y+10', () => _jog('Y', 10), rs),
+                _buildTestButton('Y-10', () => _jog('Y', -10), rs),
+                _buildTestButton('Z+10', () => _jog('Z', 10), rs),
+                _buildTestButton('Z-10', () => _jog('Z', -10), rs),
+              ],
+            ),
+            SizedBox(height: 20 * rs),
             Text('원점 및 간격 (mm)', style: TextStyle(color: Colors.white, fontSize: 18 * rs, fontWeight: FontWeight.bold)),
             SizedBox(height: 12 * rs),
             Row(
@@ -259,6 +274,18 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
         padding: EdgeInsets.symmetric(horizontal: 16 * rs, vertical: 8 * rs),
       ),
       child: Text(label),
+    );
+  }
+
+  Widget _buildTestButton(String text, VoidCallback onPressed, double rs) {
+    return ElevatedButton(
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFF333333),
+        foregroundColor: Colors.white,
+        padding: EdgeInsets.symmetric(horizontal: 16 * rs, vertical: 12 * rs),
+      ),
+      child: Text(text, style: TextStyle(fontSize: 14 * rs)),
     );
   }
 }
