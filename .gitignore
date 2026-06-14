@@ -1,39 +1,16 @@
-# Claude AI
-.claude/
-
-# Jupyter
-.ipynb_checkpoints/
-
-# Miscellaneous
-*.class
-*.log
-*.pyc
-*.swp
-.DS_Store
-.atom/
-.build/
-.buildlog/
-.history
-.svn/
-.swiftpm/
-migrate_working_dir/
-
-# Environment variables
-.env
-.env.*
-backend/.env
-backend/.env.*
-!.env_ex
-!backend/.env_ex
-
-# IntelliJ related
-*.iml
-*.ipr
-*.iws
-.idea/
-
-# Visual Studio Code related
-.vscode/
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+devtools_options.yaml
+.packages
+.flutter-plugins
+pubspec.lock
 
 # Python related
 __pycache__/
@@ -50,29 +27,41 @@ dist/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.python-version
 
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins-dependencies
-.pub-cache/
-.pub/
-/build/
-/coverage/
-devtools_options.yaml
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+*.tmp
+*.temp
 
-# Symbolication related
-app.*.symbols
+# Environment variables
+.env
+.env.*
+backend/.env
+backend/.env.*
+!.env_ex
+!backend/.env_ex
 
-# Obfuscation related
-app.*.map.json
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+.idea_modules/
 
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
-
+# Visual Studio Code related
+.vscode/
 
 # Database
 *.db
@@ -81,5 +70,3 @@ app.*.map.json
 
 # touch-bridge-495300-e3f42de71ebd.json
 touch-bridge-495300-e3f42de71ebd.json
-
-Touch_bridge_HW_code/
