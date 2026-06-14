@@ -187,14 +187,16 @@ lib/
 
 ## 하드웨어 연동
 
-```
-ESP32 BLE GATT Server
-Service UUID : 0000FFE0-0000-1000-8000-00805F9B34FB
-Characteristic: 0000FFE1-...
+하드웨어는 CNC 그리드 방식을 따르며, BLE를 통해 텍스트 기반 명령을 수신합니다.
 
-명령 포맷:
-{ "action": "press", "x": 0, "y": 1, "deviceId": "microwave_1" }
-```
+**명령어 종류:**
+- `BTN_n`: n번째 버튼(인덱스)을 터치 (예: `BTN_1`, `BTN_5`)
+- `SET_GRID rows cols ox oy px py`: 그리드 설정 동기화
+- `STOP`: 비상 정지 및 원점 복귀
+
+**좌표 계산 방식:**
+- 버튼 번호 = `(y * cols) + x + 1` (좌상단 0,0 기준)
+- 예: 3x3 그리드에서 (1,1) 위치는 `(1 * 3) + 1 + 1 = BTN_5`
 
 ---
 
