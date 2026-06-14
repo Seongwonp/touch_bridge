@@ -3,18 +3,14 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:nfc_manager/nfc_manager.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../theme/app_colors.dart';
 import '../../services/tts_service.dart';
 import '../../services/active_device_service.dart';
 import '../../services/ble_service.dart';
 import '../../services/ai_backend_service.dart';
 import '../../services/device_mapping_service.dart';
-import '../../services/app_logger.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import 'qr_scan_screen.dart';
@@ -50,22 +46,11 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
 
   static const _prefKeyDevices = 'home_devices';
 
-  String _newDeviceId([String prefix = 'device']) {
+  String _newDeviceId(String prefix) {
     final ts = DateTime.now().microsecondsSinceEpoch;
     final suffix = _random.nextInt(1 << 20).toRadixString(16);
     return '${prefix}_$ts$suffix';
   }
-
-  static const _iconOptions = [
-    (label: '전자레인지', icon: Icons.microwave_rounded, type: 'microwave'),
-    (label: '세탁기', icon: Icons.local_laundry_service_rounded, type: 'washer'),
-    (label: '공기청정기', icon: Icons.air_rounded, type: 'air'),
-    (label: '에어컨', icon: Icons.ac_unit_rounded, type: 'ac'),
-    (label: '전등', icon: Icons.light_mode_rounded, type: 'light'),
-    (label: 'TV', icon: Icons.tv_rounded, type: 'tv'),
-    (label: '냉장고', icon: Icons.kitchen_rounded, type: 'fridge'),
-    (label: '기타', icon: Icons.devices_rounded, type: ''),
-  ];
 
   Future<void> _registerDevice(
     BuildContext context, {
@@ -188,12 +173,12 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
         child: ListView.separated(
           shrinkWrap: true,
           itemCount: devices.length,
-          separatorBuilder: (_, __) => const Divider(color: Color(0xFF2A2A2A), height: 1),
+          separatorBuilder: (_, index) => const Divider(color: Color(0xFF2A2A2A), height: 1),
           itemBuilder: (_, index) {
             final d = devices[index];
             return ListTile(
               title: Text(d.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-              subtitle: Text('${d.id}', style: const TextStyle(color: Color(0xFF888888), fontSize: 12)),
+              subtitle: Text(d.id, style: const TextStyle(color: Color(0xFF888888), fontSize: 12)),
               trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFFFFEB00)),
               onTap: () => Navigator.of(ctx).pop(d),
             );

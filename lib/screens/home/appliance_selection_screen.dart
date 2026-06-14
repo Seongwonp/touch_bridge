@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/appliance_config.dart';
 import '../../services/recommendation_service.dart';
@@ -45,7 +43,7 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
           ListTile(leading: const Icon(Icons.camera_alt, color: Colors.white), title: const Text('사진 촬영', style: TextStyle(color: Colors.white)), onTap: () => Navigator.of(ctx).pop(0)),
           ListTile(leading: const Icon(Icons.photo_library, color: Colors.white), title: const Text('갤러리에서 선택', style: TextStyle(color: Colors.white)), onTap: () => Navigator.of(ctx).pop(1)),
           ListTile(leading: const Icon(Icons.image, color: Colors.white), title: const Text('샘플 이미지 사용', style: TextStyle(color: Colors.white)), onTap: () => Navigator.of(ctx).pop(2)),
-          SizedBox(height: 12),
+          const SizedBox(height: 12),
         ]),
       ),
     );
@@ -65,19 +63,6 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
     final safe = prefix.replaceAll(RegExp(r'\s+'), '_');
     final ts = DateTime.now().microsecondsSinceEpoch;
     return '${safe}_$ts';
-  }
-
-  int _iconCodePointForType(String type) {
-    return switch (type.toLowerCase()) {
-      'microwave' => Icons.microwave_rounded.codePoint,
-      'washer' || 'laundry' => Icons.local_laundry_service_rounded.codePoint,
-      'air' || 'air_purifier' => Icons.air_rounded.codePoint,
-      'ac' || 'aircon' || 'air_cond' => Icons.ac_unit_rounded.codePoint,
-      'light' || 'lamp' => Icons.light_mode_rounded.codePoint,
-      'tv' => Icons.tv_rounded.codePoint,
-      'fridge' || 'refrigerator' => Icons.kitchen_rounded.codePoint,
-      _ => Icons.devices_rounded.codePoint,
-    };
   }
 
   @override
@@ -100,9 +85,11 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
               _tts.speak('${appliance.name} 선택.', source: 'ApplianceSelectionScreen');
             },
             onStartMapping: (sheetCtx, ap) async {
-              Navigator.pop(sheetCtx);
+              if (Navigator.of(sheetCtx).canPop()) {
+                Navigator.of(sheetCtx).pop();
+              }
               final imagePath = await _chooseImageForMapping(context);
-              if (!mounted) return;
+              if (!context.mounted) return;
               
               Navigator.push(
                 context, 

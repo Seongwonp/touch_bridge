@@ -131,9 +131,9 @@ class AppColors {
   
   /// 상대 명도 계산 (W3C 공식)
   static double _getRelativeLuminance(Color color) {
-    final r = _linearize(color.red / 255);
-    final g = _linearize(color.green / 255);
-    final b = _linearize(color.blue / 255);
+    final r = _linearize((color.r * 255.0).round().clamp(0, 255) / 255);
+    final g = _linearize((color.g * 255.0).round().clamp(0, 255) / 255);
+    final b = _linearize((color.b * 255.0).round().clamp(0, 255) / 255);
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   }
   

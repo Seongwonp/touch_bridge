@@ -36,7 +36,6 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
 
   late int _secondsLeft;
   bool _isHolding = false;
-  bool _isListening = false;
   bool _speechEnabled = false;
   bool _isStartingListening = false;
 
@@ -78,7 +77,6 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     if (!_speechEnabled || _speech.isListening || _isStartingListening) return;
     _isStartingListening = true;
     try {
-      setState(() => _isListening = true);
       await _speech.listen(
         onResult: (result) {
           final words = result.recognizedWords.toLowerCase();
@@ -86,10 +84,10 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
             _onHoldCompleted();
           }
         },
-        localeId: 'ko_KR',
+        listenOptions: SpeechListenOptions(localeId: 'ko_KR'),
       );
     } catch (_) {
-      if (mounted) setState(() => _isListening = false);
+      // ignore
     } finally {
       _isStartingListening = false;
     }
@@ -140,7 +138,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
 
   Future<void> _onHoldCompleted() async {
     if (!mounted) return;
-    setState(() { _isHolding = false; _isListening = false; });
+    setState(() { _isHolding = false; });
     _speech.stop();
     _timerService.stop();
     await AccessibilityExperimentService.instance.recordEmergencyStop();
@@ -167,65 +165,140 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
       backgroundColor: const Color(0xFF041329),
       appBar: TopAppBar(title: '${widget.deviceName} 작동 중', showBack: true),
       body: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.all(24 * rs),
-          child: Column(
-            children: [
-              const Spacer(),
-              Text('남은 시간', style: TextStyle(color: const Color(0xFFCEC6AD), fontSize: 18 * rs, fontWeight: FontWeight.bold, letterSpacing: 4)),
-              SizedBox(height: ResponsiveScale.v(context, 8)),
-              Text(
-                _formatMMSS(_secondsLeft),
-                style: TextStyle(color: const Color(0xFFFDE047), fontSize: 90 * rs, fontWeight: FontWeight.w900, letterSpacing: -2),
-              ),
-              const Spacer(),
-              Container(
-                width: double.infinity,
-                padding: EdgeInsets.symmetric(horizontal: 20 * rs, vertical: 18 * rs),
-                decoration: BoxDecoration(color: const Color(0x660D1C32), borderRadius: BorderRadius.circular(999), border: Border.all(color: const Color(0xFF27354C))),
-                child: Text('중단하려면 아래 버튼을 3초간 누르세요', textAlign: TextAlign.center, style: TextStyle(color: const Color(0xFFD6E3FF), fontSize: 16 * rs, fontWeight: FontWeight.w700)),
-              ),
-              SizedBox(height: ResponsiveScale.v(context, 20)),
-              Column(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(999),
-                    child: Container(
-                      height: 8 * rs, width: double.infinity, color: const Color(0xFF27354C),
-                      child: Align(alignment: Alignment.centerLeft, child: AnimatedBuilder(
-                        animation: _holdController,
-                        builder: (context, child) => FractionallySizedBox(widthFactor: _holdController.value, child: child),
-                        child: Container(decoration: const BoxDecoration(color: Color(0xFFFDE047))),
-                      )),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: IntrinsicHeight(
+                  child: Padding(
+                    padding: EdgeInsets.all(24 * rs),
+                    child: Column(
+                      children: [
+                        const Spacer(),
+                        Text(
+                          '남은 시간',
+                          style: TextStyle(
+                            color: const Color(0xFFCEC6AD),
+                            fontSize: 18 * rs,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 4,
+                          ),
+                        ),
+                        SizedBox(height: ResponsiveScale.v(context, 8)),
+                        Text(
+                          _formatMMSS(_secondsLeft),
+                          style: TextStyle(
+                            color: const Color(0xFFFDE047),
+                            fontSize: 90 * rs,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -2,
+                          ),
+                        ),
+                        const Spacer(),
+                        Container(
+                          width: double.infinity,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 20 * rs,
+                            vertical: 18 * rs,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0x660D1C32),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: const Color(0xFF27354C)),
+                          ),
+                          child: Text(
+                            '중단하려면 아래 버튼을 3초간 누르세요',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: const Color(0xFFD6E3FF),
+                              fontSize: 16 * rs,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: ResponsiveScale.v(context, 20)),
+                        Column(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(999),
+                              child: Container(
+                                height: 8 * rs,
+                                width: double.infinity,
+                                color: const Color(0xFF27354C),
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: AnimatedBuilder(
+                                    animation: _holdController,
+                                    builder: (context, child) =>
+                                        FractionallySizedBox(
+                                      widthFactor: _holdController.value,
+                                      child: child,
+                                    ),
+                                    child: Container(
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFFFDE047),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            SizedBox(height: ResponsiveScale.v(context, 16)),
+                            GestureDetector(
+                              onLongPressStart: (_) => _onHoldStart(),
+                              onLongPressEnd: (_) => _onHoldEnd(),
+                              onLongPressCancel: _onHoldEnd,
+                              child: Container(
+                                width: double.infinity,
+                                height: ResponsiveScale.v(context, 200),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFFFF5252),
+                                      Color(0xFF93000A),
+                                    ],
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                  ),
+                                  borderRadius: BorderRadius.circular(32 * rs),
+                                  border: Border.all(
+                                    color: _isHolding
+                                        ? Colors.white
+                                        : const Color(0xFFFFB4AB),
+                                    width: 4 * rs,
+                                  ),
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.back_hand,
+                                      size: 80 * rs,
+                                      color: Colors.white,
+                                    ),
+                                    Text(
+                                      '길게 눌러 중단',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 32 * rs,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Spacer(),
+                      ],
                     ),
                   ),
-                  SizedBox(height: ResponsiveScale.v(context, 16)),
-                  GestureDetector(
-                    onLongPressStart: (_) => _onHoldStart(),
-                    onLongPressEnd: (_) => _onHoldEnd(),
-                    onLongPressCancel: _onHoldEnd,
-                    child: Container(
-                      width: double.infinity,
-                      height: ResponsiveScale.v(context, 200),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(colors: [Color(0xFFFF5252), Color(0xFF93000A)], begin: Alignment.topCenter, end: Alignment.bottomCenter),
-                        borderRadius: BorderRadius.circular(32 * rs),
-                        border: Border.all(color: _isHolding ? Colors.white : const Color(0xFFFFB4AB), width: 4 * rs),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.back_hand, size: 80 * rs, color: Colors.white),
-                          Text('길게 눌러 중단', style: TextStyle(color: Colors.white, fontSize: 32 * rs, fontWeight: FontWeight.w900)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
-              const Spacer(),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );

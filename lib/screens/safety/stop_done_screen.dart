@@ -18,7 +18,7 @@ class StopDoneScreen extends StatefulWidget {
 
 class _StopDoneScreenState extends State<StopDoneScreen> {
   final TtsService _tts = TtsService();
-  MainTab _currentTab = MainTab.home;
+  static const MainTab _currentTab = MainTab.home;
   bool _armedHomeButton = false;
 
   @override

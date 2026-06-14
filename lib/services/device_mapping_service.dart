@@ -11,6 +11,7 @@ class DeviceMappingProfile {
     required this.pitchX,
     required this.pitchY,
     required this.buttonMap,
+    this.imagePath,
   });
 
   final int rows;
@@ -20,6 +21,7 @@ class DeviceMappingProfile {
   final double pitchX;
   final double pitchY;
   final Map<String, ({int row, int col})> buttonMap;
+  final String? imagePath;
 
   Map<String, dynamic> toJson() => {
         'grid': {
@@ -33,6 +35,7 @@ class DeviceMappingProfile {
         'buttonMap': {
           for (final e in buttonMap.entries) e.key: {'row': e.value.row, 'col': e.value.col},
         },
+        'imagePath': imagePath,
       };
 
   factory DeviceMappingProfile.fromJson(Map<String, dynamic> j) {
@@ -51,6 +54,7 @@ class DeviceMappingProfile {
       pitchX: (grid['pitchX'] as num?)?.toDouble() ?? 1,
       pitchY: (grid['pitchY'] as num?)?.toDouble() ?? 1,
       buttonMap: map,
+      imagePath: j['imagePath'] as String?,
     );
   }
 
