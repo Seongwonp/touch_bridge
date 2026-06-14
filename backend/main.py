@@ -42,7 +42,10 @@ async def startup_event():
 
 # Gemini AI 설정
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-ai_model = genai.GenerativeModel(os.getenv("GEMINI_MODEL", "gemini-1.5-flash"))
+ai_model = genai.GenerativeModel(
+    model_name=os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
+    system_instruction=get_interpret_prompt("") # 시스템 프롬프트로 이동
+)
 
 @app.middleware("http")
 async def request_logging_middleware(request, call_next):
@@ -87,10 +90,8 @@ async def fetch_profile(device_id: str):
 
 def interpret_with_ai(text: str):
     """Gemini를 사용하여 텍스트를 앱 명령 JSON으로 변환"""
-    prompt = get_interpret_prompt(text)
-    
     try:
-        response = ai_model.generate_content(prompt)
+        response = ai_model.generate_content(f"사용자 입력: \"{text}\"")
         if not response.text:
             raise ValueError("Empty response from AI")
             
