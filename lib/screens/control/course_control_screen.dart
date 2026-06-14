@@ -66,6 +66,7 @@ class _CourseControlScreenState extends State<CourseControlScreen> {
           await BleService.instance.sendPress(
             x: mapped.col,
             y: mapped.row,
+            cols: profile.cols,
             deviceId: widget.deviceId,
           );
           await Future<void>.delayed(const Duration(milliseconds: 1000));

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'hardware_protocol.dart';
@@ -131,12 +130,12 @@ class BleService {
     if (_pairKey == null) return false; // not provisioned
 
     // Request nonce (challenge)
-    final nonceResp = await _sendAndWaitAck({'action': 'challenge'}, timeout: const Duration(seconds: 4));
+    final nonceResp = await _sendAndWaitAck({'action': 'challenge'}, timeout: timeout);
     if (!nonceResp.startsWith('NONCE:')) return false;
     final nonce = nonceResp.substring(6);
 
     final mac = _hmacHex(_pairKey!, nonce);
-    final authResp = await _sendAndWaitAck({'action': 'auth', 'mac': mac}, timeout: const Duration(seconds: 4));
+    final authResp = await _sendAndWaitAck({'action': 'auth', 'mac': mac}, timeout: timeout);
 
     if (authResp.toUpperCase().contains('AUTH_OK')) {
       _sessionAuthenticated = true;
@@ -376,7 +375,7 @@ class BleService {
     final c = _commandCharacteristic;
     if (c == null) return false;
     try {
-      await c.write(utf8.encode(command + '\r\n'), withoutResponse: false);
+      await c.write(utf8.encode('$command\r\n'), withoutResponse: false);
       return true;
     } catch (e) {
       _addLog('RAW 전송 오류: $e');
@@ -387,11 +386,14 @@ class BleService {
   Future<bool> sendPress({
     required int x,
     required int y,
+    required int cols,
     required String deviceId,
   }) async {
-    debugPrint('[BLE_HW] Sending PRESS command: x=$x, y=$y (device=$deviceId)');
-    // JSON 대신 하드웨어가 직접 인식하는 텍스트 명령 전송
-    final cmd = '${HardwareProtocol.uartPressPrefix} $x $y';
+    final btnNum = (y * cols) + x + 1;
+    debugPrint('[BLE_HW] Sending PRESS command: x=$x, y=$y (cols=$cols, btnNum=$btnNum, device=$deviceId)');
+    
+    // 하드웨어(GRBL)는 BTN_n 형식을 인식함
+    final cmd = '${HardwareProtocol.uartBtnPrefix}$btnNum';
     return await sendRaw(cmd);
   }
 

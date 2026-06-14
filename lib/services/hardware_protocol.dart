@@ -12,6 +12,5 @@ class HardwareProtocol {
 
   static const String uartBtnPrefix = 'BTN_';
   static const String uartBtPrefix = 'BT-';
-  static const String uartPressPrefix = 'PRESS';
   static const String uartSetGridPrefix = 'SET_GRID';
 }

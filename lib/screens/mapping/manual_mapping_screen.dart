@@ -56,9 +56,11 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
     final deviceId = await ActiveDeviceService.instance.getActiveDeviceId();
 >>>>>>> 5fa8134 (feat(control): 이미지 기반 수동 제어 및 간편 코스 실행 기능 구현)
     if (deviceId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('연결된 기기가 없습니다.')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('연결된 기기가 없습니다.')),
+        );
+      }
       return;
     }
 
@@ -94,6 +96,8 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
         deviceId: deviceId,
       );
 
+      if (!mounted) return;
+
       if (ok) {
         _tts.speak('그리드 설정이 하드웨어로 전송되었습니다.');
         ScaffoldMessenger.of(context).showSnackBar(
@@ -106,11 +110,13 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('오류: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('오류: $e')),
+        );
+      }
     } finally {
-      setState(() => _isUploading = false);
+      if (mounted) setState(() => _isUploading = false);
     }
   }
 
@@ -121,7 +127,8 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
     final deviceId = await ActiveDeviceService.instance.getActiveDeviceId();
 >>>>>>> 5fa8134 (feat(control): 이미지 기반 수동 제어 및 간편 코스 실행 기능 구현)
     if (deviceId == null) return;
-    await BleService.instance.sendPress(x: x, y: y, deviceId: deviceId);
+    final cols = int.tryParse(_colsCtrl.text) ?? 3;
+    await BleService.instance.sendPress(x: x, y: y, cols: cols, deviceId: deviceId);
   }
 
   Future<void> _jog(String axis, double value) async {
