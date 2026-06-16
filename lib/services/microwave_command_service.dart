@@ -50,6 +50,20 @@ class MicrowaveCommandService {
 
   static Map<String, dynamic>? checkSimpleRules(String text) {
     final t = text.replaceAll(' ', '');
+    // 새로운 규칙 추가: 'n번 눌러줘' 또는 'n번 버튼'
+    final pressMatch = RegExp(r'(\d+)번(눌러줘|눌러|버튼)').firstMatch(t);
+    if (pressMatch != null) {
+      final btnNum = pressMatch.group(1);
+      if (btnNum != null) {
+        final btnId = 'BT-${btnNum.padLeft(2, '0')}';
+        return {
+          'action': 'IMMEDIATE_PRESS',
+          'commands': [btnId],
+          'message': '$btnNum번 버튼을 누릅니다.'
+        };
+      }
+    }
+    
     if (t.contains('30초시작') || t.contains('삼십초시작')) {
       return {'action': 'MICROWAVE_CONTROL', 'commands': ['BT-02', 'BT-05'], 'message': '30초 조리를 시작합니다.'};
     }
