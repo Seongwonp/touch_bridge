@@ -100,11 +100,15 @@ class _HomeScreenState extends State<HomeScreen> {
     final device = _devices[index];
     final deviceId = device['id'] as String? ?? '';
     final deviceName = device['name'] as String? ?? '스마트 기기';
+    final bleId = device['bleId'] as String?;
+    final bleName = device['bleName'] as String?;
     
     if (deviceId.isNotEmpty) {
       await ActiveDeviceService.instance.setActiveDevice(
         deviceId: deviceId,
         deviceName: deviceName,
+        bleId: bleId,
+        bleName: bleName,
       );
     }
     

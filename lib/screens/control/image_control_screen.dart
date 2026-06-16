@@ -298,6 +298,9 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
   }
 
   String _getButtonLabel(String btId) {
+    if (_profile != null && _profile!.customLabels.containsKey(btId)) {
+      return _profile!.customLabels[btId]!;
+    }
     const labels = {
       'BT-01': '10초',
       'BT-02': '30초',

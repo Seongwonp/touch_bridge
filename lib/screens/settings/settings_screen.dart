@@ -5,6 +5,7 @@ import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import 'ble_log_screen.dart';
 import 'developer_console_screen.dart';
+import 'device_management_screen.dart';
 import '../../theme/app_colors.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -224,6 +225,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
             SizedBox(height: ResponsiveScale.v(context, 10)),
             _SettingsCard(
               children: [
+                ListTile(
+                  leading: const Icon(
+                    Icons.settings_bluetooth_rounded,
+                    color: Color(0xFFFFEB00),
+                  ),
+                  title: Text(
+                    '하드웨어(ESP32) 관리',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16 * rs,
+                    ),
+                  ),
+                  subtitle: const Text(
+                    '기기별 블루투스 연결 설정',
+                    style: TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                  trailing: const Icon(
+                    Icons.chevron_right_rounded,
+                    color: Color(0xFF555555),
+                  ),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const DeviceManagementScreen()),
+                  ),
+                ),
+                const _Divider(),
                 ListTile(
                   leading: const Icon(
                     Icons.list_alt_rounded,
