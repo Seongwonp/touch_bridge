@@ -10,7 +10,14 @@
 devtools_options.yaml
 .packages
 .flutter-plugins
-pubspec.lock
+
+# iOS / Xcode related
+Pods/
+Podfile.lock
+*.xcworkspace
+xcuserdata/
+*.xcuserdatad/
+*.xcuserstate
 
 # Python related
 __pycache__/
@@ -21,7 +28,6 @@ backend/.venv/
 venv/
 ENV/
 env/
-build/
 dist/
 *.egg-info/
 .pytest_cache/
@@ -68,7 +74,11 @@ backend/.env.*
 *.sqlite
 *.sqlite3
 
-# touch-bridge-495300-e3f42de71ebd.json
+# Credentials / Specific files
 touch-bridge-495300-e3f42de71ebd.json
 
+# Hardware code folders
 Touch_bridge_HW_code/
+Touch_bridge_HW_code-ble-connect/
+Touch_bridge_HW_code-moter/
+
