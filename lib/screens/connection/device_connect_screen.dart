@@ -57,6 +57,8 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
     required String name,
     required String type,
     String? preferredDeviceId,
+    String? bleId,
+    String? bleName,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     final jsonStr = prefs.getString(_prefKeyDevices);
@@ -68,23 +70,30 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
         ? preferredDeviceId!.trim()
         : _newDeviceId(name.replaceAll(' ', '_'));
 
-    if (devices.any((d) => d['id'] == candidateId || d['name'] == name)) {
+    // Check if device with same ID or BLE ID already exists
+    if (devices.any((d) => d['id'] == candidateId)) {
       if (context.mounted) {
         _tts.speak('$name 기기는 이미 등록되어 있습니다.', source: 'DeviceConnectScreen');
       }
       return;
     }
 
-    devices.add({
+    final newDevice = {
       'id': candidateId,
       'name': name,
       'status': '작동 대기 중',
       'iconCodePoint': _iconCodePointForType(type),
-    });
+      'bleId': bleId,
+      'bleName': bleName,
+    };
+
+    devices.add(newDevice);
     await prefs.setString(_prefKeyDevices, jsonEncode(devices));
     await ActiveDeviceService.instance.setActiveDevice(
       deviceId: candidateId,
       deviceName: name,
+      bleId: bleId,
+      bleName: bleName,
     );
 
     if (context.mounted) {
@@ -109,10 +118,6 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
 
       final profile = DeviceMappingProfile.fromJson(profileData);
       await DeviceMappingService.instance.save(deviceId, profile);
-      await ActiveDeviceService.instance.setActiveDevice(
-        deviceId: deviceId,
-        deviceName: name,
-      );
 
       _tts.speak('$name 정보 로드 완료.', source: 'DeviceConnectScreen');
     } catch (e) {
@@ -158,7 +163,10 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
     final devices = await BleService.instance.scan(timeout: const Duration(seconds: 5));
 
     if (!mounted) return;
-    setState(() => _isScanning = false);
+    setState(() {
+      _isScanning = false;
+      _statusText = devices.isEmpty ? '검색된 기기 없음' : '기기 선택 대기 중';
+    });
 
     if (devices.isEmpty) {
       _tts.speak('검색된 기기가 없습니다.', source: 'DeviceConnectScreen');
@@ -203,7 +211,53 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
       _connected = ok;
       _statusText = ok ? '연결 완료' : '연결 실패';
     });
-    _tts.speak(ok ? '연결되었습니다.' : '연결 실패.', source: 'DeviceConnectScreen');
+    
+    if (ok) {
+      _tts.speak('연결되었습니다. 이 기기를 어떤 가전제품으로 등록할까요?', source: 'DeviceConnectScreen');
+      
+      // 기기 유형 선택 다이얼로그
+      if (mounted) {
+        final type = await showDialog<String>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF1A1A1A),
+            title: const Text('기기 유형 선택', style: TextStyle(color: Colors.white)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.microwave_rounded, color: Color(0xFFFFEB00)),
+                  title: const Text('전자레인지', style: TextStyle(color: Colors.white)),
+                  onTap: () => Navigator.pop(ctx, '전자레인지'),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.local_laundry_service_rounded, color: Color(0xFFFFEB00)),
+                  title: const Text('세탁기', style: TextStyle(color: Colors.white)),
+                  onTap: () => Navigator.pop(ctx, '세탁기'),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.devices_rounded, color: Color(0xFFFFEB00)),
+                  title: const Text('기타 기기', style: TextStyle(color: Colors.white)),
+                  onTap: () => Navigator.pop(ctx, '기타'),
+                ),
+              ],
+            ),
+          ),
+        );
+
+        if (type != null && mounted) {
+          await _registerDevice(
+            context,
+            name: type,
+            type: type == '전자레인지' ? 'microwave' : (type == '세탁기' ? 'washer' : 'other'),
+            bleId: selected.id,
+            bleName: selected.name,
+          );
+        }
+      }
+    } else {
+      _tts.speak('연결에 실패했습니다.', source: 'DeviceConnectScreen');
+    }
   }
 
   @override
