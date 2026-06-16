@@ -296,7 +296,14 @@ class BleService {
       await characteristic.setNotifyValue(true);
       _notifySub = characteristic.lastValueStream.listen((value) {
         if (value.isEmpty) return;
-        final res = utf8.decode(value).trim();
+
+        String res;
+        try {
+          res = utf8.decode(value, allowMalformed: true).trim();
+        } catch (e) {
+          res = 'DECODE_ERROR: ${value.toString()}';
+        }
+
         _addLog('RECV: ${_normalizeHardwareLog(res)}');
         _ackCompleter?.complete(res);
       });
@@ -313,6 +320,13 @@ class BleService {
       await disconnect();
       return false;
     }
+  }
+
+  Future<bool> ensureConnected(String deviceId) async {
+    if (isConnected && _connectedDevice?.remoteId.str == deviceId) {
+      return true;
+    }
+    return await connect(deviceId);
   }
 
   Future<void> disconnect() async {
@@ -383,6 +397,22 @@ class BleService {
     }
   }
 
+  Future<String?> readResponse({Duration timeout = const Duration(seconds: 2)}) async {
+    final c = _commandCharacteristic;
+    if (c == null) return null;
+    
+    _ackCompleter = Completer<String>();
+    try {
+      final res = await _ackCompleter!.future.timeout(timeout);
+      return res;
+    } catch (e) {
+      _addLog('응답 대기 타임아웃: $e');
+      return null;
+    } finally {
+      _ackCompleter = null;
+    }
+  }
+
   Future<bool> sendPress({
     required int x,
     required int y,
@@ -390,11 +420,25 @@ class BleService {
     required String deviceId,
   }) async {
     final btnNum = (y * cols) + x + 1;
-    debugPrint('[BLE_HW] Sending PRESS command: x=$x, y=$y (cols=$cols, btnNum=$btnNum, device=$deviceId)');
+    final startTime = DateTime.now();
+    debugPrint('[BLE_HW] Sending PRESS command: x=$x, y=$y (btnNum=$btnNum, device=$deviceId)');
     
     // 하드웨어(GRBL)는 BTN_n 형식을 인식함
     final cmd = '${HardwareProtocol.uartBtnPrefix}$btnNum';
-    return await sendRaw(cmd);
+    final success = await sendRaw(cmd);
+    
+    if (success) {
+      final endTime = DateTime.now();
+      final latency = endTime.difference(startTime).inMilliseconds;
+      AppLogger.info('ble.command.press', {
+        'device_id': deviceId,
+        'btn': btnNum,
+        'latency_ms': latency,
+      });
+      debugPrint('[BLE_LATENCY] Press command latency: ${latency}ms');
+    }
+    
+    return success;
   }
 
   Future<bool> sendSetGrid({
@@ -433,6 +477,13 @@ class BleService {
 
   Future<String> sendGetServo() async {
     return await _sendAndWaitAck({'action': HardwareProtocol.actionGetServo});
+  }
+
+  Future<void> sendHoming(String deviceId) async {
+    await _sendAndWaitAck({
+      'action': 'home',
+      'deviceId': deviceId,
+    }, timeout: const Duration(seconds: 5));
   }
 
   Future<void> sendEmergencyStop(String deviceId) async {

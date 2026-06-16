@@ -11,6 +11,9 @@ class DeviceMappingProfile {
     required this.pitchX,
     required this.pitchY,
     required this.buttonMap,
+    this.customLabels = const {},
+    this.homeRow = 0,
+    this.homeCol = 0,
     this.imagePath,
   });
 
@@ -21,6 +24,9 @@ class DeviceMappingProfile {
   final double pitchX;
   final double pitchY;
   final Map<String, ({int row, int col})> buttonMap;
+  final Map<String, String> customLabels;
+  final int homeRow;
+  final int homeCol;
   final String? imagePath;
 
   Map<String, dynamic> toJson() => {
@@ -35,17 +41,26 @@ class DeviceMappingProfile {
         'buttonMap': {
           for (final e in buttonMap.entries) e.key: {'row': e.value.row, 'col': e.value.col},
         },
+        'customLabels': customLabels,
+        'homePosition': {
+          'row': homeRow,
+          'col': homeCol,
+        },
         'imagePath': imagePath,
       };
 
   factory DeviceMappingProfile.fromJson(Map<String, dynamic> j) {
     final grid = (j['grid'] as Map<String, dynamic>? ?? const {});
     final buttonRaw = (j['buttonMap'] as Map<String, dynamic>? ?? const {});
+    final labelsRaw = (j['customLabels'] as Map<String, dynamic>? ?? const {});
+    final homePos = (j['homePosition'] as Map<String, dynamic>? ?? const {});
+    
     final map = <String, ({int row, int col})>{};
     for (final e in buttonRaw.entries) {
       final v = e.value as Map<String, dynamic>;
       map[e.key] = (row: (v['row'] as num).toInt(), col: (v['col'] as num).toInt());
     }
+
     return DeviceMappingProfile(
       rows: (grid['rows'] as num?)?.toInt() ?? 3,
       cols: (grid['cols'] as num?)?.toInt() ?? 3,
@@ -54,6 +69,9 @@ class DeviceMappingProfile {
       pitchX: (grid['pitchX'] as num?)?.toDouble() ?? 1,
       pitchY: (grid['pitchY'] as num?)?.toDouble() ?? 1,
       buttonMap: map,
+      customLabels: labelsRaw.cast<String, String>(),
+      homeRow: (homePos['row'] as num?)?.toInt() ?? 0,
+      homeCol: (homePos['col'] as num?)?.toInt() ?? 0,
       imagePath: j['imagePath'] as String?,
     );
   }
@@ -69,6 +87,8 @@ class DeviceMappingProfile {
         pitchX: 1,
         pitchY: 1,
         buttonMap: const {},
+        homeRow: 0,
+        homeCol: 0,
       );
 }
 
