@@ -6,8 +6,11 @@ import '../../control/image_control_screen.dart';
 import '../../control/course_control_screen.dart';
 import '../../mapping/manual_mapping_screen.dart';
 import '../../../services/device_mapping_service.dart';
+import '../../../services/ble_service.dart';
+import '../../../services/active_device_service.dart';
+import '../../../services/tts_service.dart';
 
-class ControlModeSheet extends StatelessWidget {
+class ControlModeSheet extends StatefulWidget {
   const ControlModeSheet({
     super.key,
     required this.deviceName,
@@ -18,6 +21,51 @@ class ControlModeSheet extends StatelessWidget {
   final String deviceName;
   final String deviceId;
   final IconData deviceIcon;
+
+  @override
+  State<ControlModeSheet> createState() => _ControlModeSheetState();
+}
+
+class _ControlModeSheetState extends State<ControlModeSheet> {
+  final TtsService _tts = TtsService();
+  bool _isConnecting = false;
+  bool _connectionFailed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _autoConnectBle();
+  }
+
+  Future<void> _autoConnectBle() async {
+    final bleId = await ActiveDeviceService.instance.getActiveBleId();
+    if (bleId == null || bleId.isEmpty) return;
+
+    if (BleService.instance.isConnected && BleService.instance.connectedDeviceId == bleId) {
+      return;
+    }
+
+    setState(() {
+      _isConnecting = true;
+      _connectionFailed = false;
+    });
+
+    _tts.speak('${widget.deviceName} 하드웨어에 연결 중입니다.', source: 'ControlModeSheet');
+    
+    final ok = await BleService.instance.ensureConnected(bleId);
+    
+    if (mounted) {
+      setState(() {
+        _isConnecting = false;
+        _connectionFailed = !ok;
+      });
+      if (ok) {
+        _tts.speak('연결되었습니다.', source: 'ControlModeSheet');
+      } else {
+        _tts.speak('연결에 실패했습니다. 하드웨어가 켜져 있는지 확인해 주세요.', source: 'ControlModeSheet');
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,10 +93,10 @@ class ControlModeSheet extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(deviceIcon, color: const Color(0xFFFFEB00), size: 32 * rs),
+              Icon(widget.deviceIcon, color: const Color(0xFFFFEB00), size: 32 * rs),
               SizedBox(width: 12 * rs),
               Text(
-                deviceName,
+                widget.deviceName,
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 22 * rs,
@@ -57,6 +105,34 @@ class ControlModeSheet extends StatelessWidget {
               ),
             ],
           ),
+          if (_isConnecting) ...[
+            SizedBox(height: ResponsiveScale.v(context, 12)),
+            const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 16, height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFFEB00)),
+                ),
+                SizedBox(width: 8),
+                Text('블루투스 연결 중...', style: TextStyle(color: Color(0xFFFFEB00), fontSize: 13)),
+              ],
+            ),
+          ] else if (_connectionFailed) ...[
+            SizedBox(height: ResponsiveScale.v(context, 12)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 16),
+                const SizedBox(width: 8),
+                const Text('연결 실패', style: TextStyle(color: Colors.redAccent, fontSize: 13)),
+                TextButton(
+                  onPressed: _autoConnectBle,
+                  child: const Text('재시도', style: TextStyle(color: Colors.white70, fontSize: 13, decoration: TextDecoration.underline)),
+                ),
+              ],
+            ),
+          ],
           SizedBox(height: ResponsiveScale.v(context, 8)),
           Text(
             '제어 방식을 선택하세요',
@@ -77,8 +153,8 @@ class ControlModeSheet extends StatelessWidget {
               Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => VoiceListeningScreen(
-                    deviceId: deviceId,
-                    deviceName: deviceName,
+                    deviceId: widget.deviceId,
+                    deviceName: widget.deviceName,
                   ),
                 ),
               );
@@ -93,13 +169,13 @@ class ControlModeSheet extends StatelessWidget {
             label: '이미지로 제어 (직관적)',
             onPressed: () async {
               Navigator.of(context).pop();
-              final profile = await DeviceMappingService.instance.load(deviceId);
+              final profile = await DeviceMappingService.instance.load(widget.deviceId);
               if (!context.mounted) return;
               Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => ImageControlScreen(
-                    deviceId: deviceId,
-                    deviceName: deviceName,
+                    deviceId: widget.deviceId,
+                    deviceName: widget.deviceName,
                     imagePath: profile.imagePath,
                   ),
                 ),
@@ -117,8 +193,8 @@ class ControlModeSheet extends StatelessWidget {
               Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => CourseControlScreen(
-                    deviceId: deviceId,
-                    deviceName: deviceName,
+                    deviceId: widget.deviceId,
+                    deviceName: widget.deviceName,
                   ),
                 ),
               );
@@ -136,7 +212,7 @@ class ControlModeSheet extends StatelessWidget {
                     Navigator.of(context).pop();
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => RemoteControlScreen(deviceName: deviceName),
+                        builder: (_) => RemoteControlScreen(deviceName: widget.deviceName),
                       ),
                     );
                   },
