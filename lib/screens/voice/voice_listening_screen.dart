@@ -511,6 +511,19 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       }
       await Future<void>.delayed(const Duration(milliseconds: 800));
     }
+
+    // 모든 명령 수행 후 홈 위치로 복귀 (2초 대기 후 이동)
+    await Future<void>.delayed(const Duration(seconds: 2));
+    await BleService.instance.sendPress(
+      x: profile.homeCol,
+      y: profile.homeRow,
+      cols: profile.cols,
+      deviceId: deviceId,
+    );
+    AppLogger.info('voice.home_return', {
+      'row': profile.homeRow,
+      'col': profile.homeCol,
+    });
   }
 
   Future<void> _handleCommand(
@@ -534,6 +547,12 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     });
 
     switch (action) {
+      case 'IMMEDIATE_PRESS':
+        await _sendBleSequence(commands);
+        FeedbackService.instance.vibrateSuccess();
+        await _speak(message);
+        return;
+        
       case 'EMERGENCY_STOP':
         FeedbackService.instance.vibrateError(); // 강한 진동
         await _speak(message.isNotEmpty ? message : '중단합니다.');
