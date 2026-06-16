@@ -8,6 +8,7 @@ import '../../services/active_device_service.dart';
 import '../../services/ai_backend_service.dart';
 import '../../services/tts_service.dart';
 import '../../services/ble_service.dart';
+import '../../services/microwave_command_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../../widgets/ble_loading_overlay.dart';
@@ -40,6 +41,7 @@ class PhotoMappingScreen extends StatefulWidget {
 
 class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
   final List<ButtonPoint> _points = [];
+  Offset? _redMarkerPosition;
   final GlobalKey _imageKey = GlobalKey();
   final DeviceService _deviceService = MockDeviceService();
   final TtsService _tts = TtsService();
@@ -78,6 +80,15 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
     final relativeX = (localPosition.dx / renderBox.size.width).clamp(0.0, 1.0);
     final relativeY = (localPosition.dy / renderBox.size.height).clamp(0.0, 1.0);
 
+    // If red marker not set, prioritize setting it
+    if (_redMarkerPosition == null) {
+      setState(() {
+        _redMarkerPosition = Offset(relativeX, relativeY);
+      });
+      _tts.speak('기준점이 설정되었습니다.');
+      return;
+    }
+
     setState(() {
       if (_points.length < 9) {
         _points.add(ButtonPoint(
@@ -104,6 +115,8 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
     String message = '매핑 저장 완료';
     try {
       debugPrint('[BLE_DEBUG] Sending SET_GRID to device: rows=$rows, cols=$cols, ox=${newProfile.originX}, oy=${newProfile.originY}, px=${newProfile.pitchX}, py=${newProfile.pitchY}');
+      
+      // 1. Send SET_GRID command
       final ok = await BleService.instance.sendSetGrid(
         rows: newProfile.rows,
         cols: newProfile.cols,
@@ -113,21 +126,33 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
         pitchY: newProfile.pitchY,
         deviceId: deviceId,
       );
+
       if (ok) {
-        int verified = 0;
-        final entries = map.entries.toList();
-        final toVerify = entries.take(3).toList();
-        for (final e in toVerify) {
-          final r = e.value.row;
-          final col = e.value.col;
-          debugPrint('[BLE_DEBUG] Sending PRESS: ${e.key} at (x=$col, y=$r)');
-          final pressOk = await BleService.instance.sendPress(x: col, y: r, cols: cols, deviceId: deviceId);
-          if (pressOk) verified++;
-          await Future<void>.delayed(const Duration(milliseconds: 500));
+        // 2. Wait for hardware confirmation (e.g., 'GRID_OK')
+        final response = await BleService.instance.readResponse(timeout: const Duration(seconds: 5));
+        
+        if (response != null && response.contains('GRID_OK')) {
+          debugPrint('[BLE_DEBUG] SET_GRID confirmed by hardware: $response');
+          
+          int verified = 0;
+          final entries = map.entries.toList();
+          final toVerify = entries.take(3).toList();
+          for (final e in toVerify) {
+            final r = e.value.row;
+            final col = e.value.col;
+            debugPrint('[BLE_DEBUG] Sending PRESS: ${e.key} at (x=$col, y=$r)');
+            final pressOk = await BleService.instance.sendPress(x: col, y: r, cols: cols, deviceId: deviceId);
+            if (pressOk) verified++;
+            await Future<void>.delayed(const Duration(milliseconds: 500));
+          }
+          message += ' · BLE 전송 성공 (검증: $verified/${toVerify.length})';
+          debugPrint('[BLE_DEBUG] Verification complete: $verified/${toVerify.length} presses confirmed');
+          try { await _tts.speak('매핑 저장 및 BLE 그리드 보정 완료. $verified개 버튼을 확인했습니다.', source: 'PhotoMappingScreen', interrupt: true); } catch (_) {}
+        } else {
+          message += ' · 그리드 보정 실패 (응답: $response)';
+          debugPrint('[BLE_DEBUG] SET_GRID not confirmed or timed out: $response');
+          try { await _tts.speak('매핑은 저장되었으나 하드웨어 그리드 보정에 실패했습니다.', source: 'PhotoMappingScreen', interrupt: true); } catch (_) {}
         }
-        message += ' · BLE 전송 성공 (검증: $verified/${toVerify.length})';
-        debugPrint('[BLE_DEBUG] Verification complete: $verified/${toVerify.length} presses confirmed');
-        try { await _tts.speak('매핑 저장 및 BLE 업로드 완료. $verified개 버튼을 확인했습니다.', source: 'PhotoMappingScreen', interrupt: true); } catch (_) {}
       } else {
         message += ' · BLE 업로드 실패';
         debugPrint('[BLE_DEBUG] SET_GRID failed');
@@ -144,40 +169,65 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
 
   Future<void> _loadProfileAndConnect() async {
     try {
-      await DeviceMappingService.instance.load(widget.deviceId);
+      final profile = await DeviceMappingService.instance.load(widget.deviceId);
+      if (profile.buttonMap.isNotEmpty) {
+        final newPoints = <ButtonPoint>[];
+        for (final entry in profile.buttonMap.entries) {
+          final btId = entry.key;
+          final row = entry.value.row;
+          final col = entry.value.col;
+          final label = profile.customLabels[btId] ?? 
+                        MicrowaveCommandService.buttonLabel[btId] ?? 
+                        btId;
+          
+          final x = (col + 0.5) / profile.cols;
+          final y = (row + 0.5) / profile.rows;
+          
+          newPoints.add(ButtonPoint(
+            id: btId,
+            position: Offset(x, y),
+            label: label,
+          ));
+        }
+        setState(() {
+          _points.clear();
+          _points.addAll(newPoints);
+        });
+      }
     } catch (_) {
       // ignore
     }
     // connect to device (mock)
     _deviceService.connect(widget.deviceId);
+  }
 
-    // If an image path is provided and AI backend is configured, request auto-mapping
-    if (widget.imagePath != null && AiBackendService.instance.isConfigured) {
-      setState(() => _isAiAnalyzing = true);
-      try {
-        await _tts.speak('AI가 이미지 분석을 시작합니다. 잠시만 기다려주세요.', source: 'PhotoMappingScreen', interrupt: true);
-        if (!widget.imagePath!.startsWith('http')) {
-          final file = File(widget.imagePath!);
-          if (await file.exists()) {
-            final bytes = await file.readAsBytes();
-            final mime = widget.imagePath!.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
-            final res = await AiBackendService.instance.analyzeMappingImage(imageBytes: bytes, mimeType: mime);
-            _applyAiMappingResult(res);
-          }
+  Future<void> _triggerAiMapping() async {
+    if (widget.imagePath == null || !AiBackendService.instance.isConfigured) return;
+
+    setState(() => _isAiAnalyzing = true);
+    try {
+      await _tts.speak('AI가 이미지 분석을 시작합니다. 잠시만 기다려주세요.', source: 'PhotoMappingScreen', interrupt: true);
+      if (!widget.imagePath!.startsWith('http')) {
+        final file = File(widget.imagePath!);
+        if (await file.exists()) {
+          final bytes = await file.readAsBytes();
+          final mime = widget.imagePath!.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+          final res = await AiBackendService.instance.analyzeMappingImage(imageBytes: bytes, mimeType: mime);
+          _applyAiMappingResult(res);
         }
-      } catch (e) {
-        debugPrint('AI mapping failed: $e');
-        String errMsg = 'AI 분석에 실패했습니다.';
-        if (e.toString().contains('429') || e.toString().contains('할당량')) {
-          errMsg = 'AI 사용량이 초과되었습니다. 잠시 후 다시 시도해주세요.';
-        }
-        await _tts.speak(errMsg, source: 'PhotoMappingScreen', interrupt: true);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errMsg)));
-        }
-      } finally {
-        if (mounted) setState(() => _isAiAnalyzing = false);
       }
+    } catch (e) {
+      debugPrint('AI mapping failed: $e');
+      String errMsg = 'AI 분석에 실패했습니다.';
+      if (e.toString().contains('429') || e.toString().contains('할당량')) {
+        errMsg = 'AI 사용량이 초과되었습니다. 잠시 후 다시 시도해주세요.';
+      }
+      await _tts.speak(errMsg, source: 'PhotoMappingScreen', interrupt: true);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errMsg)));
+      }
+    } finally {
+      if (mounted) setState(() => _isAiAnalyzing = false);
     }
   }
 
@@ -187,6 +237,7 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
     final rows = profile.rows;
     final cols = profile.cols;
     final map = <String, ({int row, int col})>{};
+    final customLabels = <String, String>{};
     final usedIds = <String>{};
     const int maxButtons = 9;
 
@@ -212,6 +263,7 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
       if (btId == null) continue;
       usedIds.add(btId);
       map[btId] = (row: rowIdx, col: colIdx);
+      customLabels[btId] = point.label;
     }
 
     final newProfile = DeviceMappingProfile(
@@ -222,6 +274,7 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
       pitchX: profile.pitchX,
       pitchY: profile.pitchY,
       buttonMap: map,
+      customLabels: customLabels,
       imagePath: widget.imagePath,
     );
 
@@ -386,7 +439,18 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
                   children: [
                     Text('STEP 2: 정밀 매핑', style: TextStyle(fontSize: 13 * rs, fontWeight: FontWeight.w700, color: const Color(0xFFE2C62D))),
                     SizedBox(height: ResponsiveScale.v(context, 4)),
-                    Text('실제 버튼 위치를 터치하세요', style: TextStyle(fontSize: 24 * rs, fontWeight: FontWeight.w900, color: Colors.white)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('실제 버튼 위치를 터치하세요', style: TextStyle(fontSize: 24 * rs, fontWeight: FontWeight.w900, color: Colors.white)),
+                        if (widget.imagePath != null && AiBackendService.instance.isConfigured)
+                          ElevatedButton(
+                            onPressed: _isAiAnalyzing ? null : _triggerAiMapping,
+                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1A1A1A), side: const BorderSide(color: Color(0xFFFFEB00))),
+                            child: Text('AI 분석하기', style: TextStyle(color: Colors.white, fontSize: 12 * rs)),
+                          ),
+                      ],
+                    ),
                     SizedBox(height: ResponsiveScale.v(context, 16)),
                     Expanded(
                       child: ClipRRect(
@@ -419,16 +483,46 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
                               ),
                             LayoutBuilder(
                               builder: (context, constraints) => Stack(
-                                children: _points.asMap().entries.map((entry) {
-                                  final idx = entry.key; final point = entry.value;
-                                  return Positioned(
-                                    left: point.position.dx * constraints.maxWidth - (20 * rs),
-                                    top: point.position.dy * constraints.maxHeight - (20 * rs),
-                                    child: _buildMarker(idx, rs),
-                                  );
-                                }).toList(),
+                                children: [
+                                  if (_redMarkerPosition != null)
+                                    Positioned(
+                                      left: _redMarkerPosition!.dx * constraints.maxWidth - (20 * rs),
+                                      top: _redMarkerPosition!.dy * constraints.maxHeight - (20 * rs),
+                                      child: GestureDetector(
+                                        onPanUpdate: (details) {
+                                          setState(() {
+                                            _redMarkerPosition = Offset(
+                                              (_redMarkerPosition!.dx + details.delta.dx / constraints.maxWidth).clamp(0.0, 1.0),
+                                              (_redMarkerPosition!.dy + details.delta.dy / constraints.maxHeight).clamp(0.0, 1.0),
+                                            );
+                                          });
+                                        },
+                                        child: Container(
+                                          width: 40 * rs, height: 40 * rs,
+                                          decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.8), shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2 * rs)),
+                                          child: Icon(Icons.gps_fixed_rounded, color: Colors.white, size: 20 * rs),
+                                        ),
+                                      ),
+                                    ),
+                                  ..._points.asMap().entries.map((entry) {
+                                    final idx = entry.key; final point = entry.value;
+                                    return Positioned(
+                                      left: point.position.dx * constraints.maxWidth - (20 * rs),
+                                      top: point.position.dy * constraints.maxHeight - (20 * rs),
+                                      child: _buildMarker(idx, rs),
+                                    );
+                                  }),
+                                ],
                               ),
                             ),
+                            if (_redMarkerPosition == null)
+                              Center(
+                                child: Container(
+                                  padding: EdgeInsets.all(16 * rs),
+                                  decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(12 * rs)),
+                                  child: Text('가전기기의 기준점(0,0)을 터치하여 설정하세요.', style: TextStyle(color: Colors.white, fontSize: 16 * rs, fontWeight: FontWeight.bold)),
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -465,9 +559,53 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
     );
   }
 
+  void _editPointLabel(int index) async {
+    final point = _points[index];
+    final controller = TextEditingController(text: point.label);
+    
+    final newLabel = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: const Text('버튼 이름 설정', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: '예: 시작, 30초, 해동',
+            hintStyle: TextStyle(color: Colors.white30),
+            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFFFEB00))),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('취소')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFEB00)),
+            child: const Text('확인', style: TextStyle(color: Colors.black)),
+          ),
+        ],
+      ),
+    );
+
+    if (newLabel != null && newLabel.isNotEmpty) {
+      setState(() {
+        _points[index] = ButtonPoint(
+          id: point.id,
+          position: point.position,
+          label: newLabel,
+        );
+      });
+      _tts.speak('$newLabel로 변경되었습니다.');
+    }
+  }
+
   Widget _buildMarker(int index, double rs) {
+    final point = _points[index];
     return GestureDetector(
       onTap: () => _removePoint(index),
+      onLongPress: () => _editPointLabel(index),
       child: Column(children: [
         Container(
           width: 40 * rs, height: 40 * rs,
@@ -481,7 +619,7 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
         Container(
           padding: EdgeInsets.symmetric(horizontal: 6 * rs, vertical: 2 * rs),
           decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(4 * rs)),
-          child: Text('삭제', style: TextStyle(color: Colors.white, fontSize: 10 * rs)),
+          child: Text(point.label, style: TextStyle(color: Colors.white, fontSize: 10 * rs)),
         ),
       ]),
     );

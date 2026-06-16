@@ -22,6 +22,8 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
   final _oyCtrl = TextEditingController(text: '0.0');
   final _pxCtrl = TextEditingController(text: '20.0');
   final _pyCtrl = TextEditingController(text: '20.0');
+  final _hrCtrl = TextEditingController(text: '0');
+  final _hcCtrl = TextEditingController(text: '0');
 
   bool _isUploading = false;
 
@@ -42,6 +44,8 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
       _oyCtrl.text = profile.originY.toStringAsFixed(1);
       _pxCtrl.text = profile.pitchX.toStringAsFixed(1);
       _pyCtrl.text = profile.pitchY.toStringAsFixed(1);
+      _hrCtrl.text = profile.homeRow.toString();
+      _hcCtrl.text = profile.homeCol.toString();
     });
   }
 
@@ -65,6 +69,8 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
       final oy = double.tryParse(_oyCtrl.text) ?? 0.0;
       final px = double.tryParse(_pxCtrl.text) ?? 20.0;
       final py = double.tryParse(_pyCtrl.text) ?? 20.0;
+      final hr = int.tryParse(_hrCtrl.text) ?? 0;
+      final hc = int.tryParse(_hcCtrl.text) ?? 0;
 
       final newProfile = DeviceMappingProfile(
         rows: rows,
@@ -73,6 +79,8 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
         originY: oy,
         pitchX: px,
         pitchY: py,
+        homeRow: hr,
+        homeCol: hc,
         buttonMap: const {}, // 수동 매핑에서는 그리드 기반 기본 매핑 사용
       );
 
@@ -176,6 +184,16 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
                 Expanded(child: _buildTextField('가로 간격 (PitchX)', _pxCtrl, rs)),
                 SizedBox(width: 12 * rs),
                 Expanded(child: _buildTextField('세로 간격 (PitchY)', _pyCtrl, rs)),
+              ],
+            ),
+            SizedBox(height: 20 * rs),
+            Text('홈(대기) 위치 (그리드 인덱스)', style: TextStyle(color: Colors.white, fontSize: 18 * rs, fontWeight: FontWeight.bold)),
+            SizedBox(height: 12 * rs),
+            Row(
+              children: [
+                Expanded(child: _buildTextField('홈 행 (Home Row)', _hrCtrl, rs)),
+                SizedBox(width: 12 * rs),
+                Expanded(child: _buildTextField('홈 열 (Home Col)', _hcCtrl, rs)),
               ],
             ),
             SizedBox(height: 32 * rs),
