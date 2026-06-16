@@ -7,6 +7,82 @@
 
 ---
 
+## 2026-06-16 — 기기 등록/매핑 플로우 개편 및 기술 부채
+
+### 기기 등록 및 매핑 플로우 개선 계획 (TODO)
+사용자 등록 및 제어의 신뢰성을 높이기 위해 다음과 같은 로직으로 개편 예정:
+
+1. **[TODO] 등록/매핑 프로세스 분리 및 고도화 (`DeviceConnectScreen`)**
+   - 현재: [기기 등록] → [별도 매핑] 분리됨. (유지)
+   - 변경: 
+     - 기기 등록(`DeviceConnectScreen`)과 매핑(`PhotoMappingScreen`) 과정을 명확히 분리.
+     - 기기 등록 시 모터 동작 방지.
+
+2. **[COMPLETED] 매핑 좌표 불일치 이슈 해결**
+   - 변경: 매핑 단계에서 `SET_GRID` 명령을 하드웨어에 전송하여 하드웨어가 물리적으로 그리드 위치를 확인(시각적/물리적 확인)하는 보정 과정 추가.
+   - 구현 완료: `BleService`에 `readResponse` 추가 및 `PhotoMappingScreen`의 `_executeBleUpload`에서 `SET_GRID` 전송 후 `GRID_OK` 응답 대기/검증 로직 구현.
+
+3. **[COMPLETED] 하드웨어 움직임 불안정 이슈 해결 기초 작업 및 홈(Homing) 로직 추가**
+   - 변경: 
+     - 모터 가속도 및 안정성 분석 시작.
+     - 하드웨어 홈(Homing) 명령(`HOME`)을 `BleService`에 추가하여 작업 완료 후 원점으로 복귀하도록 로직 설계.
+   - 구현 완료: `BleService`에 `sendHoming` 추가.
+
+4. **[COMPLETED] 매핑 화면(`PhotoMappingScreen`) 초기 위치 보정 기능 구현**
+   - 기능: 매핑 시작 시 하드웨어의 초기 위치(Red Marker/Origin Point)를 캘리브레이션하는 과정 추가.
+   - 구현 완료: `_redMarkerPosition` 상태 추가, UI에 Red Marker 표시 및 드래그를 통한 기준점(0,0) 설정 로직 구현. 터치 시 기준점 우선 설정.
+
+5. **[COMPLETED] 기기-ESP32 간 동적 연결 전환 시스템 구현**
+   - 기능: 가전기기 선택 시 자동으로 해당 기기에 할당된 ESP32 하드웨어로 연결을 전환.
+   - 구현 완료: `ActiveDeviceService.setActiveDevice` 호출 시 자동으로 `BleService.ensureConnected`를 트리거하여 다이내믹 연결 전환 구현.
+
+6. **[PARTIALLY COMPLETED] 하드웨어 움직임 불안정 이슈 해결 (펌웨어 보정 및 Latency 측정)**
+   - 문제: 명령 전송 시 움직임이 부자연스럽거나 타겟을 벗어남.
+   - 조치: 
+     - 앱에서 전송하는 좌표값의 정밀도 향상.
+     - 기기 상태 모니터링 강화를 위해 `ble_log_screen.dart`의 로그를 기반으로 명령 전송과 실제 모터 동작 사이의 시간 차(`Latency`) 측정.
+   - 구현 완료: `BleService.sendPress`에 레이턴시 측정 및 `AppLogger` 기록 기능 구현. (펌웨어 가속도 보정은 차후 하드웨어 개발자와 협의)
+
+7. **[COMPLETED] 음성 명령 기반 즉시 제어 구현**
+   - 기능: "1번 눌러줘"와 같은 명령 수신 시 특정 좌표/버튼으로 즉시 매핑되는 기능.
+   - 구현 완료: `MicrowaveCommandService`에 정규식 기반 `IMMEDIATE_PRESS` 파싱 로직 추가 및 `VoiceListeningScreen`에서 해당 액션 처리 로직 구현.
+
+8. **[COMPLETED] 매핑 화면(`PhotoMappingScreen`) UX 개선**
+   - UI: 상단 헤더에 현재 매핑 상태 및 가이드 문구 표시.
+   - 인터랙션 개선:
+     - 탭(Tap): 매핑된 버튼 삭제.
+     - 롱프레스(Long Press): 매핑된 버튼 정보 수정(라벨/좌표).
+   - 구현 완료: `_buildMarker`에서 `GestureDetector` 이벤트를 탭(삭제)과 롱프레스(수정)로 변경 적용. 헤더 가이드는 기존 UI 구조를 활용.
+
+---
+
+## 2026-06-16 — 자동 BLE 매핑 및 접근성 연결 고도화
+
+### 자동 BLE 매핑 시스템 구현
+- **목적**: 시각장애인 사용자가 기기 제어 시 매번 블루투스를 수동으로 연결해야 하는 불편함을 해소하고, "가전기기 - 전용 하드웨어(ESP32)" 간의 1:1 관계를 자동화함.
+- **변경 내용**:
+  - **데이터 모델 확장**: `home_devices` 데이터 구조에 `bleId`(Mac Address 등) 및 `bleName` 필드를 추가하여 가전별 전용 하드웨어를 기억하도록 함.
+  - `lib/services/active_device_service.dart`: 활성 기기 세션 관리 시 BLE 정보(`bleId`, `bleName`)를 함께 저장하고 불러올 수 있도록 확장.
+  - `lib/services/ble_service.dart`: `ensureConnected(deviceId)` 메서드 추가. 이미 연결된 기기인 경우 불필요한 재연결을 방지하고 효율적으로 상태 유지.
+
+### 기기 등록 및 관리 UI 개선
+- **등록 프로세스 고도화 (`DeviceConnectScreen`)**:
+  - 블루투스 연결 성공 시 즉시 "이 기기를 어떤 가전으로 등록할까요?" 다이얼로그 노출.
+  - 기기 유형(전자레인지, 세탁기 등) 선택 시 해당 하드웨어 ID가 자동으로 매핑되어 저장됨.
+- **하드웨어 관리 콘솔 신규 구축 (`DeviceManagementScreen`)**:
+  - 설정 메뉴에 '하드웨어(ESP32) 관리' 항목 추가.
+  - 등록된 모든 가전 목록과 연결된 하드웨어 상태를 한눈에 확인하고, 하드웨어 교체나 재페어링을 손쉽게 수행할 수 있는 인터페이스 제공.
+
+### 사용자 제어 자동화 (`ControlModeSheet`)
+- **자동 연결 플로우**: 홈 화면에서 기기 카드 선택 시 백엔드에서 즉시 해당 기기에 할당된 `bleId`로 연결 시도.
+- **음성 피드백 강화**: "전자레인지 하드웨어에 연결 중입니다", "연결되었습니다" 등 실시간 진행 상태를 TTS로 안내하여 시각장애인 사용자의 불안감 해소.
+
+### 검증
+- `flutter analyze`: 통과
+- `active_device_service_test.dart` 업데이트를 통한 데이터 정합성 검증 완료.
+
+---
+
 ## 2026-06-14 — 하드웨어 프로토콜 정렬 및 AI 고도화
 
 ### 하드웨어 통신 프로토콜 정렬
