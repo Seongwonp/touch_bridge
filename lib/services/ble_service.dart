@@ -377,10 +377,10 @@ class BleService {
       final res = await _ackCompleter!.future.timeout(timeout);
       return res;
     } catch (e) {
-      _addLog('전송/응답 타임아웃: $e');
+      _addLog('전송/응답 타임아웃 또는 오류: $e');
       return 'ERROR:TIMEOUT';
     } finally {
-      _ackCompleter = null;
+      _ackCompleter = null; // 타임아웃이나 에러 발생 시 반드시 null 처리하여 다음 명령 방해 금지
     }
   }
 
@@ -459,6 +459,14 @@ class BleService {
     // JSON 대신 하드웨어가 직접 인식하는 텍스트 명령 전송
     final cmd = '${HardwareProtocol.uartSetGridPrefix} $rows $cols $ox10 $oy10 $px10 $py10';
     return await sendRaw(cmd);
+  }
+
+  Future<String?> sendGetStatus() async {
+    // 하드웨어 상태를 요청하는 텍스트 명령 '$$' 전송
+    if (await sendRaw('\$\$')) {
+      return await readResponse(timeout: const Duration(seconds: 2));
+    }
+    return null;
   }
 
   Future<bool> sendSetServo({

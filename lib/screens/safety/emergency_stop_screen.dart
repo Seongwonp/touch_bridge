@@ -175,7 +175,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                     padding: EdgeInsets.all(24 * rs),
                     child: Column(
                       children: [
-                        const Spacer(),
+                        SizedBox(height: 20 * rs),
                         Text(
                           '남은 시간',
                           style: TextStyle(
@@ -186,16 +186,19 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                           ),
                         ),
                         SizedBox(height: ResponsiveScale.v(context, 8)),
-                        Text(
-                          _formatMMSS(_secondsLeft),
-                          style: TextStyle(
-                            color: const Color(0xFFFDE047),
-                            fontSize: 90 * rs,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -2,
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            _formatMMSS(_secondsLeft),
+                            style: TextStyle(
+                              color: const Color(0xFFFDE047),
+                              fontSize: 90 * rs,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: -2,
+                            ),
                           ),
                         ),
-                        const Spacer(),
+                        SizedBox(height: 24 * rs),
                         Container(
                           width: double.infinity,
                           padding: EdgeInsets.symmetric(
@@ -251,7 +254,10 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                               onLongPressCancel: _onHoldEnd,
                               child: Container(
                                 width: double.infinity,
-                                height: ResponsiveScale.v(context, 200),
+                                constraints: BoxConstraints(
+                                  minHeight: 160 * rs,
+                                  maxHeight: 220 * rs,
+                                ),
                                 decoration: BoxDecoration(
                                   gradient: const LinearGradient(
                                     colors: [
@@ -274,14 +280,15 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                                   children: [
                                     Icon(
                                       Icons.back_hand,
-                                      size: 80 * rs,
+                                      size: 70 * rs,
                                       color: Colors.white,
                                     ),
+                                    SizedBox(height: 8 * rs),
                                     Text(
                                       '길게 눌러 중단',
                                       style: TextStyle(
                                         color: Colors.white,
-                                        fontSize: 32 * rs,
+                                        fontSize: 28 * rs,
                                         fontWeight: FontWeight.w900,
                                       ),
                                     ),
@@ -291,7 +298,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                             ),
                           ],
                         ),
-                        const Spacer(),
+                        SizedBox(height: 20 * rs),
                       ],
                     ),
                   ),

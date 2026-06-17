@@ -35,8 +35,8 @@ class MicrowaveCommandService {
 
   static (int row, int col)? btnToGrid(String btn) {
     return switch (btn) {
-      'BT-01' => (0, 0),
-      'BT-02' => (0, 1),
+      'BT-01' => (22, 2), // row/col을 물리 좌표로 변환할 때 사용하므로 임시 설정
+      'BT-02' => (22, 9),
       'BT-03' => (0, 2),
       'BT-04' => (1, 0),
       'BT-05' => (1, 1),
@@ -48,10 +48,26 @@ class MicrowaveCommandService {
     };
   }
 
+  // 물리 좌표 전송을 위한 헬퍼 추가
+    static (double x, double y)? btnToPhysical(String btn) {
+    return switch (btn) {
+      'BT-01' => (2.0, 20.0),
+      'BT-02' => (8.0, 20.0),
+      'BT-03' => (17.0, 20.0),
+      'BT-04' => (2.0, 14.0),
+      'BT-05' => (8.0, 14.0),
+      'BT-06' => (17.0, 14.0),
+      'BT-07' => (2.0, 3.0),
+      'BT-08' => (8.0, 3.0),
+      'BT-09' => (17.0, 3.0),
+      _ => null,
+    };
+  }
+
   static Map<String, dynamic>? checkSimpleRules(String text) {
     final t = text.replaceAll(' ', '');
-    // 새로운 규칙 추가: 'n번 눌러줘' 또는 'n번 버튼'
-    final pressMatch = RegExp(r'(\d+)번(눌러줘|눌러|버튼)').firstMatch(t);
+    // 새로운 규칙 추가: 'n번 눌러줘' 또는 'n번 버튼' 또는 그냥 'n번'
+    final pressMatch = RegExp(r'(\d+)번(눌러줘|눌러|버튼|)?').firstMatch(t);
     if (pressMatch != null) {
       final btnNum = pressMatch.group(1);
       if (btnNum != null) {

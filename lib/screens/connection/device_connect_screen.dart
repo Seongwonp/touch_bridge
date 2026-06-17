@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -7,12 +6,13 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/tts_service.dart';
-import '../../services/active_device_service.dart';
 import '../../services/ble_service.dart';
+import '../../services/active_device_service.dart';
 import '../../services/ai_backend_service.dart';
 import '../../services/device_mapping_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
+import '../home/appliance_selection_screen.dart';
 import 'qr_scan_screen.dart';
 
 int _iconCodePointForType(String type) {
@@ -37,19 +37,150 @@ class DeviceConnectScreen extends StatefulWidget {
 
 class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
   final TtsService _tts = TtsService();
-  final Random _random = Random();
-  bool _isScanning = false;
-  bool _isConnecting = false;
-  String _statusText = '연결 가능한 기기 감지됨';
-  String _hubName = 'ESP32 Smart Hub';
+  bool _scanning = false;
   bool _connected = false;
-
+  String _statusMessage = '주변 기기를 검색합니다.';
   static const _prefKeyDevices = 'home_devices';
 
+  @override
+  void initState() {
+    super.initState();
+    _checkPermissions();
+  }
+
+  Future<void> _checkPermissions() async {
+    if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS)) {
+      await [
+        Permission.bluetoothScan,
+        Permission.bluetoothConnect,
+        Permission.location,
+        Permission.camera,
+      ].request();
+    }
+  }
+
+  Future<void> _onBluetoothConnectTap() async {
+    setState(() {
+      _scanning = true;
+      _statusMessage = '주변 기기를 검색 중입니다...';
+    });
+
+    final devices = await BleService.instance.scan(timeout: const Duration(seconds: 5));
+    
+    if (!mounted) return;
+    setState(() {
+      _scanning = false;
+      _statusMessage = devices.isEmpty ? '검색된 기기가 없습니다.' : '기기를 선택하세요.';
+    });
+
+    if (devices.isEmpty) {
+      _tts.speak('주변에 연결 가능한 기기가 없습니다.', source: 'DeviceConnectScreen');
+      return;
+    }
+
+    final selected = await showModalBottomSheet<BleDeviceInfo>(
+      context: context,
+      backgroundColor: const Color(0xFF111111),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('주변 기기 목록', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 20),
+            ...devices.map((d) => ListTile(
+              leading: const Icon(Icons.bluetooth, color: Color(0xFFFFEB00)),
+              title: Text(d.name, style: const TextStyle(color: Colors.white)),
+              subtitle: Text('RSSI: ${d.rssi} dBm', style: const TextStyle(color: Colors.white54)),
+              onTap: () => Navigator.pop(ctx, d),
+            )),
+          ],
+        ),
+      ),
+    );
+
+    if (selected != null) {
+      _tts.speak('기기 연결을 시도합니다.', source: 'DeviceConnectScreen');
+      final ok = await BleService.instance.connect(selected.id);
+      
+      if (mounted) {
+        if (ok) {
+          setState(() {
+            _connected = true;
+            _statusMessage = 'BLE 연결 완료';
+          });
+          
+          _tts.speak('연결에 성공했습니다. 이제 이 하드웨어에 등록할 가전 기기를 선택해 주세요.', source: 'DeviceConnectScreen');
+          
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => ApplianceSelectionScreen(
+                bleId: selected.id,
+                bleName: selected.name,
+              ),
+            ),
+          );
+        } else {
+          _tts.speak('연결에 실패했습니다. 다시 시도해 주세요.', source: 'DeviceConnectScreen');
+        }
+      }
+    }
+  }
+
+  Future<void> _onQrScanTap() async {
+    final result = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const QrScanScreen()),
+    );
+
+    if (result != null && result.isNotEmpty) {
+      if (result.startsWith('http')) {
+        _tts.speak('지원되지 않는 QR 형식입니다.');
+        return;
+      }
+      await _processCloudDeviceId(result);
+    }
+  }
+
+  Future<void> _onManualInputTap() async {
+    final controller = TextEditingController();
+    final code = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF111111),
+        title: const Text('기기 코드 입력', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: controller,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: '6자리 기기 코드 (예: MW001A)',
+            hintStyle: TextStyle(color: Colors.white30),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('취소')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()), child: const Text('확인')),
+        ],
+      ),
+    );
+
+    if (code != null && code.isNotEmpty) {
+      await _processCloudDeviceId(code);
+    }
+  }
+
+  Future<void> _onNfcTagTap() async {
+    _tts.speak('NFC 태그를 휴대폰 뒷면에 가까이 대주세요.');
+    // NFC 연동 로직 (NfcManager 등을 사용)
+    await Future.delayed(const Duration(seconds: 3));
+    _tts.speak('NFC 태그를 찾을 수 없습니다.');
+  }
+
   String _newDeviceId(String prefix) {
+    final safe = prefix.replaceAll(RegExp(r'\s+'), '_');
     final ts = DateTime.now().microsecondsSinceEpoch;
-    final suffix = _random.nextInt(1 << 20).toRadixString(16);
-    return '${prefix}_$ts$suffix';
+    return '${safe}_$ts';
   }
 
   Future<void> _registerDevice(
@@ -125,141 +256,6 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
     }
   }
 
-  Future<bool> _ensureBlePermissions() async {
-    if (defaultTargetPlatform == TargetPlatform.iOS) {
-      final status = await Permission.bluetooth.request();
-      if (!status.isGranted) {
-        _tts.speak('블루투스 권한이 필요합니다.', source: 'DeviceConnectScreen');
-        return false;
-      }
-      return true;
-    }
-
-    if (defaultTargetPlatform != TargetPlatform.android) return true;
-
-    final statuses = await [
-      Permission.bluetoothScan,
-      Permission.bluetoothConnect,
-      Permission.locationWhenInUse,
-    ].request();
-
-    final granted = statuses.values.every((status) => status.isGranted);
-    if (!granted) _tts.speak('블루투스 권한이 필요합니다.', source: 'DeviceConnectScreen');
-    return granted;
-  }
-
-  Future<void> _onBluetoothConnectTap() async {
-    if (_isScanning || _isConnecting) return;
-    final allowed = await _ensureBlePermissions();
-    if (!allowed) return;
-
-    setState(() {
-      _isScanning = true;
-      _statusText = '검색 중...';
-      _connected = false;
-    });
-    _tts.speak('주변 기기를 검색합니다.', source: 'DeviceConnectScreen');
-
-    final devices = await BleService.instance.scan(timeout: const Duration(seconds: 5));
-
-    if (!mounted) return;
-    setState(() {
-      _isScanning = false;
-      _statusText = devices.isEmpty ? '검색된 기기 없음' : '기기 선택 대기 중';
-    });
-
-    if (devices.isEmpty) {
-      _tts.speak('검색된 기기가 없습니다.', source: 'DeviceConnectScreen');
-      return;
-    }
-
-    final selected = await showModalBottomSheet<BleDeviceInfo>(
-      context: context,
-      backgroundColor: const Color(0xFF111111),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => SafeArea(
-        child: ListView.separated(
-          shrinkWrap: true,
-          itemCount: devices.length,
-          separatorBuilder: (_, index) => const Divider(color: Color(0xFF2A2A2A), height: 1),
-          itemBuilder: (_, index) {
-            final d = devices[index];
-            return ListTile(
-              title: Text(d.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-              subtitle: Text(d.id, style: const TextStyle(color: Color(0xFF888888), fontSize: 12)),
-              trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFFFFEB00)),
-              onTap: () => Navigator.of(ctx).pop(d),
-            );
-          },
-        ),
-      ),
-    );
-
-    if (selected == null || !mounted) return;
-
-    setState(() {
-      _isConnecting = true;
-      _statusText = '연결 중...';
-      _hubName = selected.name;
-    });
-    _tts.speak('연결 중입니다.', source: 'DeviceConnectScreen');
-
-    final ok = await BleService.instance.connect(selected.id);
-    if (!mounted) return;
-    setState(() {
-      _isConnecting = false;
-      _connected = ok;
-      _statusText = ok ? '연결 완료' : '연결 실패';
-    });
-    
-    if (ok) {
-      _tts.speak('연결되었습니다. 이 기기를 어떤 가전제품으로 등록할까요?', source: 'DeviceConnectScreen');
-      
-      // 기기 유형 선택 다이얼로그
-      if (mounted) {
-        final type = await showDialog<String>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            backgroundColor: const Color(0xFF1A1A1A),
-            title: const Text('기기 유형 선택', style: TextStyle(color: Colors.white)),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.microwave_rounded, color: Color(0xFFFFEB00)),
-                  title: const Text('전자레인지', style: TextStyle(color: Colors.white)),
-                  onTap: () => Navigator.pop(ctx, '전자레인지'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.local_laundry_service_rounded, color: Color(0xFFFFEB00)),
-                  title: const Text('세탁기', style: TextStyle(color: Colors.white)),
-                  onTap: () => Navigator.pop(ctx, '세탁기'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.devices_rounded, color: Color(0xFFFFEB00)),
-                  title: const Text('기타 기기', style: TextStyle(color: Colors.white)),
-                  onTap: () => Navigator.pop(ctx, '기타'),
-                ),
-              ],
-            ),
-          ),
-        );
-
-        if (type != null && mounted) {
-          await _registerDevice(
-            context,
-            name: type,
-            type: type == '전자레인지' ? 'microwave' : (type == '세탁기' ? 'washer' : 'other'),
-            bleId: selected.id,
-            bleName: selected.name,
-          );
-        }
-      }
-    } else {
-      _tts.speak('연결에 실패했습니다.', source: 'DeviceConnectScreen');
-    }
-  }
-
   @override
   void dispose() {
     _tts.stop();
@@ -291,57 +287,63 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
                   padding: EdgeInsets.all(ResponsiveScale.v(context, 16)),
                   decoration: BoxDecoration(
                     color: const Color(0xFF111111),
-                    borderRadius: BorderRadius.circular(16 * rs),
-                    border: Border.all(color: const Color(0xFF2A2A2A)),
+                    borderRadius: BorderRadius.circular(20 * rs),
+                    border: Border.all(color: statusColor.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     children: [
-                      Container(width: 10 * rs, height: 10 * rs, decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle)),
-                      SizedBox(width: ResponsiveScale.v(context, 12)),
-                      Expanded(child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(_hubName, style: TextStyle(fontSize: 17 * rs, fontWeight: FontWeight.w700, color: Colors.white)),
-                          Text(_statusText, style: TextStyle(fontSize: 13 * rs, color: statusColor)),
-                        ],
-                      )),
+                      Container(
+                        padding: EdgeInsets.all(12 * rs),
+                        decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.1), shape: BoxShape.circle),
+                        child: Icon(_scanning ? Icons.sync : (_connected ? Icons.bluetooth_connected : Icons.bluetooth_searching), color: statusColor, size: 24 * rs),
+                      ),
+                      SizedBox(width: 16 * rs),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(_connected ? 'Touch Bridge 허브 연결됨' : '허브를 찾는 중', style: TextStyle(color: Colors.white, fontSize: 16 * rs, fontWeight: FontWeight.bold)),
+                            Text(_statusMessage, style: TextStyle(color: Colors.white54, fontSize: 13 * rs)),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
+                SizedBox(height: ResponsiveScale.v(context, 24)),
                 
-                SizedBox(height: ResponsiveScale.v(context, 12)),
-                _OptionCard(
-                  icon: Icons.qr_code_scanner_rounded,
-                  title: 'QR 코드 스캔',
-                  subtitle: '허브의 QR을 촬영하여 연결',
-                  highlighted: true,
-                  onTap: () async {
-                    _tts.speak('QR 스캔 시작', source: 'DeviceConnectScreen');
-                    final result = await Navigator.push<Map<String, String>>(context, MaterialPageRoute(builder: (_) => const QrScanScreen()));
-                    if (result != null && mounted) {
-                      final id = (result['deviceId'] ?? result['raw'] ?? '').trim();
-                      if (id.isNotEmpty) await _processCloudDeviceId(id);
-                    }
-                  },
-                ),
-                SizedBox(height: ResponsiveScale.v(context, 10)),
-                _OptionCard(
-                  icon: Icons.bluetooth_rounded,
-                  title: '블루투스 연결',
-                  subtitle: '주변 기기 자동 검색 및 페어링',
-                  highlighted: false,
+                _buildConnectOption(
+                  icon: Icons.bluetooth,
+                  title: 'Touch Bridge 허브 연결',
+                  desc: '주변의 ESP32 하드웨어를 검색하여 연결합니다.',
                   onTap: _onBluetoothConnectTap,
+                  rs: rs,
+                  isPrimary: true,
                 ),
-                SizedBox(height: ResponsiveScale.v(context, 10)),
-                Row(
-                  children: [
-                    _SmallAction(title: 'NFC 태그', icon: Icons.nfc_rounded, onTap: () => _tts.speak('NFC 기능', source: 'DeviceConnectScreen')),
-                    SizedBox(width: ResponsiveScale.v(context, 10)),
-                    _SmallAction(title: '수동 입력', icon: Icons.keyboard_rounded, onTap: () => _tts.speak('수동 입력', source: 'DeviceConnectScreen')),
-                  ],
+                SizedBox(height: ResponsiveScale.v(context, 12)),
+                _buildConnectOption(
+                  icon: Icons.qr_code_scanner_rounded,
+                  title: '기기 QR 스캔',
+                  desc: '가전제품에 부착된 QR 코드를 인식합니다.',
+                  onTap: _onQrScanTap,
+                  rs: rs,
                 ),
-                SizedBox(height: ResponsiveScale.v(context, 40)),
-                Center(child: Text('연결에 문제가 있나요? 도움말 보기', style: TextStyle(fontSize: 12 * rs, color: Colors.white30))),
+                SizedBox(height: ResponsiveScale.v(context, 12)),
+                _buildConnectOption(
+                  icon: Icons.nfc_rounded,
+                  title: 'NFC 태그 접촉',
+                  desc: 'NFC 칩에 가까이 대어 정보를 읽습니다.',
+                  onTap: _onNfcTagTap,
+                  rs: rs,
+                ),
+                SizedBox(height: ResponsiveScale.v(context, 12)),
+                _buildConnectOption(
+                  icon: Icons.keyboard_rounded,
+                  title: '기기 코드 직접 입력',
+                  desc: '기기에 적힌 6자리 코드를 입력합니다.',
+                  onTap: _onManualInputTap,
+                  rs: rs,
+                ),
               ],
             ),
           ),
@@ -349,67 +351,46 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
       ),
     );
   }
-}
 
-class _OptionCard extends StatelessWidget {
-  const _OptionCard({required this.icon, required this.title, required this.subtitle, required this.onTap, required this.highlighted});
-  final IconData icon; final String title; final String subtitle; final VoidCallback onTap; final bool highlighted;
-
-  @override
-  Widget build(BuildContext context) {
-    final rs = ResponsiveScale.factor(context);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16 * rs),
-      child: Container(
-        padding: EdgeInsets.all(ResponsiveScale.v(context, 16)),
-        decoration: BoxDecoration(
-          color: highlighted ? const Color(0xFFFFEB00) : const Color(0xFF111111),
-          borderRadius: BorderRadius.circular(16 * rs),
-          border: Border.all(color: highlighted ? Colors.transparent : const Color(0xFF2A2A2A)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 48 * rs, height: 48 * rs,
-              decoration: BoxDecoration(color: highlighted ? Colors.black12 : const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(12 * rs)),
-              child: Icon(icon, color: highlighted ? Colors.black : const Color(0xFFFFEB00), size: 24 * rs),
-            ),
-            SizedBox(width: ResponsiveScale.v(context, 14)),
-            Expanded(child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: TextStyle(fontSize: 18 * rs, fontWeight: FontWeight.w800, color: highlighted ? Colors.black : Colors.white)),
-                Text(subtitle, style: TextStyle(fontSize: 13 * rs, color: highlighted ? Colors.black54 : const Color(0xFF888888))),
-              ],
-            )),
-            Icon(Icons.chevron_right_rounded, color: highlighted ? Colors.black38 : const Color(0xFF555555)),
-          ],
+  Widget _buildConnectOption({
+    required IconData icon,
+    required String title,
+    required String desc,
+    required VoidCallback onTap,
+    required double rs,
+    bool isPrimary = false,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16 * rs),
+        child: Container(
+          padding: EdgeInsets.all(20 * rs),
+          decoration: BoxDecoration(
+            color: isPrimary ? const Color(0xFF1A1A1A) : const Color(0xFF111111),
+            borderRadius: BorderRadius.circular(16 * rs),
+            border: Border.all(color: isPrimary ? const Color(0xFFFFEB00).withValues(alpha: 0.5) : const Color(0xFF222222)),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: isPrimary ? const Color(0xFFFFEB00) : Colors.white, size: 28 * rs),
+              SizedBox(width: 20 * rs),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: TextStyle(color: Colors.white, fontSize: 17 * rs, fontWeight: FontWeight.bold)),
+                    SizedBox(height: 4 * rs),
+                    Text(desc, style: TextStyle(color: const Color(0xFF888888), fontSize: 13 * rs)),
+                  ],
+                ),
+              ),
+              Icon(Icons.arrow_forward_ios_rounded, color: const Color(0xFF333333), size: 16 * rs),
+            ],
+          ),
         ),
       ),
     );
-  }
-}
-
-class _SmallAction extends StatelessWidget {
-  const _SmallAction({required this.title, required this.icon, required this.onTap});
-  final String title; final IconData icon; final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final rs = ResponsiveScale.factor(context);
-    return Expanded(child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14 * rs),
-      child: Container(
-        padding: EdgeInsets.symmetric(vertical: ResponsiveScale.v(context, 14)),
-        decoration: BoxDecoration(color: const Color(0xFF111111), borderRadius: BorderRadius.circular(14 * rs), border: Border.all(color: const Color(0xFF2A2A2A))),
-        child: Column(children: [
-          Icon(icon, color: const Color(0xFF888888), size: 22 * rs),
-          SizedBox(height: ResponsiveScale.v(context, 6)),
-          Text(title, style: TextStyle(fontSize: 13 * rs, fontWeight: FontWeight.w700, color: Colors.white)),
-        ]),
-      ),
-    ));
   }
 }

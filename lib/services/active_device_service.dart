@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'ble_service.dart';
 
@@ -5,10 +7,29 @@ class ActiveDeviceService {
   ActiveDeviceService._();
   static final ActiveDeviceService instance = ActiveDeviceService._();
 
+  // 기기 목록 변경 알림을 위한 노티파이어 추가
+  final ValueNotifier<int> deviceListUpdateNotifier = ValueNotifier<int>(0);
+
+  void notifyDeviceListChanged() {
+    deviceListUpdateNotifier.value++;
+  }
+
+  // 메모리 캐시
+  String? _activeDeviceId;
+  String? _activeDeviceName;
+  String? _activeBleId;
+
   static const _kActiveDeviceId = 'active_device_id';
   static const _kActiveDeviceName = 'active_device_name';
   static const _kActiveBleId = 'active_ble_id';
   static const _kActiveBleName = 'active_ble_name';
+
+  Future<void> init() async {
+    final prefs = await SharedPreferences.getInstance();
+    _activeDeviceId = prefs.getString(_kActiveDeviceId);
+    _activeDeviceName = prefs.getString(_kActiveDeviceName);
+    _activeBleId = prefs.getString(_kActiveBleId);
+  }
 
   Future<void> setActiveDevice({
     required String deviceId,
@@ -16,19 +37,21 @@ class ActiveDeviceService {
     String? bleId,
     String? bleName,
   }) async {
+    _activeDeviceId = deviceId;
+    _activeDeviceName = deviceName;
+    _activeBleId = bleId;
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kActiveDeviceId, deviceId);
-
-    final name = deviceName?.trim();
-    if (name != null && name.isNotEmpty) {
-      await prefs.setString(_kActiveDeviceName, name);
+    
+    if (deviceName != null && deviceName.isNotEmpty) {
+      await prefs.setString(_kActiveDeviceName, deviceName);
     } else {
       await prefs.remove(_kActiveDeviceName);
     }
-
+    
     if (bleId != null) {
       await prefs.setString(_kActiveBleId, bleId);
-      // Automatically attempt to connect to the new ESP32
       await BleService.instance.ensureConnected(bleId);
     } else {
       await prefs.remove(_kActiveBleId);
@@ -42,23 +65,33 @@ class ActiveDeviceService {
     }
   }
 
-  Future<String?> getActiveDeviceId() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_kActiveDeviceId);
-  }
-
-  Future<String?> getActiveDeviceName() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_kActiveDeviceName);
-  }
-
-  Future<String?> getActiveBleId() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_kActiveBleId);
-  }
-
+  String? getActiveDeviceId() => _activeDeviceId;
+  String? getActiveDeviceName() => _activeDeviceName;
+  String? getActiveBleId() => _activeBleId;
+  
   Future<String?> getActiveBleName() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_kActiveBleName);
+  }
+
+  /// 기기가 선택되어 있지 않을 때, 등록된 기기 중 첫 번째를 자동으로 활성화함
+  Future<bool> autoPickFirstDevice() async {
+    if (_activeDeviceId != null && _activeDeviceId!.isNotEmpty) return true;
+    
+    final prefs = await SharedPreferences.getInstance();
+    final jsonStr = prefs.getString('home_devices');
+    if (jsonStr == null) return false;
+    
+    final List<dynamic> devices = jsonDecode(jsonStr);
+    if (devices.isEmpty) return false;
+    
+    final first = devices.first as Map<String, dynamic>;
+    await setActiveDevice(
+      deviceId: first['id'] ?? '',
+      deviceName: first['name'],
+      bleId: first['bleId'],
+      bleName: first['bleName'],
+    );
+    return true;
   }
 }
