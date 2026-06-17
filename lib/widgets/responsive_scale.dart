@@ -5,16 +5,24 @@ class ResponsiveScale {
 
   static double factor(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
-    // Galaxy S20 logical size baseline: 360 x 800.
-    final widthFactor = size.width / 360;
-    final heightFactor = size.height / 800;
+    // Baseline: 375 x 812 (iPhone 13 mini / typical mid-range)
+    final widthFactor = size.width / 375;
+    final heightFactor = size.height / 812;
+    
+    // Use the smaller factor to ensure content fits, 
+    // but allow for more flexible scaling (0.85 to 1.4)
     return (widthFactor < heightFactor ? widthFactor : heightFactor).clamp(
-      0.9,
-      1.15,
+      0.8,
+      1.4,
     );
   }
 
   static double v(BuildContext context, double value) {
+    return value * factor(context);
+  }
+
+  /// Horizontal padding helper
+  static double h(BuildContext context, double value) {
     return value * factor(context);
   }
 }

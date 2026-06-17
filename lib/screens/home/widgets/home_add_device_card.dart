@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../widgets/responsive_scale.dart';
-import '../appliance_selection_screen.dart';
+import '../../connection/device_connect_screen.dart';
 
 class HomeAddDeviceCard extends StatelessWidget {
   const HomeAddDeviceCard({
@@ -25,7 +25,7 @@ class HomeAddDeviceCard extends StatelessWidget {
             HapticFeedback.mediumImpact();
             await Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) => const ApplianceSelectionScreen(),
+                builder: (_) => const DeviceConnectScreen(),
               ),
             );
             onDeviceAdded();

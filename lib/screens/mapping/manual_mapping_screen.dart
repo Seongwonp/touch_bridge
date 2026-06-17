@@ -34,7 +34,7 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
   }
 
   Future<void> _loadCurrentProfile() async {
-    final deviceId = await ActiveDeviceService.instance.getActiveDeviceId();
+    final deviceId = ActiveDeviceService.instance.getActiveDeviceId();
     if (deviceId == null) return;
     final profile = await DeviceMappingService.instance.load(deviceId);
     setState(() {
@@ -50,7 +50,7 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
   }
 
   Future<void> _saveAndUpload() async {
-    final deviceId = await ActiveDeviceService.instance.getActiveDeviceId();
+    final deviceId = ActiveDeviceService.instance.getActiveDeviceId();
     if (deviceId == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -121,7 +121,7 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
   }
 
   Future<void> _testPress(int x, int y) async {
-    final deviceId = await ActiveDeviceService.instance.getActiveDeviceId();
+    final deviceId = ActiveDeviceService.instance.getActiveDeviceId();
     if (deviceId == null) return;
     final cols = int.tryParse(_colsCtrl.text) ?? 3;
     await BleService.instance.sendPress(x: x, y: y, cols: cols, deviceId: deviceId);
