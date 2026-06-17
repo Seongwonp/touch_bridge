@@ -10,7 +10,10 @@ import '../../widgets/top_app_bar.dart';
 import '../mapping/photo_mapping_screen.dart';
 
 class ApplianceSelectionScreen extends StatefulWidget {
-  const ApplianceSelectionScreen({super.key});
+  final String? bleId;
+  final String? bleName;
+
+  const ApplianceSelectionScreen({super.key, this.bleId, this.bleName});
 
   @override
   State<ApplianceSelectionScreen> createState() => _ApplianceSelectionScreenState();
@@ -18,8 +21,6 @@ class ApplianceSelectionScreen extends StatefulWidget {
 
 class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
   final TtsService _tts = TtsService();
-
-  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -52,9 +53,27 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
     if (choice == 2) return null; // use built-in sample image
 
     try {
-      final xfile = await _picker.pickImage(source: choice == 0 ? ImageSource.camera : ImageSource.gallery, maxWidth: 1600, imageQuality: 85);
+      // [CRITICAL] iOS 리소스 격리: 모든 고부하 작업 중지
+      await _tts.stop();
+      // 블루투스 스캔 중이면 중지 (필요 시)
+      
+      // iOS XPC 세션 안정화를 위해 충분한 대기
+      await Future.delayed(const Duration(milliseconds: 1500));
+      
+      final ImagePicker isolatedPicker = ImagePicker();
+      final xfile = await isolatedPicker.pickImage(
+        source: choice == 0 ? ImageSource.camera : ImageSource.gallery, 
+        maxWidth: 1024, // 해상도 하향 조정으로 메모리 부담 완화
+        imageQuality: 80,
+      );
+      
+      // 피커 종료 후 다시 대기
+      await Future.delayed(const Duration(milliseconds: 800));
+      
       return xfile?.path;
     } catch (e) {
+      debugPrint('Error picking image (Critical Isolation): $e');
+      _tts.speak('사진을 가져오는 중 오류가 발생했습니다.');
       return null;
     }
   }
@@ -88,20 +107,28 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
               if (Navigator.of(sheetCtx).canPop()) {
                 Navigator.of(sheetCtx).pop();
               }
-              final imagePath = await _chooseImageForMapping(context);
-              if (!context.mounted) return;
               
-              Navigator.push(
-                context, 
-                MaterialPageRoute(
-                  builder: (_) => PhotoMappingScreen(
-                    deviceId: _newDeviceId(ap.name.replaceAll(' ', '_')), 
-                    imagePath: imagePath,
-                    applianceName: ap.name,
-                    applianceType: ap.type.name,
+              final result = await _chooseImageForMapping(context);
+              if (!mounted) return;
+              
+              // [CRITICAL] 피커 종료 후 OS 리소스 안정화를 위해 추가 대기
+              await Future.delayed(const Duration(milliseconds: 500));
+              
+              if (mounted) {
+                Navigator.push(
+                  context, 
+                  MaterialPageRoute(
+                    builder: (_) => PhotoMappingScreen(
+                      deviceId: _newDeviceId(ap.name.replaceAll(' ', '_')), 
+                      imagePath: result,
+                      applianceName: ap.name,
+                      applianceType: ap.type.name,
+                      bleId: widget.bleId,
+                      bleName: widget.bleName,
+                    )
                   )
-                )
-              );
+                );
+              }
             },
           );
         },
