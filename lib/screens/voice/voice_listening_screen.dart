@@ -449,81 +449,99 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     _speak('취소되었습니다.');
   }
 
-  Future<String?> _resolveMappingDeviceId() async {
-    final explicitId = widget.deviceId?.trim();
-    if (explicitId != null && explicitId.isNotEmpty) {
-      return explicitId;
-    }
-    return ActiveDeviceService.instance.getActiveDeviceId();
-  }
-
   Future<void> _sendBleSequence(List<dynamic> commands) async {
-    final deviceId = BleService.instance.connectedDeviceId;
-    if (!BleService.instance.isConnected || deviceId.isEmpty) {
-      _speak('블루투스 연결이 필요합니다.');
-      return;
+    // [DEMO PRIORITY] 이미 연결된 기기가 있다면 즉시 사용
+    String deviceId = BleService.instance.connectedDeviceId;
+    
+    if (deviceId.isEmpty) {
+      // 연결된 게 없을 때만 자동 선택 및 재연결 시도
+      await ActiveDeviceService.instance.autoPickFirstDevice();
+      final activeBleId = ActiveDeviceService.instance.getActiveBleId();
+      if (activeBleId == null) {
+        _speak('먼저 기기 연결 화면에서 허브를 연결해 주세요.');
+        return;
+      }
+      
+      _speak('기기에 연결 중입니다...');
+      final connected = await BleService.instance.ensureConnected(activeBleId);
+      if (!connected) {
+        _speak('연결에 실패했습니다. 기기 전원을 확인하세요.');
+        return;
+      }
+      deviceId = BleService.instance.connectedDeviceId;
     }
 
-    final activeDeviceId = await _resolveMappingDeviceId();
-    if (activeDeviceId == null || activeDeviceId.isEmpty) {
-      _speak('먼저 홈 화면에서 제어할 기기를 선택해 주세요.');
-      return;
-    }
-
-    final profile = await DeviceMappingService.instance.load(activeDeviceId);
-
-    final gridOk = await BleService.instance.sendSetGrid(
-      rows: profile.rows,
-      cols: profile.cols,
-      originX: profile.originX,
-      originY: profile.originY,
-      pitchX: profile.pitchX,
-      pitchY: profile.pitchY,
-      deviceId: deviceId,
-    );
-
-    if (!gridOk) {
-      _speak('기기 설정 전송에 실패했습니다.');
-      return;
-    }
-
-    // ESP32가 첫 번째 명령(set_grid)을 처리할 시간을 충분히 줌 (DROP 방지)
-    await Future<void>.delayed(const Duration(milliseconds: 800));
+    // 활성 기기 프로필 로드 (그리드 방식 버튼을 위해)
+    final activeApplianceId = ActiveDeviceService.instance.getActiveDeviceId() ?? '';
+    final profile = await DeviceMappingService.instance.load(activeApplianceId);
 
     for (final dynamic raw in commands) {
       final btn = raw as String;
-      final mapped = profile.buttonMap[btn];
-      final pos = mapped == null
-          ? MicrowaveCommandService.btnToGrid(btn)
-          : (mapped.row, mapped.col);
-
-      if (pos != null) {
-        final ok = await BleService.instance.sendPress(
-          x: pos.$2,
-          y: pos.$1,
+      
+      // 1. 물리 좌표(Demo Mock Data)가 있으면 G-Code로 즉시 전송
+      final phys = MicrowaveCommandService.btnToPhysical(btn);
+      if (phys != null) {
+        // [시연 핵심] 충분한 딜레이를 주어 하드웨어 버퍼 오버플로우 방지
+        // 모든 인버전/오프셋 제거: MOCK_MAPPING_DATA 원본 좌표 그대로 사용
+        final targetX = phys.$1; 
+        final targetY = phys.$2; 
+        debugPrint('[DEMO_DEBUG] Executing physical press: $btn at ($targetX, $targetY)');
+        
+        // ★ GRBL 좌표계 강제 초기화 및 설정
+        await BleService.instance.sendRaw('G92.1'); // 모든 오프셋 취소
+        await BleService.instance.sendRaw('G92 X0 Y0'); // 현재 위치를 (0,0)으로 설정
+        await BleService.instance.sendRaw('G90'); // 절대 좌표 모드 명시
+        await BleService.instance.sendRaw('G1 X$targetX Y$targetY F1000'); 
+        await Future<void>.delayed(const Duration(milliseconds: 1500)); // 이동 시간 확보
+        
+        // Z 터치 로직: 상대 좌표(G91)
+        await BleService.instance.sendRaw('G91'); 
+        await BleService.instance.sendRaw('G1 Z-1.0 F150'); // 1.0mm 내려가기
+        await Future<void>.delayed(const Duration(milliseconds: 800));
+        
+        await BleService.instance.sendRaw('G4 P0.4'); // 터치 유지
+        await Future<void>.delayed(const Duration(milliseconds: 600));
+        
+        await BleService.instance.sendRaw('G1 Z1.0 F150');   // 1.0mm 올라오기
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        await BleService.instance.sendRaw('G90'); // 다시 절대 좌표 모드로 설정
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        await BleService.instance.sendRaw('G1 X0 Y0 F1000'); // ★ 원점 복귀
+        await Future<void>.delayed(const Duration(milliseconds: 800));
+      } else {
+        // 2. 물리 좌표가 없으면 기존 그리드 인덱스 매핑 방식 사용
+        // (그리드 방식 사용 시에만 SET_GRID 필요)
+        await BleService.instance.sendSetGrid(
+          rows: profile.rows,
           cols: profile.cols,
+          originX: profile.originX,
+          originY: profile.originY,
+          pitchX: profile.pitchX,
+          pitchY: profile.pitchY,
           deviceId: deviceId,
         );
-        if (!ok) {
-          _speak('명령 전송 중 오류가 발생했습니다.');
-          return;
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+
+        final mapped = profile.buttonMap[btn];
+        final pos = mapped == null
+            ? MicrowaveCommandService.btnToGrid(btn)
+            : (mapped.row, mapped.col);
+
+        if (pos != null) {
+          final ok = await BleService.instance.sendPress(
+            x: pos.$2,
+            y: pos.$1,
+            cols: profile.cols,
+            deviceId: deviceId,
+          );
+          if (!ok) {
+            _speak('명령 전송 중 오류가 발생했습니다.');
+            return;
+          }
         }
       }
       await Future<void>.delayed(const Duration(milliseconds: 800));
     }
-
-    // 모든 명령 수행 후 홈 위치로 복귀 (2초 대기 후 이동)
-    await Future<void>.delayed(const Duration(seconds: 2));
-    await BleService.instance.sendPress(
-      x: profile.homeCol,
-      y: profile.homeRow,
-      cols: profile.cols,
-      deviceId: deviceId,
-    );
-    AppLogger.info('voice.home_return', {
-      'row': profile.homeRow,
-      'col': profile.homeCol,
-    });
   }
 
   Future<void> _handleCommand(
@@ -647,7 +665,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
                     padding: EdgeInsets.symmetric(horizontal: 24 * rs),
                     child: Column(
                       children: [
-                        const Spacer(flex: 2),
+                        SizedBox(height: 40 * rs),
                         Text(
                           _isProcessing
                               ? '분석 중...'
@@ -676,7 +694,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
                           ),
                           textAlign: TextAlign.center,
                         ),
-                        const Spacer(flex: 2),
+                        SizedBox(height: 40 * rs),
                         SizedBox(
                           height: waveH,
                           child: Row(
@@ -718,7 +736,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ],
-                        const Spacer(flex: 2),
+                        SizedBox(height: 40 * rs),
                         if (_isRecording) ...[
                           Row(
                             children: [
@@ -891,7 +909,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
                           Wrap(
                             spacing: 8 * rs,
                             runSpacing: 8 * rs,
-                            children: ['만두 데워줘', '우유 따뜻하게', '30초 돌려줘', '해동해줘']
+                            children: ['1번 눌러줘', '2번 눌러줘', '8번 눌러줘', '만두 데워줘', '우유 따뜻하게', '30초 돌려줘', '해동해줘']
                                 .map(
                                   (cmd) => GestureDetector(
                                     onTap: () {
@@ -930,7 +948,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
                                 .toList(),
                           ),
                         ],
-                        const Spacer(flex: 1),
+                        SizedBox(height: 24 * rs),
                       ],
                     ),
                   ),

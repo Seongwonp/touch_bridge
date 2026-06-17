@@ -38,7 +38,7 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
   }
 
   Future<void> _autoConnectBle() async {
-    final bleId = await ActiveDeviceService.instance.getActiveBleId();
+    final bleId = ActiveDeviceService.instance.getActiveBleId();
     if (bleId == null || bleId.isEmpty) return;
 
     if (BleService.instance.isConnected && BleService.instance.connectedDeviceId == bleId) {

@@ -15,9 +15,9 @@ void main() {
       bleName: 'ESP32-Hub',
     );
 
-    expect(await ActiveDeviceService.instance.getActiveDeviceId(), 'device-123');
-    expect(await ActiveDeviceService.instance.getActiveDeviceName(), '전자레인지');
-    expect(await ActiveDeviceService.instance.getActiveBleId(), 'XX:XX:XX:XX:XX:XX');
+    expect(ActiveDeviceService.instance.getActiveDeviceId(), 'device-123');
+    expect(ActiveDeviceService.instance.getActiveDeviceName(), '전자레인지');
+    expect(ActiveDeviceService.instance.getActiveBleId(), 'XX:XX:XX:XX:XX:XX');
     expect(await ActiveDeviceService.instance.getActiveBleName(), 'ESP32-Hub');
   });
 
@@ -26,12 +26,12 @@ void main() {
       deviceId: 'device-123',
       bleId: 'some-id',
     );
-    expect(await ActiveDeviceService.instance.getActiveBleId(), 'some-id');
+    expect(ActiveDeviceService.instance.getActiveBleId(), 'some-id');
 
     await ActiveDeviceService.instance.setActiveDevice(
       deviceId: 'device-123',
       bleId: null,
     );
-    expect(await ActiveDeviceService.instance.getActiveBleId(), isNull);
+    expect(ActiveDeviceService.instance.getActiveBleId(), isNull);
   });
 }

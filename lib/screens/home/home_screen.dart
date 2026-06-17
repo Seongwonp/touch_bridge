@@ -36,6 +36,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadDevices();
+    // 기기 목록 갱신 감지 리스너 등록
+    ActiveDeviceService.instance.deviceListUpdateNotifier.addListener(_loadDevices);
   }
 
   Future<void> _loadDevices() async {
@@ -91,6 +93,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _pageController.dispose();
+    ActiveDeviceService.instance.deviceListUpdateNotifier.removeListener(_loadDevices);
     _tts.stop();
     super.dispose();
   }
@@ -236,7 +239,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Padding(
                 padding: EdgeInsets.fromLTRB(
                   ResponsiveScale.v(context, 20),
-                  ResponsiveScale.v(context, 20),
+                  ResponsiveScale.v(context, 10),
                   ResponsiveScale.v(context, 20),
                   0,
                 ),
@@ -244,13 +247,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _buildHeader(rs),
-                    SizedBox(height: ResponsiveScale.v(context, 16)),
+                    SizedBox(height: 16 * rs),
                     if (_devices.isEmpty) ...[
                       const HomeEmptyState(),
-                      SizedBox(height: ResponsiveScale.v(context, 16)),
+                      SizedBox(height: 24 * rs),
+                    ] else ...[
+                      _buildPageIndicator(rs),
+                      SizedBox(height: 12 * rs),
                     ],
-                    _buildPageIndicator(rs),
-                    SizedBox(height: ResponsiveScale.v(context, 16)),
                     Expanded(
                       child: PageView.builder(
                         controller: _pageController,
@@ -290,11 +294,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         },
                       ),
                     ),
-                    _buildFooterNavigation(rs),
                   ],
                 ),
               ),
             ),
+            _buildFooterNavigation(rs),
           ],
         ),
       ),
@@ -308,16 +312,16 @@ class _HomeScreenState extends State<HomeScreen> {
         Text(
           '내 기기',
           style: TextStyle(
-            fontSize: 28 * rs,
+            fontSize: 24 * rs,
             fontWeight: FontWeight.w800,
             color: Colors.white,
           ),
         ),
-        SizedBox(height: ResponsiveScale.v(context, 4)),
+        SizedBox(height: ResponsiveScale.v(context, 2)),
         Text(
           '기기를 눌러 제어하세요',
           style: TextStyle(
-            fontSize: 14 * rs,
+            fontSize: 13 * rs,
             fontWeight: FontWeight.w500,
             color: const Color(0xFF888888),
           ),

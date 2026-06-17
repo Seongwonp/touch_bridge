@@ -3,6 +3,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'services/accessibility_settings.dart';
 import 'services/accessibility_experiment_service.dart';
 import 'services/ble_service.dart';
+import 'services/active_device_service.dart';
 import 'screens/main_navigation_screen.dart';
 import 'theme/app_theme.dart';
 
@@ -13,6 +14,7 @@ void main() async {
   } catch (_) {}
   await AccessibilitySettings.instance.load();
   await AccessibilityExperimentService.instance.load();
+  await ActiveDeviceService.instance.init(); // 서비스 초기화 추가
   BleService.instance.warmUp();
   runApp(const TouchBridgeApp());
 }
