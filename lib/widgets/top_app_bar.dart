@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'responsive_scale.dart';
 import '../services/active_device_service.dart';
 import '../services/ble_service.dart';
+import '../theme/app_colors.dart';
 
 class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
   const TopAppBar({
@@ -16,19 +17,14 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
   final List<Widget>? actions;
 
   @override
-  Size get preferredSize => const Size.fromHeight(80);
+  Size get preferredSize => const Size.fromHeight(86);
 
   @override
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
     
     return Container(
-      decoration: const BoxDecoration(
-        color: Colors.black,
-        border: Border(
-          bottom: BorderSide(color: Color(0xFF2A2A2A), width: 1),
-        ),
-      ),
+      decoration: const BoxDecoration(color: AppColors.background),
       child: SafeArea(
         child: Column(
           children: [
@@ -36,9 +32,9 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
               backgroundColor: Colors.transparent,
               elevation: 0,
               automaticallyImplyLeading: false,
-              leading: showBack 
+              leading: showBack
                 ? IconButton(
-                    icon: Icon(Icons.arrow_back_ios_new_rounded, size: 22 * rs, color: const Color(0xFFFFEB00)),
+                    icon: Icon(Icons.arrow_back_ios_new_rounded, size: 22 * rs, color: AppColors.primary),
                     onPressed: () => Navigator.pop(context),
                   )
                 : null,
@@ -48,7 +44,7 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
                   fontSize: 20 * rs,
                   fontWeight: FontWeight.w900,
                   letterSpacing: -0.5,
-                  color: const Color(0xFFFFEB00),
+                  color: AppColors.primary,
                 ),
               ),
               actions: actions?.map((a) => Padding(
@@ -90,6 +86,17 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
                     ),
                   ),
                 ],
+              ),
+            ),
+            const SizedBox(height: 4),
+            Container(
+              height: 2,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: AppColors.accentLineGradient,
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
               ),
             ),
           ],

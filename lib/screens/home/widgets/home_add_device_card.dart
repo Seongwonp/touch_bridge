@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../widgets/responsive_scale.dart';
+import '../../../theme/app_colors.dart';
 import '../../connection/device_connect_screen.dart';
 
 class HomeAddDeviceCard extends StatelessWidget {
@@ -33,12 +34,15 @@ class HomeAddDeviceCard extends StatelessWidget {
           child: Container(
             padding: EdgeInsets.all(28 * rs),
             decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A),
+              color: AppColors.surfaceElevated,
               borderRadius: BorderRadius.circular(24 * rs),
               border: Border.all(
-                color: const Color(0xFFFFEB00),
+                color: AppColors.primary,
                 width: 2 * rs,
               ),
+              boxShadow: const [
+                BoxShadow(color: AppColors.shadowPrimary, blurRadius: 16),
+              ],
             ),
             child: Center(
               child: SingleChildScrollView(
@@ -50,13 +54,17 @@ class HomeAddDeviceCard extends StatelessWidget {
                       width: 100 * rs,
                       height: 100 * rs,
                       decoration: const BoxDecoration(
-                        color: Color(0xFF1A1A1A),
+                        gradient: LinearGradient(
+                          colors: AppColors.primaryGradient,
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
                         shape: BoxShape.circle,
                       ),
                       child: Center(
                         child: Icon(
                           Icons.add_rounded,
-                          color: const Color(0xFFFFEB00),
+                          color: Colors.black,
                           size: 64 * rs,
                         ),
                       ),
@@ -67,7 +75,7 @@ class HomeAddDeviceCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 24 * rs,
                         fontWeight: FontWeight.w900,
-                        color: const Color(0xFFFFEB00),
+                        color: AppColors.primary,
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -77,7 +85,7 @@ class HomeAddDeviceCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 14 * rs,
                         fontWeight: FontWeight.w600,
-                        color: const Color(0xFF888888),
+                        color: AppColors.textTertiary,
                       ),
                       textAlign: TextAlign.center,
                     ),

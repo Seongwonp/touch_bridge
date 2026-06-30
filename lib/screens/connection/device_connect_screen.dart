@@ -1,15 +1,14 @@
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/tts_service.dart';
 import '../../services/ble_service.dart';
 import '../../services/active_device_service.dart';
 import '../../services/ai_backend_service.dart';
 import '../../services/device_mapping_service.dart';
+import '../../services/home_device_store.dart';
+import '../../theme/app_colors.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../home/appliance_selection_screen.dart';
@@ -40,7 +39,6 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
   bool _scanning = false;
   bool _connected = false;
   String _statusMessage = '주변 기기를 검색합니다.';
-  static const _prefKeyDevices = 'home_devices';
 
   @override
   void initState() {
@@ -80,7 +78,7 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
 
     final selected = await showModalBottomSheet<BleDeviceInfo>(
       context: context,
-      backgroundColor: const Color(0xFF111111),
+      backgroundColor: AppColors.surfaceElevated,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => Container(
         padding: const EdgeInsets.all(20),
@@ -90,7 +88,7 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
             const Text('주변 기기 목록', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 20),
             ...devices.map((d) => ListTile(
-              leading: const Icon(Icons.bluetooth, color: Color(0xFFFFEB00)),
+              leading: const Icon(Icons.bluetooth, color: AppColors.primary),
               title: Text(d.name, style: const TextStyle(color: Colors.white)),
               subtitle: Text('RSSI: ${d.rssi} dBm', style: const TextStyle(color: Colors.white54)),
               onTap: () => Navigator.pop(ctx, d),
@@ -147,7 +145,7 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
     final code = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF111111),
+        backgroundColor: AppColors.surfaceElevated,
         title: const Text('기기 코드 입력', style: TextStyle(color: Colors.white)),
         content: TextField(
           controller: controller,
@@ -191,11 +189,7 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
     String? bleId,
     String? bleName,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    final jsonStr = prefs.getString(_prefKeyDevices);
-    final devices = jsonStr != null
-        ? (jsonDecode(jsonStr) as List).cast<Map<String, dynamic>>()
-        : <Map<String, dynamic>>[];
+    final devices = await HomeDeviceStore.loadDevices();
 
     final candidateId = (preferredDeviceId?.trim().isNotEmpty ?? false)
         ? preferredDeviceId!.trim()
@@ -219,7 +213,7 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
     };
 
     devices.add(newDevice);
-    await prefs.setString(_prefKeyDevices, jsonEncode(devices));
+    await HomeDeviceStore.saveDevices(devices);
     await ActiveDeviceService.instance.setActiveDevice(
       deviceId: candidateId,
       deviceName: name,
@@ -265,10 +259,10 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
   @override
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
-    final statusColor = _connected ? const Color(0xFF00FF88) : const Color(0xFFFFB020);
+    final statusColor = _connected ? AppColors.success : AppColors.warning;
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppColors.background,
       appBar: const TopAppBar(title: 'Touch Bridge'),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -279,14 +273,14 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
               children: [
                 Text('기기 연결', style: TextStyle(fontSize: 28 * rs, fontWeight: FontWeight.w800, color: Colors.white)),
                 SizedBox(height: ResponsiveScale.v(context, 4)),
-                Text('기기를 연결하여 제어를 시작하세요', style: TextStyle(fontSize: 14 * rs, color: const Color(0xFF888888))),
+                Text('기기를 연결하여 제어를 시작하세요', style: TextStyle(fontSize: 14 * rs, color: AppColors.textTertiary)),
                 SizedBox(height: ResponsiveScale.v(context, 20)),
                 
                 // Status Card
                 Container(
                   padding: EdgeInsets.all(ResponsiveScale.v(context, 16)),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF111111),
+                    color: AppColors.surfaceElevated,
                     borderRadius: BorderRadius.circular(20 * rs),
                     border: Border.all(color: statusColor.withValues(alpha: 0.3)),
                   ),
@@ -368,13 +362,13 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
         child: Container(
           padding: EdgeInsets.all(20 * rs),
           decoration: BoxDecoration(
-            color: isPrimary ? const Color(0xFF1A1A1A) : const Color(0xFF111111),
+            color: isPrimary ? AppColors.surfaceElevated : AppColors.surfaceElevated,
             borderRadius: BorderRadius.circular(16 * rs),
-            border: Border.all(color: isPrimary ? const Color(0xFFFFEB00).withValues(alpha: 0.5) : const Color(0xFF222222)),
+            border: Border.all(color: isPrimary ? AppColors.primary.withValues(alpha: 0.5) : const Color(0xFF222222)),
           ),
           child: Row(
             children: [
-              Icon(icon, color: isPrimary ? const Color(0xFFFFEB00) : Colors.white, size: 28 * rs),
+              Icon(icon, color: isPrimary ? AppColors.primary : Colors.white, size: 28 * rs),
               SizedBox(width: 20 * rs),
               Expanded(
                 child: Column(
@@ -382,7 +376,7 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
                   children: [
                     Text(title, style: TextStyle(color: Colors.white, fontSize: 17 * rs, fontWeight: FontWeight.bold)),
                     SizedBox(height: 4 * rs),
-                    Text(desc, style: TextStyle(color: const Color(0xFF888888), fontSize: 13 * rs)),
+                    Text(desc, style: TextStyle(color: AppColors.textTertiary, fontSize: 13 * rs)),
                   ],
                 ),
               ),

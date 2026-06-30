@@ -6,7 +6,10 @@ import '../../widgets/top_app_bar.dart';
 import 'ble_log_screen.dart';
 import 'developer_console_screen.dart';
 import 'device_management_screen.dart';
+import '../connection/device_connect_screen.dart';
+import '../voice/voice_listening_screen.dart';
 import '../../theme/app_colors.dart';
+import 'widgets/settings_form_widgets.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -20,6 +23,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late double _speed;
   late double _volume;
   late bool _guardianModeEnabled;
+  late bool _developerModeEnabled;
   late bool _voiceGuidanceEnabled;
   late bool _largeTextEnabled;
   late bool _highContrastEnabled;
@@ -36,9 +40,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _largeTextEnabled = s.largeTextEnabled;
     _highContrastEnabled = s.highContrastEnabled;
     _guardianModeEnabled = s.guardianModeEnabled;
+    _developerModeEnabled = s.developerModeEnabled;
     _contactName = s.contactName;
     _contactPhone = s.contactPhone;
-    _tts.speak('설정 화면입니다. 보호자 안내 모드를 조정할 수 있습니다.', source: 'SettingsScreen');
+    _tts.speak(
+      '설정입니다. 음성 속도, 보호자 모드, 개발자 모드를 변경할 수 있습니다.',
+      source: 'SettingsScreen',
+    );
   }
 
   @override
@@ -54,16 +62,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
+        backgroundColor: AppColors.surfaceElevated,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text(
           '비상 연락처 편집',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+          style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w800),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _ContactField(
+            ContactField(
               controller: nameCtrl,
               label: '이름',
               hint: '예) 자녀',
@@ -71,7 +79,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               keyboardType: TextInputType.name,
             ),
             const SizedBox(height: 14),
-            _ContactField(
+            ContactField(
               controller: phoneCtrl,
               label: '전화번호',
               hint: '예) 010-0000-0000',
@@ -83,7 +91,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('취소', style: TextStyle(color: Color(0xFF888888))),
+            child: const Text('취소', style: TextStyle(color: AppColors.textTertiary)),
           ),
           ElevatedButton(
             onPressed: () {
@@ -98,7 +106,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _tts.speak('저장되었습니다.', source: 'SettingsScreen');
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFFEB00),
+              backgroundColor: AppColors.primary,
               foregroundColor: Colors.black,
             ),
             child: const Text(
@@ -126,18 +134,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: TextStyle(
                 fontSize: 28 * rs,
                 fontWeight: FontWeight.w800,
-                color: Colors.white,
+                color: AppColors.textPrimary,
               ),
             ),
             SizedBox(height: ResponsiveScale.v(context, 24)),
-            _SectionLabel(
+            SectionLabel(
               icon: Icons.record_voice_over_rounded,
               label: '음성 안내',
             ),
             SizedBox(height: ResponsiveScale.v(context, 10)),
-            _SettingsCard(
+            SettingsCard(
               children: [
-                _SliderRow(
+                SliderRow(
                   label: '속도',
                   value: _speed,
                   min: 0.5,
@@ -149,8 +157,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     AccessibilitySettings.instance.setTtsSpeed(v);
                   },
                 ),
-                const _Divider(),
-                _SliderRow(
+                const SettingsDivider(),
+                SliderRow(
                   label: '음량',
                   value: _volume,
                   min: 0.0,
@@ -165,11 +173,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
             SizedBox(height: ResponsiveScale.v(context, 24)),
-            _SectionLabel(icon: Icons.accessibility_new_rounded, label: '접근성'),
+            SectionLabel(icon: Icons.accessibility_new_rounded, label: '접근성'),
             SizedBox(height: ResponsiveScale.v(context, 10)),
-            _SettingsCard(
+            SettingsCard(
               children: [
-                _SwitchRow(
+                SwitchRow(
                   title: '음성 안내',
                   subtitle: '이동/상태 변화를 음성으로 안내',
                   value: _voiceGuidanceEnabled,
@@ -178,8 +186,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     AccessibilitySettings.instance.setVoiceGuidanceEnabled(v);
                   },
                 ),
-                const _Divider(),
-                _SwitchRow(
+                const SettingsDivider(),
+                SwitchRow(
                   title: '큰 글씨',
                   subtitle: '가독성 향상',
                   value: _largeTextEnabled,
@@ -188,8 +196,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     AccessibilitySettings.instance.setLargeTextEnabled(v);
                   },
                 ),
-                const _Divider(),
-                _SwitchRow(
+                const SettingsDivider(),
+                SwitchRow(
                   title: '고대비',
                   subtitle: '텍스트를 더 진하게 표시',
                   value: _highContrastEnabled,
@@ -201,11 +209,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
             SizedBox(height: ResponsiveScale.v(context, 24)),
-            _SectionLabel(icon: Icons.family_restroom_rounded, label: '보호자 설정'),
+            SectionLabel(icon: Icons.family_restroom_rounded, label: '보호자 설정'),
             SizedBox(height: ResponsiveScale.v(context, 10)),
-            _SettingsCard(
+            SettingsCard(
               children: [
-                _SwitchRow(
+                SwitchRow(
                   title: '보호자 안내 모드',
                   subtitle: '초기 세팅과 사용법을 더 자세히 안내',
                   value: _guardianModeEnabled,
@@ -213,104 +221,115 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     setState(() => _guardianModeEnabled = v);
                     AccessibilitySettings.instance.setGuardianModeEnabled(v);
                     _tts.speak(
-                      v ? '보호자 안내 모드가 켜졌습니다.' : '보호자 안내 모드가 꺼졌습니다.',
+                      v
+                          ? '보호자 모드를 켰습니다. 기기 관리와 매핑에 접근할 수 있습니다.'
+                          : '보호자 모드를 껐습니다. 기기 추가와 매핑은 숨겨집니다.',
+                      source: 'SettingsScreen',
+                    );
+                  },
+                ),
+                if (_guardianModeEnabled) ...[
+                  const SettingsDivider(),
+                  NavRow(
+                    icon: Icons.add_link_rounded,
+                    title: '기기 추가 및 연결',
+                    subtitle: 'QR, 블루투스, NFC로 새 기기 등록',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const DeviceConnectScreen(),
+                      ),
+                    ),
+                  ),
+                  const SettingsDivider(),
+                  NavRow(
+                    icon: Icons.settings_bluetooth_rounded,
+                    title: '기기 및 하드웨어 관리',
+                    subtitle: '등록된 기기와 ESP32 연결 설정',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const DeviceManagementScreen(),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            SizedBox(height: ResponsiveScale.v(context, 24)),
+            SectionLabel(icon: Icons.developer_mode_rounded, label: '개발자 설정'),
+            SizedBox(height: ResponsiveScale.v(context, 10)),
+            SettingsCard(
+              children: [
+                SwitchRow(
+                  title: '개발자 모드',
+                  subtitle: 'ESP 선택, 조이스틱, raw 명령, 통신 로그 표시',
+                  value: _developerModeEnabled,
+                  onChanged: (v) {
+                    setState(() => _developerModeEnabled = v);
+                    AccessibilitySettings.instance.setDeveloperModeEnabled(v);
+                    _tts.speak(
+                      v
+                          ? '개발자 모드를 켰습니다. 콘솔과 로그 도구를 사용할 수 있습니다.'
+                          : '개발자 모드를 껐습니다. 개발자 도구가 숨겨집니다.',
                       source: 'SettingsScreen',
                     );
                   },
                 ),
               ],
             ),
+            if (_developerModeEnabled) ...[
+              SizedBox(height: ResponsiveScale.v(context, 24)),
+              SectionLabel(icon: Icons.bug_report_rounded, label: '개발자/시연 도구'),
+              SizedBox(height: ResponsiveScale.v(context, 10)),
+              SettingsCard(
+                children: [
+                  NavRow(
+                    icon: Icons.mic_external_on_rounded,
+                    title: '음성 테스트 화면',
+                    subtitle: '음성 명령 인식과 AI 파싱 확인',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const VoiceListeningScreen(),
+                      ),
+                    ),
+                  ),
+                  const SettingsDivider(),
+                  NavRow(
+                    icon: Icons.list_alt_rounded,
+                    title: '통신 로그 확인',
+                    subtitle: 'BLE 송수신 로그 확인',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const BleLogScreen()),
+                    ),
+                  ),
+                  const SettingsDivider(),
+                  NavRow(
+                    icon: Icons.terminal_rounded,
+                    title: '개발자 콘솔',
+                    subtitle: '조이스틱과 raw 명령 전송',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const DeveloperConsoleScreen(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
             SizedBox(height: ResponsiveScale.v(context, 24)),
-            _SectionLabel(icon: Icons.bug_report_rounded, label: '시스템'),
+            SectionLabel(icon: Icons.emergency_rounded, label: '비상 연락처'),
             SizedBox(height: ResponsiveScale.v(context, 10)),
-            _SettingsCard(
-              children: [
-                ListTile(
-                  leading: const Icon(
-                    Icons.settings_bluetooth_rounded,
-                    color: Color(0xFFFFEB00),
-                  ),
-                  title: Text(
-                    '하드웨어(ESP32) 관리',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16 * rs,
-                    ),
-                  ),
-                  subtitle: const Text(
-                    '기기별 블루투스 연결 설정',
-                    style: TextStyle(color: Colors.white54, fontSize: 12),
-                  ),
-                  trailing: const Icon(
-                    Icons.chevron_right_rounded,
-                    color: Color(0xFF555555),
-                  ),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const DeviceManagementScreen()),
-                  ),
-                ),
-                const _Divider(),
-                ListTile(
-                  leading: const Icon(
-                    Icons.list_alt_rounded,
-                    color: Color(0xFFFFEB00),
-                  ),
-                  title: Text(
-                    '통신 로그 확인',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16 * rs,
-                    ),
-                  ),
-                  trailing: const Icon(
-                    Icons.chevron_right_rounded,
-                    color: Color(0xFF555555),
-                  ),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const BleLogScreen()),
-                  ),
-                ),
-                const _Divider(),
-                ListTile(
-                  leading: const Icon(
-                    Icons.terminal_rounded,
-                    color: Color(0xFFFFEB00),
-                  ),
-                  title: Text(
-                    '개발자 콘솔',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16 * rs,
-                    ),
-                  ),
-                  trailing: const Icon(
-                    Icons.chevron_right_rounded,
-                    color: Color(0xFF555555),
-                  ),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const DeveloperConsoleScreen()),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: ResponsiveScale.v(context, 24)),
-            _SectionLabel(icon: Icons.emergency_rounded, label: '비상 연락처'),
-            SizedBox(height: ResponsiveScale.v(context, 10)),
-            _SettingsCard(
+            SettingsCard(
               children: [
                 Padding(
                   padding: EdgeInsets.all(ResponsiveScale.v(context, 16)),
                   child: _contactName.isEmpty
-                      ? _EmptyContactRow(onTap: _showContactEditDialog)
-                      : _ContactRow(
+                      ? EmptyContactRow(onTap: _showContactEditDialog)
+                      : ContactRow(
                           name: _contactName,
                           phone: _contactPhone,
                           onCall: () =>
@@ -324,317 +343,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel({required this.icon, required this.label});
-  final IconData icon;
-  final String label;
-  @override
-  Widget build(BuildContext context) {
-    final rs = ResponsiveScale.factor(context);
-    return Row(
-      children: [
-        Icon(icon, color: const Color(0xFFFFEB00), size: 18 * rs),
-        const SizedBox(width: 8),
-        Text(
-          label,
-          style: TextStyle(
-            color: const Color(0xFFFFEB00),
-            fontSize: 13 * rs,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _SettingsCard extends StatelessWidget {
-  const _SettingsCard({required this.children});
-  final List<Widget> children;
-  @override
-  Widget build(BuildContext context) {
-    final rs = ResponsiveScale.factor(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF111111),
-        borderRadius: BorderRadius.circular(16 * rs),
-        border: Border.all(color: const Color(0xFF2A2A2A)),
-      ),
-      child: Column(children: children),
-    );
-  }
-}
-
-class _Divider extends StatelessWidget {
-  const _Divider();
-  @override
-  Widget build(BuildContext context) =>
-      const Divider(height: 1, color: Color(0xFF2A2A2A));
-}
-
-class _SliderRow extends StatelessWidget {
-  const _SliderRow({
-    required this.label,
-    required this.value,
-    required this.min,
-    required this.max,
-    required this.display,
-    required this.onChanged,
-  });
-  final String label;
-  final double value;
-  final double min;
-  final double max;
-  final String display;
-  final ValueChanged<double> onChanged;
-  @override
-  Widget build(BuildContext context) {
-    final rs = ResponsiveScale.factor(context);
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16 * rs, 14 * rs, 16 * rs, 6 * rs),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 17 * rs,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                display,
-                style: TextStyle(
-                  color: const Color(0xFFFFEB00),
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14 * rs,
-                ),
-              ),
-            ],
-          ),
-          Slider(
-            value: value,
-            min: min,
-            max: max,
-            onChanged: onChanged,
-            activeColor: const Color(0xFFFFEB00),
-            inactiveColor: const Color(0xFF2A2A2A),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SwitchRow extends StatelessWidget {
-  const _SwitchRow({
-    required this.title,
-    required this.subtitle,
-    required this.value,
-    required this.onChanged,
-  });
-  final String title;
-  final String subtitle;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-  @override
-  Widget build(BuildContext context) {
-    final rs = ResponsiveScale.factor(context);
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 16 * rs, vertical: 4 * rs),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 17 * rs,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    color: const Color(0xFF888888),
-                    fontSize: 13 * rs,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Switch(
-            value: value,
-            onChanged: onChanged,
-            activeThumbColor: const Color(0xFFFFEB00),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ContactField extends StatelessWidget {
-  const _ContactField({
-    required this.controller,
-    required this.label,
-    required this.hint,
-    required this.icon,
-    required this.keyboardType,
-  });
-  final TextEditingController controller;
-  final String label;
-  final String hint;
-  final IconData icon;
-  final TextInputType keyboardType;
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: Color(0xFF888888),
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 6),
-        TextField(
-          controller: controller,
-          keyboardType: keyboardType,
-          style: const TextStyle(color: Colors.white, fontSize: 16),
-          decoration: InputDecoration(
-            hintText: hint,
-            prefixIcon: Icon(icon, color: const Color(0xFFFFEB00), size: 20),
-            filled: true,
-            fillColor: const Color(0xFF111111),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _EmptyContactRow extends StatelessWidget {
-  const _EmptyContactRow({required this.onTap});
-  final VoidCallback onTap;
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: const Color(0xFFFFEB00).withValues(alpha: 0.4),
-              ),
-            ),
-            child: const Icon(Icons.add_rounded, color: Color(0xFFFFEB00)),
-          ),
-          const SizedBox(width: 14),
-          const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '연락처 추가',
-                style: TextStyle(
-                  color: Color(0xFFFFEB00),
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              Text(
-                '보호자를 등록하세요',
-                style: TextStyle(color: Color(0xFF888888), fontSize: 13),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ContactRow extends StatelessWidget {
-  const _ContactRow({
-    required this.name,
-    required this.phone,
-    required this.onCall,
-    required this.onEdit,
-  });
-  final String name;
-  final String phone;
-  final VoidCallback onCall;
-  final VoidCallback onEdit;
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Center(
-            child: Text(
-              name.isNotEmpty ? name[0] : '?',
-              style: const TextStyle(
-                color: Color(0xFFFFEB00),
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                name,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              Text(
-                phone,
-                style: const TextStyle(color: Color(0xFF888888), fontSize: 14),
-              ),
-            ],
-          ),
-        ),
-        IconButton(
-          onPressed: onEdit,
-          icon: const Icon(Icons.edit_rounded, color: Color(0xFF888888)),
-        ),
-        IconButton(
-          onPressed: onCall,
-          icon: const Icon(Icons.call_rounded, color: Color(0xFFFF3B30)),
-        ),
-      ],
     );
   }
 }

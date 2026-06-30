@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/tts_service.dart';
+import '../theme/app_colors.dart';
 
 class PrimaryButton extends StatefulWidget {
   const PrimaryButton({
@@ -122,15 +123,20 @@ class _PrimaryButtonState extends State<PrimaryButton> with SingleTickerProvider
             curve: Curves.easeOut,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
+              gradient: const LinearGradient(
+                colors: AppColors.primaryGradient,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
               border: Border.all(
                 color: _armed ? Colors.white : Colors.transparent,
                 width: _armed ? 3 : 0,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: _armed ? 0.1 : 0.3),
-                  blurRadius: _armed ? 4 : 12,
-                  spreadRadius: _armed ? 0 : 2,
+                  color: AppColors.shadowPrimary.withValues(alpha: _armed ? 0.15 : 0.6),
+                  blurRadius: _armed ? 4 : 14,
+                  spreadRadius: _armed ? 0 : 1,
                 ),
               ],
             ),
@@ -145,11 +151,11 @@ class _PrimaryButtonState extends State<PrimaryButton> with SingleTickerProvider
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(widget.icon ?? Icons.arrow_forward, size: 28),
+                      Icon(widget.icon ?? Icons.arrow_forward, size: 28, color: Colors.black),
                       const SizedBox(width: 12),
                       Text(
                         _armed ? '${widget.label} (다시 누르기)' : widget.label,
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
                       ),
                     ],
                   ),
