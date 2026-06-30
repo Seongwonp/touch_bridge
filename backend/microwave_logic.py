@@ -145,7 +145,7 @@ def infer_food_command(text: str):
                     "commands": ["BT-07", "BT-03", "BT-03", "BT-03", "BT-05"],
                     "inferred_seconds": 180,
                     "confidence": 0.95,
-                    "needs_confirmation": true,
+                    "needs_confirmation": True,
                     "message": "해동 모드로 3분 조리를 시작할까요? 전자레인지 작동하면 될까요?",
                     "confirmation_message": "알겠습니다. 해동 모드로 3분 조리를 시작할게요.",
                 }

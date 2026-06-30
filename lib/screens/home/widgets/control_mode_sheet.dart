@@ -9,6 +9,7 @@ import '../../../services/device_mapping_service.dart';
 import '../../../services/ble_service.dart';
 import '../../../services/active_device_service.dart';
 import '../../../services/tts_service.dart';
+import '../../../theme/app_colors.dart';
 
 class ControlModeSheet extends StatefulWidget {
   const ControlModeSheet({
@@ -73,9 +74,9 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
 
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF111111),
+        color: AppColors.surfaceElevated,
         borderRadius: BorderRadius.vertical(top: Radius.circular(28 * rs)),
-        border: const Border(top: BorderSide(color: Color(0xFF2A2A2A))),
+        border: const Border(top: BorderSide(color: AppColors.borderDefault)),
       ),
       padding: EdgeInsets.fromLTRB(24 * rs, 16 * rs, 24 * rs, 40 * rs),
       child: Column(
@@ -93,7 +94,7 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(widget.deviceIcon, color: const Color(0xFFFFEB00), size: 32 * rs),
+              Icon(widget.deviceIcon, color: AppColors.primary, size: 32 * rs),
               SizedBox(width: 12 * rs),
               Text(
                 widget.deviceName,
@@ -112,10 +113,10 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
               children: [
                 SizedBox(
                   width: 16, height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFFEB00)),
+                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
                 ),
                 SizedBox(width: 8),
-                Text('블루투스 연결 중...', style: TextStyle(color: Color(0xFFFFEB00), fontSize: 13)),
+                Text('블루투스 연결 중...', style: TextStyle(color: AppColors.primary, fontSize: 13)),
               ],
             ),
           ] else if (_connectionFailed) ...[
@@ -137,7 +138,7 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
           Text(
             '제어 방식을 선택하세요',
             style: TextStyle(
-              color: const Color(0xFF888888),
+              color: AppColors.textTertiary,
               fontSize: 14 * rs,
               fontWeight: FontWeight.w500,
             ),
@@ -255,13 +256,13 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
       child: ElevatedButton.icon(
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
-          backgroundColor: isPrimary ? const Color(0xFFFFEB00) : const Color(0xFF1A1A1A),
-          foregroundColor: isPrimary ? Colors.black : const Color(0xFFFFEB00),
+          backgroundColor: isPrimary ? AppColors.primary : AppColors.surfaceElevated,
+          foregroundColor: isPrimary ? Colors.black : AppColors.primary,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16 * rs),
             side: isPrimary 
               ? BorderSide.none 
-              : BorderSide(color: const Color(0xFFFFEB00), width: 1.5 * rs),
+              : BorderSide(color: AppColors.primary, width: 1.5 * rs),
           ),
           elevation: 0,
         ),
@@ -289,7 +290,7 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
         onPressed: onPressed,
         style: TextButton.styleFrom(
           foregroundColor: Colors.white70,
-          backgroundColor: const Color(0xFF1A1A1A),
+          backgroundColor: AppColors.surfaceElevated,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12 * rs),
           ),

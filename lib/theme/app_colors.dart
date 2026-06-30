@@ -14,10 +14,16 @@ class AppColors {
   
   /// 다크 서피스 — 카드/컨테이너
   static const Color surface = Color(0xFF020617); // 변경: 더 검은색
-  
+
+  /// 한 단계 더 밝은 서피스 — 카드가 배경에서 떠 보이도록 (모달/강조 카드)
+  static const Color surfaceElevated = Color(0xFF0B1220);
+
   /// 주요 색상 — CTA/강조/성공
   static const Color primary = Color(0xFFFFEB00); // 노랑
-  
+
+  /// 보조 강조색 — 정보/상태 아이콘, 음성·연결 등 노랑과 구분이 필요한 강조
+  static const Color secondary = Color(0xFF22D3EE); // 청록
+
   /// 텍스트 — 주요
   static const Color textPrimary = Color(0xFFFFFFFF); // 흰색
   
@@ -88,7 +94,17 @@ class AppColors {
   
   /// 에러 그림자
   static const Color shadowError = Color(0x26FF3B30);
-  
+
+  /// 보조색 그림자 (청록 글로우)
+  static const Color shadowSecondaryGlow = Color(0x2622D3EE);
+
+  // ✅ Gradients
+  /// 주요 CTA 버튼용 그라디언트 (노랑 → 진한 골드, 입체감)
+  static const List<Color> primaryGradient = [Color(0xFFFFF066), Color(0xFFFFD400)];
+
+  /// 상단 accent 라인 / 보조 강조용 그라디언트 (노랑 → 청록)
+  static const List<Color> accentLineGradient = [Color(0xFFFFEB00), Color(0xFF22D3EE)];
+
   // ✅ Utility Methods
   
   /// 상태에 따른 버튼 색상

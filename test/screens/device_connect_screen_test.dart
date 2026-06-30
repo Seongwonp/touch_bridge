@@ -15,19 +15,15 @@ void main() {
   });
 
   testWidgets('블루투스 검색 결과가 없으면 상태 문구를 갱신한다', (tester) async {
-    BleService.instance.setTestOverrides(
-      scan: (_) async => const [],
-    );
+    BleService.instance.setTestOverrides(scan: (_) async => const []);
 
-    await tester.pumpWidget(
-      const MaterialApp(home: DeviceConnectScreen()),
-    );
+    await tester.pumpWidget(const MaterialApp(home: DeviceConnectScreen()));
 
-    expect(find.text('연결 가능한 기기 감지됨'), findsOneWidget);
-    await tester.tap(find.text('블루투스 연결'));
+    expect(find.text('기기 연결'), findsOneWidget);
+    await tester.tap(find.text('Touch Bridge 허브 연결'));
     await tester.pumpAndSettle();
 
-    expect(find.text('검색된 BLE 기기가 없습니다.'), findsOneWidget);
+    expect(find.text('검색된 기기가 없습니다.'), findsOneWidget);
   });
 
   testWidgets('블루투스 기기를 선택해 연결 성공 상태를 표시한다', (tester) async {
@@ -38,17 +34,15 @@ void main() {
       connect: (deviceId) async => deviceId == 'esp32_001',
     );
 
-    await tester.pumpWidget(
-      const MaterialApp(home: DeviceConnectScreen()),
-    );
+    await tester.pumpWidget(const MaterialApp(home: DeviceConnectScreen()));
 
-    await tester.tap(find.text('블루투스 연결'));
+    await tester.tap(find.text('Touch Bridge 허브 연결'));
     await tester.pumpAndSettle();
     expect(find.text('ESP32 Hub'), findsWidgets);
 
-    await tester.tap(find.textContaining('RSSI'));
+    await tester.tap(find.text('ESP32 Hub'));
     await tester.pumpAndSettle();
 
-    expect(find.text('BLE 연결 완료'), findsOneWidget);
+    expect(find.text('가전 종류 선택'), findsOneWidget);
   });
 }

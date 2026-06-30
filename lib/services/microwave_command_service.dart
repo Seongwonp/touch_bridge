@@ -35,8 +35,8 @@ class MicrowaveCommandService {
 
   static (int row, int col)? btnToGrid(String btn) {
     return switch (btn) {
-      'BT-01' => (22, 2), // row/col을 물리 좌표로 변환할 때 사용하므로 임시 설정
-      'BT-02' => (22, 9),
+      'BT-01' => (0, 0),
+      'BT-02' => (0, 1),
       'BT-03' => (0, 2),
       'BT-04' => (1, 0),
       'BT-05' => (1, 1),
@@ -49,7 +49,7 @@ class MicrowaveCommandService {
   }
 
   // 물리 좌표 전송을 위한 헬퍼 추가
-    static (double x, double y)? btnToPhysical(String btn) {
+  static (double x, double y)? btnToPhysical(String btn) {
     return switch (btn) {
       'BT-01' => (2.0, 20.0),
       'BT-02' => (8.0, 20.0),
@@ -75,19 +75,35 @@ class MicrowaveCommandService {
         return {
           'action': 'IMMEDIATE_PRESS',
           'commands': [btnId],
-          'message': '$btnNum번 버튼을 누릅니다.'
+          'message': '$btnNum번 버튼을 누릅니다.',
         };
       }
     }
-    
+
     if (t.contains('30초시작') || t.contains('삼십초시작')) {
-      return {'action': 'MICROWAVE_CONTROL', 'commands': ['BT-02', 'BT-05'], 'message': '30초 조리를 시작합니다.'};
+      return {
+        'action': 'MICROWAVE_CONTROL',
+        'commands': ['BT-02', 'BT-05'],
+        'message': '30초 조리를 시작합니다.',
+      };
     }
     if (t.contains('1분시작') || t.contains('일분시작')) {
-      return {'action': 'MICROWAVE_CONTROL', 'commands': ['BT-03', 'BT-05'], 'message': '1분 조리를 시작합니다.'};
+      return {
+        'action': 'MICROWAVE_CONTROL',
+        'commands': ['BT-03', 'BT-05'],
+        'message': '1분 조리를 시작합니다.',
+      };
     }
-    if (t.contains('취소') || t.contains('정지') || t.contains('그만') || t.contains('중단') || t.contains('stop')) {
-      return {'action': 'MICROWAVE_CONTROL', 'commands': ['BT-06'], 'message': '조리를 중단합니다.'};
+    if (t.contains('취소') ||
+        t.contains('정지') ||
+        t.contains('그만') ||
+        t.contains('중단') ||
+        t.contains('stop')) {
+      return {
+        'action': 'MICROWAVE_CONTROL',
+        'commands': ['BT-06'],
+        'message': '조리를 중단합니다.',
+      };
     }
     return null;
   }

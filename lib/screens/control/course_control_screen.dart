@@ -4,6 +4,7 @@ import '../../services/course_service.dart';
 import '../../services/device_mapping_service.dart';
 import '../../services/tts_service.dart';
 import '../../services/feedback_service.dart';
+import '../../services/mapping_execution_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../../theme/app_colors.dart';
@@ -46,31 +47,16 @@ class _CourseControlScreenState extends State<CourseControlScreen> {
 
     try {
       final profile = await DeviceMappingService.instance.load(widget.deviceId);
-      
-      // 1. 그리드 동기화
-      await BleService.instance.sendSetGrid(
-        rows: profile.rows,
-        cols: profile.cols,
-        originX: profile.originX,
-        originY: profile.originY,
-        pitchX: profile.pitchX,
-        pitchY: profile.pitchY,
-        deviceId: widget.deviceId,
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 500));
 
-      // 2. 시퀀스 실행
-      for (final btId in course.buttonIds) {
-        final mapped = profile.buttonMap[btId];
-        if (mapped != null) {
-          await BleService.instance.sendPress(
-            x: mapped.col,
-            y: mapped.row,
-            cols: profile.cols,
-            deviceId: widget.deviceId,
-          );
-          await Future<void>.delayed(const Duration(milliseconds: 1000));
-        }
+      final result = await MappingExecutionService.instance.pressSequence(
+        deviceId: widget.deviceId,
+        profile: profile,
+        buttonIds: course.buttonIds,
+        betweenPressDelay: const Duration(milliseconds: 1000),
+      );
+      if (!result.ok) {
+        _tts.speak(result.message);
+        return;
       }
 
       if (mounted) {
@@ -132,15 +118,29 @@ class _CourseControlScreenState extends State<CourseControlScreen> {
                         color: AppColors.primary.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(Icons.stars_rounded, color: AppColors.primary, size: 28 * rs),
+                      child: Icon(
+                        Icons.stars_rounded,
+                        color: AppColors.primary,
+                        size: 28 * rs,
+                      ),
                     ),
                     title: Text(
                       c.name,
-                      style: TextStyle(color: Colors.white, fontSize: 18 * rs, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18 * rs,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     subtitle: Padding(
                       padding: const EdgeInsets.only(top: 4),
-                      child: Text(c.description, style: TextStyle(color: Colors.white70, fontSize: 14 * rs)),
+                      child: Text(
+                        c.description,
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 14 * rs,
+                        ),
+                      ),
                     ),
                     onTap: () => _runCourse(c),
                   ),

@@ -53,7 +53,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
 
     _startCountdown();
     _initSpeech();
-    _speak('${widget.deviceName} 작동 중입니다. 중단하려면 버튼을 길게 누르세요.');
+    _speak('${widget.deviceName} 작동 중입니다. 중단하려면 아래 버튼을 3초간 누르세요.');
   }
 
   Future<void> _initSpeech() async {
@@ -80,7 +80,9 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
       await _speech.listen(
         onResult: (result) {
           final words = result.recognizedWords.toLowerCase();
-          if (words.contains('멈춰') || words.contains('정지') || words.contains('stop')) {
+          if (words.contains('멈춰') ||
+              words.contains('정지') ||
+              words.contains('stop')) {
             _onHoldCompleted();
           }
         },
@@ -118,7 +120,10 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
-  Future<void> _speak(String message, {String source = 'emergencystopScreen'}) async {
+  Future<void> _speak(
+    String message, {
+    String source = 'emergencystopScreen',
+  }) async {
     await _tts.speak(message, source: source);
   }
 
@@ -126,7 +131,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     setState(() => _isHolding = true);
     HapticFeedback.heavyImpact();
     _holdController.forward(from: 0);
-    _speak('중지 버튼 누름');
+    _speak('멈추는 중입니다. 그대로 눌러주세요.');
   }
 
   void _onHoldEnd() {
@@ -138,14 +143,18 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
 
   Future<void> _onHoldCompleted() async {
     if (!mounted) return;
-    setState(() { _isHolding = false; });
+    setState(() {
+      _isHolding = false;
+    });
     _speech.stop();
     _timerService.stop();
     await AccessibilityExperimentService.instance.recordEmergencyStop();
     HapticFeedback.heavyImpact();
-    await _speak('작동 중단.');
+    await _speak('즉시 중단했습니다. 기기가 멈췄습니다.');
     if (!mounted) return;
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const StopDoneScreen()));
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const StopDoneScreen()));
   }
 
   @override
@@ -235,9 +244,9 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                                     animation: _holdController,
                                     builder: (context, child) =>
                                         FractionallySizedBox(
-                                      widthFactor: _holdController.value,
-                                      child: child,
-                                    ),
+                                          widthFactor: _holdController.value,
+                                          child: child,
+                                        ),
                                     child: Container(
                                       decoration: const BoxDecoration(
                                         color: Color(0xFFFDE047),

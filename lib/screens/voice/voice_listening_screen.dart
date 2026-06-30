@@ -17,10 +17,22 @@ import '../../services/ble_service.dart';
 import '../../services/microwave_command_service.dart';
 import '../../services/device_mapping_service.dart';
 import '../../services/feedback_service.dart';
+import '../../services/voice_device_resolver.dart';
+import '../../services/mapping_execution_service.dart';
+import '../../services/home_device_store.dart';
+import '../../services/voice_text_matcher.dart';
 import '../../theme/app_colors.dart';
+import 'widgets/voice_wave_visualizer.dart';
+import 'widgets/voice_action_buttons.dart';
+import 'widgets/voice_example_commands.dart';
 
 class VoiceListeningScreen extends StatefulWidget {
-  const VoiceListeningScreen({super.key, this.deviceId, this.deviceName, this.autoStart = false});
+  const VoiceListeningScreen({
+    super.key,
+    this.deviceId,
+    this.deviceName,
+    this.autoStart = false,
+  });
 
   final String? deviceId;
   final String? deviceName;
@@ -37,7 +49,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
   bool _isRecording = false;
   bool _isProcessing = false;
-  String _statusMessage = '버튼을 눌러 명령을 말씀해 주세요.';
+  String _statusMessage = '말하기 버튼을 눌러 명령하세요.';
   String _recognizedText = '아직 인식된 명령이 없어요.';
   bool _speechEnabled = false;
 
@@ -67,6 +79,9 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   int _analysisRequestId = 0;
   final Duration _maxRecordingDuration = const Duration(seconds: 10);
   static const _silenceTimeout = Duration(seconds: 8);
+
+  String? _resolvedDeviceId;
+  String? _resolvedDeviceName;
 
   @override
   void initState() {
@@ -107,7 +122,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         if (status == 'listening') {
           setState(() {
             _isRecording = true;
-            _statusMessage = '듣고 있습니다...';
+            _statusMessage = '듣고 있습니다.';
           });
           return;
         }
@@ -117,9 +132,9 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       },
       onError: (errorNotification) {
         if (mounted) {
-          _speak('음성 인식 오류가 발생했습니다.');
+          _speak('음성 인식에 실패했습니다. 마이크 버튼을 다시 눌러주세요.');
           setState(() {
-            _statusMessage = '음성 인식 오류';
+            _statusMessage = '음성 인식 실패';
             _isProcessing = false;
             _isRecording = false;
           });
@@ -129,7 +144,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       },
     );
     if (_speechEnabled) {
-      _speak('음성 명령 화면입니다. 마이크 버튼을 한 번 누르면 선택되고, 한 번 더 누르면 녹음이 시작됩니다.');
+      _speak('음성 명령입니다. 마이크 버튼을 눌러 명령하세요.');
     } else {
       _speak('음성 인식 기능을 사용할 수 없습니다.');
       setState(() {
@@ -149,10 +164,12 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     _silenceTimer?.cancel();
     _silenceTimer = Timer(_silenceTimeout, () {
       if (!mounted || !_isRecording) return;
-      
+
       // 만약 이미 명령이 인식되어 처리 중이라면 침묵 타이머 무시
       if (_lastWords.isNotEmpty) {
-        AppLogger.info('voice.silence_timer.trigger_stop', {'lastWords': _lastWords});
+        AppLogger.info('voice.silence_timer.trigger_stop', {
+          'lastWords': _lastWords,
+        });
         _toggleRecording();
         return;
       }
@@ -164,35 +181,35 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       setState(() {
         _isRecording = false;
         _isProcessing = false;
-        _statusMessage = '아무 말씀도 인식되지 않았습니다.';
+        _statusMessage = '말씀이 들리지 않았습니다.';
       });
-      _speak('아무 말씀도 인식되지 않았습니다.');
+      _speak('말씀이 들리지 않았습니다. 다시 말하려면 마이크를 누르세요.');
     });
   }
 
   void _onSttNaturalEnd() {
     // 이미 처리 중이거나 녹음 중이 아니면 무시
     if (!_isRecording || _isProcessing) return;
-    
+
     AppLogger.info('voice.stt_natural_end', {'lastWords': _lastWords});
     _silenceTimer?.cancel();
     _recordingTimeoutTimer?.cancel();
     _stopWaveAnimation();
-    
+
     setState(() {
       _isRecording = false;
       _isProcessing = _lastWords.isNotEmpty;
       _statusMessage = _lastWords.isNotEmpty
-          ? '명령 분석 중...'
-          : '아무 말씀도 인식되지 않았습니다.';
+          ? '명령을 확인하고 있습니다.'
+          : '말씀이 들리지 않았습니다.';
     });
 
     if (_lastWords.isNotEmpty) {
       FeedbackService.instance.playDing();
-      _speak('녹음이 완료되었습니다. 명령을 분석 중입니다.');
+      _speak('명령을 확인하고 있습니다.');
       _sendTextToGemini(_lastWords);
     } else {
-      _speak('아무 말씀도 인식되지 않았습니다.');
+      _speak('말씀이 들리지 않았습니다. 다시 말하려면 마이크를 누르세요.');
     }
   }
 
@@ -242,7 +259,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       setState(() {
         _isRecording = false;
         _isProcessing = true;
-        _statusMessage = '명령 분석 중...';
+        _statusMessage = '명령을 확인하고 있습니다.';
       });
       _stopWaveAnimation();
       _speak('녹음이 종료되었습니다.');
@@ -251,7 +268,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       } else {
         _speak('인식된 음성이 없습니다.');
         setState(() {
-          _statusMessage = '인식된 음성이 없습니다.';
+          _statusMessage = '말씀이 들리지 않았습니다.';
           _isProcessing = false;
         });
       }
@@ -265,7 +282,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         if (mounted) {
           setState(() {
             _isRecording = true;
-            _statusMessage = '듣고 있습니다...';
+            _statusMessage = '듣고 있습니다.';
           });
         }
         await _speech.listen(
@@ -334,48 +351,45 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     _toggleRecording();
   }
 
-  String _normalizeVoiceText(String text) {
-    return text.toLowerCase().replaceAll(RegExp(r'\s+'), '');
+  Future<List<RegisteredVoiceDevice>> _loadRegisteredDevices() async {
+    final devices = await HomeDeviceStore.loadDevices();
+    return devices
+        .map(RegisteredVoiceDevice.fromJson)
+        .where((device) => device.id.isNotEmpty)
+        .toList(growable: false);
   }
 
-  bool _isAffirmativeResponse(String text) {
-    final t = _normalizeVoiceText(text);
-    return const [
-      '응',
-      '네',
-      '예',
-      '맞아',
-      '맞아요',
-      '그래',
-      '그래요',
-      '좋아',
-      '좋아요',
-      'ok',
-      'okay',
-      '오케이',
-    ].any((token) => t == token || t.contains(token));
+  Future<void> _activateVoiceDevice(RegisteredVoiceDevice device) async {
+    final preservedBleId =
+        device.bleId ?? ActiveDeviceService.instance.getActiveBleId();
+    final preservedBleName =
+        device.bleName ?? await ActiveDeviceService.instance.getActiveBleName();
+
+    _resolvedDeviceId = device.id;
+    _resolvedDeviceName = device.name;
+
+    await ActiveDeviceService.instance.setActiveDevice(
+      deviceId: device.id,
+      deviceName: device.name,
+      bleId: preservedBleId,
+      bleName: preservedBleName,
+    );
   }
 
-  bool _isNegativeResponse(String text) {
-    final t = _normalizeVoiceText(text);
-    return const [
-      '아니',
-      '아니야',
-      '아니요',
-      '아뇨',
-      '취소',
-      '그만',
-      '중지',
-      '멈춰',
-      '안돼',
-      '안해',
-      '하지마',
-    ].any((token) => t == token || t.contains(token));
+  void _restartListeningAfterPrompt() {
+    if (!_speechEnabled || !mounted) return;
+    Future<void>.delayed(const Duration(milliseconds: 900), () {
+      if (!mounted || _isRecording || _isProcessing) return;
+      _toggleRecording();
+    });
   }
 
   Future<void> _sendTextToGemini(String text) async {
     final requestId = ++_analysisRequestId;
-    AppLogger.info('voice.send_to_gemini.start', {'requestId': requestId, 'text': text});
+    AppLogger.info('voice.send_to_gemini.start', {
+      'requestId': requestId,
+      'text': text,
+    });
 
     if (text.isEmpty) {
       AppLogger.warn('voice.send_to_gemini.empty_text');
@@ -387,7 +401,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     }
 
     if (_pendingCommandData != null) {
-      if (_isAffirmativeResponse(text)) {
+      if (VoiceTextMatcher.isAffirmative(text)) {
         AppLogger.info('voice.response.affirmative', {'requestId': requestId});
         final pending = _pendingCommandData!;
         _pendingCommandData = null;
@@ -399,7 +413,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         return;
       }
 
-      if (_isNegativeResponse(text)) {
+      if (VoiceTextMatcher.isNegative(text)) {
         AppLogger.info('voice.response.negative', {'requestId': requestId});
         _pendingCommandData = null;
         setState(() {
@@ -413,7 +427,37 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       _pendingCommandData = null;
     }
 
-    final ruleResult = MicrowaveCommandService.checkSimpleRules(text);
+    final registeredDevices = await _loadRegisteredDevices();
+    final resolution = VoiceDeviceResolver.resolve(
+      text: text,
+      devices: registeredDevices,
+      preferredDeviceId: widget.deviceId ?? _resolvedDeviceId,
+      preferredDeviceName: widget.deviceName ?? _resolvedDeviceName,
+    );
+
+    if (resolution.device != null) {
+      await _activateVoiceDevice(resolution.device!);
+    }
+
+    if (resolution.needsClarification || resolution.needsAction) {
+      AppLogger.info('voice.device_resolution.follow_up', {
+        'requestId': requestId,
+        'needsClarification': resolution.needsClarification,
+        'needsAction': resolution.needsAction,
+      });
+      setState(() {
+        _statusMessage = resolution.message;
+        _isProcessing = false;
+      });
+      await _speak(resolution.message);
+      _restartListeningAfterPrompt();
+      return;
+    }
+
+    final commandText = resolution.commandText.isNotEmpty
+        ? resolution.commandText
+        : text;
+    final ruleResult = MicrowaveCommandService.checkSimpleRules(commandText);
     if (ruleResult != null) {
       if (requestId != _analysisRequestId) return;
       AppLogger.info('voice.parse.simple_rule_hit', {'requestId': requestId});
@@ -423,17 +467,23 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
     try {
       final commandData = await AiBackendService.instance.parseVoiceCommand(
-        text,
+        commandText,
       );
       if (requestId != _analysisRequestId) return;
-      AppLogger.info('voice.parse.backend_ok', {'requestId': requestId, 'action': commandData['action']});
+      AppLogger.info('voice.parse.backend_ok', {
+        'requestId': requestId,
+        'action': commandData['action'],
+      });
       await _handleCommand(commandData, recognizedText: text);
     } catch (e) {
-      AppLogger.error('voice.parse.error', {'requestId': requestId, 'error': e.toString()});
+      AppLogger.error('voice.parse.error', {
+        'requestId': requestId,
+        'error': e.toString(),
+      });
       if (requestId != _analysisRequestId) return;
-      _speak('분석에 실패했습니다.');
+      _speak('명령을 이해하지 못했습니다. 기기 이름과 동작을 함께 말해 주세요.');
       setState(() {
-        _statusMessage = '분석 실패';
+        _statusMessage = '명령 이해 실패';
         _isProcessing = false;
       });
     }
@@ -452,7 +502,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   Future<void> _sendBleSequence(List<dynamic> commands) async {
     // [DEMO PRIORITY] 이미 연결된 기기가 있다면 즉시 사용
     String deviceId = BleService.instance.connectedDeviceId;
-    
+
     if (deviceId.isEmpty) {
       // 연결된 게 없을 때만 자동 선택 및 재연결 시도
       await ActiveDeviceService.instance.autoPickFirstDevice();
@@ -461,7 +511,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         _speak('먼저 기기 연결 화면에서 허브를 연결해 주세요.');
         return;
       }
-      
+
       _speak('기기에 연결 중입니다...');
       final connected = await BleService.instance.ensureConnected(activeBleId);
       if (!connected) {
@@ -471,74 +521,73 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       deviceId = BleService.instance.connectedDeviceId;
     }
 
-    // 활성 기기 프로필 로드 (그리드 방식 버튼을 위해)
-    final activeApplianceId = ActiveDeviceService.instance.getActiveDeviceId() ?? '';
+    // 활성 기기 프로필 로드. 저장된 매핑이 있으면 목데이터보다 우선 사용한다.
+    final activeApplianceId =
+        ActiveDeviceService.instance.getActiveDeviceId() ?? '';
     final profile = await DeviceMappingService.instance.load(activeApplianceId);
+    final useProfileMapping =
+        activeApplianceId.isNotEmpty &&
+        (profile.buttonMap.isNotEmpty ||
+            profile.rows != 3 ||
+            profile.cols != 3 ||
+            profile.originX != 0 ||
+            profile.originY != 0 ||
+            profile.pitchX != 1 ||
+            profile.pitchY != 1);
+
+    if (useProfileMapping) {
+      final result = await MappingExecutionService.instance.pressSequence(
+        deviceId: deviceId,
+        profile: profile,
+        buttonIds: commands.cast<String>(),
+      );
+      if (!result.ok) {
+        _speak(result.message);
+        return;
+      }
+      return;
+    }
 
     for (final dynamic raw in commands) {
       final btn = raw as String;
-      
-      // 1. 물리 좌표(Demo Mock Data)가 있으면 G-Code로 즉시 전송
+
+      // 저장 매핑이 없을 때만 검증된 데모 목데이터 좌표를 fallback으로 사용한다.
       final phys = MicrowaveCommandService.btnToPhysical(btn);
       if (phys != null) {
         // [시연 핵심] 충분한 딜레이를 주어 하드웨어 버퍼 오버플로우 방지
         // 모든 인버전/오프셋 제거: MOCK_MAPPING_DATA 원본 좌표 그대로 사용
-        final targetX = phys.$1; 
-        final targetY = phys.$2; 
-        debugPrint('[DEMO_DEBUG] Executing physical press: $btn at ($targetX, $targetY)');
-        
+        final targetX = phys.$1;
+        final targetY = phys.$2;
+        debugPrint(
+          '[DEMO_DEBUG] Executing physical press: $btn at ($targetX, $targetY)',
+        );
+
         // ★ GRBL 좌표계 강제 초기화 및 설정
         await BleService.instance.sendRaw('G92.1'); // 모든 오프셋 취소
         await BleService.instance.sendRaw('G92 X0 Y0'); // 현재 위치를 (0,0)으로 설정
         await BleService.instance.sendRaw('G90'); // 절대 좌표 모드 명시
-        await BleService.instance.sendRaw('G1 X$targetX Y$targetY F1000'); 
-        await Future<void>.delayed(const Duration(milliseconds: 1500)); // 이동 시간 확보
-        
+        await BleService.instance.sendRaw('G1 X$targetX Y$targetY F1000');
+        await Future<void>.delayed(
+          const Duration(milliseconds: 1500),
+        ); // 이동 시간 확보
+
         // Z 터치 로직: 상대 좌표(G91)
-        await BleService.instance.sendRaw('G91'); 
+        await BleService.instance.sendRaw('G91');
         await BleService.instance.sendRaw('G1 Z-1.0 F150'); // 1.0mm 내려가기
         await Future<void>.delayed(const Duration(milliseconds: 800));
-        
+
         await BleService.instance.sendRaw('G4 P0.4'); // 터치 유지
         await Future<void>.delayed(const Duration(milliseconds: 600));
-        
-        await BleService.instance.sendRaw('G1 Z1.0 F150');   // 1.0mm 올라오기
+
+        await BleService.instance.sendRaw('G1 Z1.0 F150'); // 1.0mm 올라오기
         await Future<void>.delayed(const Duration(milliseconds: 300));
         await BleService.instance.sendRaw('G90'); // 다시 절대 좌표 모드로 설정
         await Future<void>.delayed(const Duration(milliseconds: 300));
         await BleService.instance.sendRaw('G1 X0 Y0 F1000'); // ★ 원점 복귀
         await Future<void>.delayed(const Duration(milliseconds: 800));
       } else {
-        // 2. 물리 좌표가 없으면 기존 그리드 인덱스 매핑 방식 사용
-        // (그리드 방식 사용 시에만 SET_GRID 필요)
-        await BleService.instance.sendSetGrid(
-          rows: profile.rows,
-          cols: profile.cols,
-          originX: profile.originX,
-          originY: profile.originY,
-          pitchX: profile.pitchX,
-          pitchY: profile.pitchY,
-          deviceId: deviceId,
-        );
-        await Future<void>.delayed(const Duration(milliseconds: 500));
-
-        final mapped = profile.buttonMap[btn];
-        final pos = mapped == null
-            ? MicrowaveCommandService.btnToGrid(btn)
-            : (mapped.row, mapped.col);
-
-        if (pos != null) {
-          final ok = await BleService.instance.sendPress(
-            x: pos.$2,
-            y: pos.$1,
-            cols: profile.cols,
-            deviceId: deviceId,
-          );
-          if (!ok) {
-            _speak('명령 전송 중 오류가 발생했습니다.');
-            return;
-          }
-        }
+        _speak('$btn 버튼의 데모 좌표를 찾지 못했습니다.');
+        return;
       }
       await Future<void>.delayed(const Duration(milliseconds: 800));
     }
@@ -550,14 +599,17 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     bool forceExecution = false,
   }) async {
     final action = data['action'] as String? ?? 'NONE';
-    AppLogger.info('voice.handle_command', {'action': action, 'force': forceExecution});
+    AppLogger.info('voice.handle_command', {
+      'action': action,
+      'force': forceExecution,
+    });
     final message = (data['message'] as String? ?? '').trim();
     final commands = (data['commands'] as List<dynamic>?) ?? [];
     final inferredSeconds = (data['inferred_seconds'] as num?)?.toInt();
     final confidence = (data['confidence'] as num?)?.toDouble() ?? 0.5;
     final needsConfirmation = (data['needs_confirmation'] as bool?) ?? false;
-    final confirmationMessage =
-        (data['confirmation_message'] as String? ?? '').trim();
+    final confirmationMessage = (data['confirmation_message'] as String? ?? '')
+        .trim();
 
     setState(() {
       _isProcessing = false;
@@ -570,7 +622,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         FeedbackService.instance.vibrateSuccess();
         await _speak(message);
         return;
-        
+
       case 'EMERGENCY_STOP':
         FeedbackService.instance.vibrateError(); // 강한 진동
         await _speak(message.isNotEmpty ? message : '중단합니다.');
@@ -672,7 +724,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
                               : (_isRecording ? 'Listening...' : '말씀해 주세요.'),
                           style: TextStyle(
                             color: (_isRecording || _isProcessing)
-                                ? const Color(0xFFFFEB00)
+                                ? AppColors.primary
                                 : Colors.white,
                             fontSize: 34 * rs,
                             fontWeight: FontWeight.w900,
@@ -685,40 +737,21 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
                           _isProcessing
                               ? _statusMessage
                               : (_isRecording
-                                  ? '듣고 있습니다.'
-                                  : '버튼을 눌러 명령을 말씀해 주세요.'),
+                                    ? '듣고 있습니다.'
+                                    : '버튼을 눌러 명령을 말씀해 주세요.'),
                           style: TextStyle(
-                            color: const Color(0xFFD1D5DB),
+                            color: AppColors.textSecondary,
                             fontSize: 16 * rs,
                             fontWeight: FontWeight.w500,
                           ),
                           textAlign: TextAlign.center,
                         ),
                         SizedBox(height: 40 * rs),
-                        SizedBox(
-                          height: waveH,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: _waveHeights
-                                .map(
-                                  (h) => AnimatedContainer(
-                                    duration: const Duration(milliseconds: 150),
-                                    width: 7 * rs,
-                                    height: waveH * h,
-                                    margin: EdgeInsets.symmetric(
-                                      horizontal: 3 * rs,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: _isRecording
-                                          ? const Color(0xFFFFEB00)
-                                          : const Color(0xFF333333),
-                                      borderRadius:
-                                          BorderRadius.circular(4 * rs),
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                          ),
+                        VoiceWaveVisualizer(
+                          waveHeights: _waveHeights,
+                          waveHeight: waveH,
+                          isRecording: _isRecording,
+                          scale: rs,
                         ),
                         if (_isRecording &&
                             _recognizedText.isNotEmpty &&
@@ -737,217 +770,37 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
                           ),
                         ],
                         SizedBox(height: 40 * rs),
-                        if (_isRecording) ...[
-                          Row(
-                            children: [
-                              Expanded(
-                                flex: 3,
-                                child: Semantics(
-                                  label: '듣기 멈추기',
-                                  button: true,
-                                  child: GestureDetector(
-                                    onTap: _handleMicTap,
-                                    child: Container(
-                                      height: 64 * rs,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFFFEB00),
-                                        borderRadius:
-                                            BorderRadius.circular(16 * rs),
-                                        border: _micArmed
-                                            ? Border.all(
-                                                color: Colors.white,
-                                                width: 3 * rs,
-                                              )
-                                            : null,
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Icon(
-                                            Icons.stop_circle_outlined,
-                                            color: Colors.black,
-                                            size: 24 * rs,
-                                          ),
-                                          SizedBox(width: 8 * rs),
-                                          Text(
-                                            '듣기 멈추기',
-                                            style: TextStyle(
-                                              color: Colors.black,
-                                              fontSize: 17 * rs,
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              SizedBox(width: 12 * rs),
-                              Expanded(
-                                flex: 2,
-                                child: Semantics(
-                                  label: '취소',
-                                  button: true,
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      _speech.stop();
-                                      _recordingTimeoutTimer?.cancel();
-                                      _stopWaveAnimation();
-                                      setState(() {
-                                        _isRecording = false;
-                                        _isProcessing = false;
-                                      });
-                                      _speak('취소되었습니다.');
-                                    },
-                                    child: Container(
-                                      height: 64 * rs,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF1E1E1E),
-                                        borderRadius:
-                                            BorderRadius.circular(16 * rs),
-                                        border: Border.all(
-                                          color: const Color(0xFF3A3A3A),
-                                        ),
-                                      ),
-                                      child: Center(
-                                        child: Text(
-                                          '취소',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 17 * rs,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ] else if (isIdle) ...[
-                          Semantics(
-                            label: '음성 명령 시작',
-                            button: true,
-                            child: GestureDetector(
-                              onTap: _handleMicTap,
-                              child: Container(
-                                width: double.infinity,
-                                height: 64 * rs,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFFFEB00),
-                                  borderRadius: BorderRadius.circular(16 * rs),
-                                  border: _micArmed
-                                      ? Border.all(
-                                          color: Colors.white,
-                                          width: 3 * rs,
-                                        )
-                                      : null,
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.mic,
-                                      color: Colors.black,
-                                      size: 26 * rs,
-                                    ),
-                                    SizedBox(width: 10 * rs),
-                                    Text(
-                                      _micArmed ? '지금 누르면 녹음 시작' : '녹음 준비',
-                                      style: TextStyle(
-                                        color: Colors.black,
-                                        fontSize: 17 * rs,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ] else ...[
-                          SizedBox(
-                            width: double.infinity,
-                            height: 64 * rs,
-                            child: OutlinedButton.icon(
-                              onPressed: _cancelAnalysis,
-                              style: OutlinedButton.styleFrom(
-                                side:
-                                    const BorderSide(color: Color(0xFF555555)),
-                                foregroundColor: const Color(0xFFD1D5DB),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16 * rs),
-                                ),
-                              ),
-                              icon: const Icon(Icons.close_rounded),
-                              label: Text(
-                                '분석 취소',
-                                style: TextStyle(
-                                  fontSize: 16 * rs,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                        VoiceActionButtons(
+                          isRecording: _isRecording,
+                          isIdle: isIdle,
+                          micArmed: _micArmed,
+                          scale: rs,
+                          onMicTap: _handleMicTap,
+                          onCancelRecording: () {
+                            _speech.stop();
+                            _recordingTimeoutTimer?.cancel();
+                            _stopWaveAnimation();
+                            setState(() {
+                              _isRecording = false;
+                              _isProcessing = false;
+                            });
+                            _speak('취소되었습니다.');
+                          },
+                          onCancelAnalysis: _cancelAnalysis,
+                        ),
                         SizedBox(height: ResponsiveScale.v(context, 24)),
-                        if (isIdle) ...[
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              '예시 명령어',
-                              style: TextStyle(
-                                color: const Color(0xFF888888),
-                                fontSize: 13 * rs,
-                              ),
-                            ),
+                        if (isIdle)
+                          VoiceExampleCommands(
+                            scale: rs,
+                            onCommandTap: (cmd) {
+                              setState(() {
+                                _recognizedText = cmd;
+                                _isProcessing = true;
+                              });
+                              _speak('$cmd 명령을 처리합니다.');
+                              _sendTextToGemini(cmd);
+                            },
                           ),
-                          SizedBox(height: ResponsiveScale.v(context, 8)),
-                          Wrap(
-                            spacing: 8 * rs,
-                            runSpacing: 8 * rs,
-                            children: ['1번 눌러줘', '2번 눌러줘', '8번 눌러줘', '만두 데워줘', '우유 따뜻하게', '30초 돌려줘', '해동해줘']
-                                .map(
-                                  (cmd) => GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        _recognizedText = cmd;
-                                        _isProcessing = true;
-                                      });
-                                      _speak('$cmd 명령을 처리합니다.');
-                                      _sendTextToGemini(cmd);
-                                    },
-                                    child: Container(
-                                      padding: EdgeInsets.symmetric(
-                                        horizontal: 14 * rs,
-                                        vertical: 8 * rs,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF1A1A1A),
-                                        borderRadius: BorderRadius.circular(
-                                          20 * rs,
-                                        ),
-                                        border: Border.all(
-                                          color: const Color(0xFF333333),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        cmd,
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 14 * rs,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                        ],
                         SizedBox(height: 24 * rs),
                       ],
                     ),
