@@ -9,6 +9,7 @@ class AccessibilitySettings extends ChangeNotifier {
   static const _kLargeText = 'large_text';
   static const _kHighContrast = 'high_contrast';
   static const _kGuardianMode = 'guardian_mode';
+  static const _kDeveloperMode = 'developer_mode';
   static const _kTtsSpeed = 'tts_speed';
   static const _kTtsVolume = 'tts_volume';
   static const _kContactName = 'contact_name';
@@ -18,6 +19,7 @@ class AccessibilitySettings extends ChangeNotifier {
   bool _largeTextEnabled = false;
   bool _highContrastEnabled = false;
   bool _guardianModeEnabled = true;
+  bool _developerModeEnabled = false;
   double _ttsSpeed = 1.0;
   double _ttsVolume = 1.0;
   String _contactName = '';
@@ -27,6 +29,7 @@ class AccessibilitySettings extends ChangeNotifier {
   bool get largeTextEnabled => _largeTextEnabled;
   bool get highContrastEnabled => _highContrastEnabled;
   bool get guardianModeEnabled => _guardianModeEnabled;
+  bool get developerModeEnabled => _developerModeEnabled;
   double get ttsSpeed => _ttsSpeed;
   double get ttsVolume => _ttsVolume;
   String get contactName => _contactName;
@@ -40,6 +43,7 @@ class AccessibilitySettings extends ChangeNotifier {
       _largeTextEnabled = prefs.getBool(_kLargeText) ?? false;
       _highContrastEnabled = prefs.getBool(_kHighContrast) ?? false;
       _guardianModeEnabled = prefs.getBool(_kGuardianMode) ?? true;
+      _developerModeEnabled = prefs.getBool(_kDeveloperMode) ?? false;
       _ttsSpeed = prefs.getDouble(_kTtsSpeed) ?? 1.0;
       _ttsVolume = prefs.getDouble(_kTtsVolume) ?? 1.0;
       _contactName = prefs.getString(_kContactName) ?? '';
@@ -74,6 +78,13 @@ class AccessibilitySettings extends ChangeNotifier {
     if (_guardianModeEnabled == value) return;
     _guardianModeEnabled = value;
     _saveBool(_kGuardianMode, value);
+    notifyListeners();
+  }
+
+  void setDeveloperModeEnabled(bool value) {
+    if (_developerModeEnabled == value) return;
+    _developerModeEnabled = value;
+    _saveBool(_kDeveloperMode, value);
     notifyListeners();
   }
 

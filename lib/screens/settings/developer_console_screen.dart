@@ -3,6 +3,9 @@ import '../../services/ble_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../../theme/app_colors.dart';
+import 'widgets/esp_connection_panel.dart';
+import 'widgets/esp_select_sheet.dart';
+import 'widgets/jog_control_panel.dart';
 
 class DeveloperConsoleScreen extends StatefulWidget {
   const DeveloperConsoleScreen({super.key});
@@ -15,15 +18,23 @@ class _DeveloperConsoleScreenState extends State<DeveloperConsoleScreen> {
   final TextEditingController _controller = TextEditingController();
   final List<String> _messages = [];
   final ScrollController _scrollController = ScrollController();
-  
+
   double _stepSize = 1.0; // 이동 거리 (mm)
-  final int _feedRate = 800;   // 이동 속도 (F)
+  double _feedRate = 800; // 이동 속도 (F)
+  bool _isScanning = false;
 
   @override
   void initState() {
     super.initState();
     _messages.add('[SYSTEM] 개발자 콘솔 및 조깅 컨트롤 활성화');
     _messages.add('[SYSTEM] 화살표 버튼으로 하드웨어를 직접 제어하세요.');
+    final connectedId = BleService.instance.connectedDeviceId;
+    if (connectedId.isNotEmpty) {
+      _messages.add('[BLE] 연결됨: ${BleService.instance.connectedDeviceName}');
+      _messages.add('[BLE] ID: $connectedId');
+    } else {
+      _messages.add('[BLE] 연결된 ESP가 없습니다. 상단의 ESP 선택을 사용하세요.');
+    }
   }
 
   void _addLog(String msg) {
@@ -58,11 +69,45 @@ class _DeveloperConsoleScreenState extends State<DeveloperConsoleScreen> {
     _controller.clear();
   }
 
-  /// GRBL 조깅 명령 생성 및 전송
-  /// $J=G91 G21 X{val} F{feed}
   Future<void> _jog(String axis, double val) async {
-    final cmd = '\$J=G91 G21 $axis$val F$_feedRate';
-    await _sendRaw(cmd);
+    final feedRate = _feedRate.round();
+    _addLog('>> MOVE $axis$val F$feedRate');
+    final ok = await BleService.instance.sendRelativeMove(
+      axis: axis,
+      value: val,
+      feedRate: feedRate,
+    );
+    _addLog(ok ? '<< [SUCCESS] 이동 완료' : '<< [ERROR] 이동 실패');
+  }
+
+  Future<void> _scanAndSelectEsp() async {
+    if (_isScanning) return;
+    setState(() => _isScanning = true);
+    _addLog('[BLE] ESP 검색 시작');
+
+    final devices = await BleService.instance.scan(
+      timeout: const Duration(seconds: 5),
+    );
+    if (!mounted) return;
+    setState(() => _isScanning = false);
+
+    if (devices.isEmpty) {
+      _addLog('[BLE] 검색된 ESP가 없습니다.');
+      return;
+    }
+
+    final selected = await showEspSelectSheet(context: context, devices: devices);
+
+    if (selected == null) {
+      _addLog('[BLE] ESP 선택 취소');
+      return;
+    }
+
+    _addLog('[BLE] 연결 시도: ${selected.name} (${selected.id})');
+    final ok = await BleService.instance.connect(selected.id);
+    if (!mounted) return;
+    _addLog(ok ? '[BLE] 연결 성공: ${selected.name}' : '[BLE] 연결 실패');
+    setState(() {});
   }
 
   @override
@@ -74,53 +119,21 @@ class _DeveloperConsoleScreenState extends State<DeveloperConsoleScreen> {
       appBar: const TopAppBar(title: '개발자 모드 (조깅)', showBack: true),
       body: Column(
         children: [
-          // 1. 조깅 컨트롤 패널
-          Container(
-            padding: EdgeInsets.all(16 * rs),
-            decoration: const BoxDecoration(
-              color: Color(0xFF111111),
-              border: Border(bottom: BorderSide(color: Color(0xFF2A2A2A))),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _buildStepSizeSelector(rs),
-                    _buildFeedRateDisplay(rs),
-                  ],
-                ),
-                SizedBox(height: 20 * rs),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // XY 방향키
-                    Column(
-                      children: [
-                        _jogButton(Icons.arrow_upward, () => _jog('Y', _stepSize), rs),
-                        Row(
-                          children: [
-                            _jogButton(Icons.arrow_back, () => _jog('X', -_stepSize), rs),
-                            SizedBox(width: 40 * rs),
-                            _jogButton(Icons.arrow_forward, () => _jog('X', _stepSize), rs),
-                          ],
-                        ),
-                        _jogButton(Icons.arrow_downward, () => _jog('Y', -_stepSize), rs),
-                      ],
-                    ),
-                    SizedBox(width: 60 * rs),
-                    // Z축 키
-                    Column(
-                      children: [
-                        _jogButton(Icons.keyboard_double_arrow_up, () => _jog('Z', _stepSize), rs, label: 'Z UP', color: Colors.blueAccent),
-                        SizedBox(height: 20 * rs),
-                        _jogButton(Icons.keyboard_double_arrow_down, () => _jog('Z', -_stepSize), rs, label: 'Z DOWN', color: Colors.blueAccent),
-                      ],
-                    ),
-                  ],
-                ),
-              ],
-            ),
+          EspConnectionPanel(
+            connected: BleService.instance.connectedDeviceId.isNotEmpty,
+            connectedName: BleService.instance.connectedDeviceName,
+            connectedId: BleService.instance.connectedDeviceId,
+            isScanning: _isScanning,
+            scale: rs,
+            onScanTap: _scanAndSelectEsp,
+          ),
+          JogControlPanel(
+            stepSize: _stepSize,
+            feedRate: _feedRate,
+            scale: rs,
+            onStepSizeChanged: (v) => setState(() => _stepSize = v),
+            onFeedRateChanged: (v) => setState(() => _feedRate = v),
+            onJog: _jog,
           ),
 
           // 2. 메시지 로그
@@ -133,14 +146,14 @@ class _DeveloperConsoleScreenState extends State<DeveloperConsoleScreen> {
                 final msg = _messages[index];
                 final isUser = msg.startsWith('>>');
                 final isError = msg.contains('[ERROR]');
-                
+
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 2),
                   child: Text(
                     msg,
                     style: TextStyle(
-                      color: isError 
-                          ? Colors.redAccent 
+                      color: isError
+                          ? Colors.redAccent
                           : (isUser ? AppColors.primary : Colors.greenAccent),
                       fontFamily: 'monospace',
                       fontSize: 12 * rs,
@@ -155,21 +168,30 @@ class _DeveloperConsoleScreenState extends State<DeveloperConsoleScreen> {
           Container(
             padding: EdgeInsets.fromLTRB(16 * rs, 8 * rs, 16 * rs, 32 * rs),
             decoration: const BoxDecoration(
-              color: Color(0xFF111111),
-              border: Border(top: BorderSide(color: Color(0xFF2A2A2A))),
+              color: AppColors.surfaceElevated,
+              border: Border(top: BorderSide(color: AppColors.borderDefault)),
             ),
             child: Row(
               children: [
                 Expanded(
                   child: TextField(
                     controller: _controller,
-                    style: const TextStyle(color: Colors.white, fontFamily: 'monospace'),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontFamily: 'monospace',
+                    ),
                     decoration: InputDecoration(
                       hintText: '직접 명령 입력 (예: PRESS 1 1)',
-                      hintStyle: const TextStyle(color: Colors.white24, fontSize: 13),
+                      hintStyle: const TextStyle(
+                        color: Colors.white24,
+                        fontSize: 13,
+                      ),
                       filled: true,
                       fillColor: Colors.black,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 16 * rs, vertical: 12 * rs),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 16 * rs,
+                        vertical: 12 * rs,
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8 * rs),
                         borderSide: BorderSide.none,
@@ -181,7 +203,10 @@ class _DeveloperConsoleScreenState extends State<DeveloperConsoleScreen> {
                 SizedBox(width: 12 * rs),
                 IconButton(
                   onPressed: _sendMessage,
-                  icon: const Icon(Icons.send_rounded, color: AppColors.primary),
+                  icon: const Icon(
+                    Icons.send_rounded,
+                    color: AppColors.primary,
+                  ),
                 ),
               ],
             ),
@@ -191,46 +216,4 @@ class _DeveloperConsoleScreenState extends State<DeveloperConsoleScreen> {
     );
   }
 
-  Widget _buildStepSizeSelector(double rs) {
-    return Row(
-      children: [
-        Text('이동 단위:', style: TextStyle(color: Colors.white70, fontSize: 13 * rs)),
-        SizedBox(width: 8 * rs),
-        DropdownButton<double>(
-          value: _stepSize,
-          dropdownColor: const Color(0xFF1A1A1A),
-          style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
-          underline: Container(),
-          items: [0.1, 0.5, 1.0, 5.0, 10.0].map((val) {
-            return DropdownMenuItem(value: val, child: Text('${val}mm'));
-          }).toList(),
-          onChanged: (v) => setState(() => _stepSize = v!),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFeedRateDisplay(double rs) {
-    return Text('속도: F$_feedRate', style: TextStyle(color: Colors.white70, fontSize: 13 * rs));
-  }
-
-  Widget _jogButton(IconData icon, VoidCallback onTap, double rs, {String? label, Color color = const Color(0xFFFFEB00)}) {
-    return Column(
-      children: [
-        IconButton(
-          onPressed: onTap,
-          icon: Icon(icon, color: color, size: 36 * rs),
-          style: IconButton.styleFrom(
-            backgroundColor: const Color(0xFF222222),
-            padding: EdgeInsets.all(12 * rs),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12 * rs)),
-          ),
-        ),
-        if (label != null) ...[
-          SizedBox(height: 4 * rs),
-          Text(label, style: TextStyle(color: color.withValues(alpha: 0.7), fontSize: 10 * rs, fontWeight: FontWeight.bold)),
-        ],
-      ],
-    );
-  }
 }

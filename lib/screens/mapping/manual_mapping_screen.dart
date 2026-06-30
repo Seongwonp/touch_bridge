@@ -6,6 +6,7 @@ import '../../services/tts_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../../theme/app_colors.dart';
+import 'widgets/mapping_form_controls.dart';
 
 class ManualMappingScreen extends StatefulWidget {
   const ManualMappingScreen({super.key});
@@ -53,9 +54,9 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
     final deviceId = ActiveDeviceService.instance.getActiveDeviceId();
     if (deviceId == null) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('연결된 기기가 없습니다.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('연결된 기기가 없습니다.')));
       }
       return;
     }
@@ -100,20 +101,20 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
 
       if (ok) {
         _tts.speak('그리드 설정이 하드웨어로 전송되었습니다.');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('BLE 전송 성공')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('BLE 전송 성공')));
       } else {
         _tts.speak('BLE 전송에 실패했습니다.');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('BLE 전송 실패')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('BLE 전송 실패')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('오류: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('오류: $e')));
       }
     } finally {
       if (mounted) setState(() => _isUploading = false);
@@ -124,13 +125,53 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
     final deviceId = ActiveDeviceService.instance.getActiveDeviceId();
     if (deviceId == null) return;
     final cols = int.tryParse(_colsCtrl.text) ?? 3;
-    await BleService.instance.sendPress(x: x, y: y, cols: cols, deviceId: deviceId);
+    await BleService.instance.sendPress(
+      x: x,
+      y: y,
+      cols: cols,
+      deviceId: deviceId,
+    );
+  }
+
+  Future<void> _homeDevice() async {
+    final deviceId = ActiveDeviceService.instance.getActiveDeviceId();
+    if (deviceId == null) {
+      _tts.speak('활성 기기가 없습니다.');
+      return;
+    }
+    await BleService.instance.sendHoming(deviceId);
+    _tts.speak('하드웨어를 홈 위치로 이동합니다.');
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('홈 이동 명령 전송')));
+  }
+
+  Future<void> _setCurrentAsOrigin() async {
+    final okOffset = await BleService.instance.sendRaw('G92.1');
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    final okOrigin = await BleService.instance.sendRaw('G92 X0 Y0');
+    if (okOffset && okOrigin) {
+      _oxCtrl.text = '0.0';
+      _oyCtrl.text = '0.0';
+      _tts.speak('현재 위치를 원점으로 지정했습니다.');
+    } else {
+      _tts.speak('원점 지정 명령 전송에 실패했습니다.');
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(okOffset && okOrigin ? '현재 위치를 원점으로 지정' : '원점 지정 실패'),
+      ),
+    );
   }
 
   Future<void> _jog(String axis, double value) async {
-    // GRBL 조깅 명령: $J=G91 G21 X10 F500
-    final cmd = '\$J=G91 G21 $axis$value F800';
-    await BleService.instance.sendRaw(cmd);
+    await BleService.instance.sendRelativeMove(
+      axis: axis,
+      value: value,
+      feedRate: 800,
+    );
   }
 
   @override
@@ -144,74 +185,137 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('그리드 구성', style: TextStyle(color: Colors.white, fontSize: 18 * rs, fontWeight: FontWeight.bold)),
+            Text(
+              '그리드 구성',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 18 * rs,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             SizedBox(height: 12 * rs),
             Row(
               children: [
-                Expanded(child: _buildTextField('행 (Rows)', _rowsCtrl, rs)),
+                Expanded(child: LabeledNumberField(label: '행 (Rows)', controller: _rowsCtrl, scale: rs)),
                 SizedBox(width: 12 * rs),
-                Expanded(child: _buildTextField('열 (Cols)', _colsCtrl, rs)),
+                Expanded(child: LabeledNumberField(label: '열 (Cols)', controller: _colsCtrl, scale: rs)),
               ],
             ),
             SizedBox(height: 20 * rs),
-            Text('모터 테스트 (10mm 이동)', style: TextStyle(color: Colors.white, fontSize: 18 * rs, fontWeight: FontWeight.bold)),
+            Text(
+              '모터 테스트 (10mm 이동)',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 18 * rs,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             SizedBox(height: 12 * rs),
             Wrap(
               spacing: 8 * rs,
               runSpacing: 8 * rs,
               children: [
-                _buildTestButton('X+10', () => _jog('X', 10), rs),
-                _buildTestButton('X-10', () => _jog('X', -10), rs),
-                _buildTestButton('Y+10', () => _jog('Y', 10), rs),
-                _buildTestButton('Y-10', () => _jog('Y', -10), rs),
-                _buildTestButton('Z+10', () => _jog('Z', 10), rs),
-                _buildTestButton('Z-10', () => _jog('Z', -10), rs),
+                MappingActionChip(label: 'X+10', onTap: () => _jog('X', 10), scale: rs),
+                MappingActionChip(label: 'X-10', onTap: () => _jog('X', -10), scale: rs),
+                MappingActionChip(label: 'Y+10', onTap: () => _jog('Y', 10), scale: rs),
+                MappingActionChip(label: 'Y-10', onTap: () => _jog('Y', -10), scale: rs),
+                MappingActionChip(label: 'Z+10', onTap: () => _jog('Z', 10), scale: rs),
+                MappingActionChip(label: 'Z-10', onTap: () => _jog('Z', -10), scale: rs),
               ],
             ),
             SizedBox(height: 20 * rs),
-            Text('원점 및 간격 (mm)', style: TextStyle(color: Colors.white, fontSize: 18 * rs, fontWeight: FontWeight.bold)),
+            Text(
+              '원점 및 간격 (mm)',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 18 * rs,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             SizedBox(height: 12 * rs),
-            Row(
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.all(14 * rs),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceElevated,
+                borderRadius: BorderRadius.circular(12 * rs),
+                border: Border.all(color: AppColors.borderDefault),
+              ),
+              child: Text(
+                '사진 매핑의 빨간 기준점은 실제 하드웨어 원점과 맞아야 합니다. 조이스틱으로 터치봉을 기준점에 맞춘 뒤 현재 위치를 원점으로 지정하세요.',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 13 * rs,
+                  height: 1.45,
+                ),
+              ),
+            ),
+            SizedBox(height: 12 * rs),
+            Wrap(
+              spacing: 8 * rs,
+              runSpacing: 8 * rs,
               children: [
-                Expanded(child: _buildTextField('시작 X (OriginX)', _oxCtrl, rs)),
-                SizedBox(width: 12 * rs),
-                Expanded(child: _buildTextField('시작 Y (OriginY)', _oyCtrl, rs)),
+                MappingActionChip(label: '홈으로 이동', onTap: _homeDevice, scale: rs),
+                MappingActionChip(label: '현재 위치를 원점으로 지정', onTap: _setCurrentAsOrigin, scale: rs),
+                MappingActionChip(label: '원점 테스트 터치', onTap: () => _testPress(0, 0), scale: rs),
               ],
             ),
             SizedBox(height: 12 * rs),
             Row(
               children: [
-                Expanded(child: _buildTextField('가로 간격 (PitchX)', _pxCtrl, rs)),
+                Expanded(child: LabeledNumberField(label: '시작 X (OriginX)', controller: _oxCtrl, scale: rs)),
                 SizedBox(width: 12 * rs),
-                Expanded(child: _buildTextField('세로 간격 (PitchY)', _pyCtrl, rs)),
+                Expanded(child: LabeledNumberField(label: '시작 Y (OriginY)', controller: _oyCtrl, scale: rs)),
+              ],
+            ),
+            SizedBox(height: 12 * rs),
+            Row(
+              children: [
+                Expanded(child: LabeledNumberField(label: '가로 간격 (PitchX)', controller: _pxCtrl, scale: rs)),
+                SizedBox(width: 12 * rs),
+                Expanded(child: LabeledNumberField(label: '세로 간격 (PitchY)', controller: _pyCtrl, scale: rs)),
               ],
             ),
             SizedBox(height: 20 * rs),
-            Text('홈(대기) 위치 (그리드 인덱스)', style: TextStyle(color: Colors.white, fontSize: 18 * rs, fontWeight: FontWeight.bold)),
+            Text(
+              '홈(대기) 위치 (그리드 인덱스)',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 18 * rs,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             SizedBox(height: 12 * rs),
             Row(
               children: [
-                Expanded(child: _buildTextField('홈 행 (Home Row)', _hrCtrl, rs)),
+                Expanded(child: LabeledNumberField(label: '홈 행 (Home Row)', controller: _hrCtrl, scale: rs)),
                 SizedBox(width: 12 * rs),
-                Expanded(child: _buildTextField('홈 열 (Home Col)', _hcCtrl, rs)),
+                Expanded(child: LabeledNumberField(label: '홈 열 (Home Col)', controller: _hcCtrl, scale: rs)),
               ],
             ),
             SizedBox(height: 32 * rs),
-            Text('위치 조정 (Jogging)', style: TextStyle(color: Colors.white, fontSize: 18 * rs, fontWeight: FontWeight.bold)),
+            Text(
+              '위치 조정 (Jogging)',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 18 * rs,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             SizedBox(height: 12 * rs),
             Center(
               child: Column(
                 children: [
-                  _jogButton(Icons.arrow_upward, () => _jog('Y', 1.0), rs),
+                  JogArrowButton(icon: Icons.arrow_upward, onTap: () => _jog('Y', 1.0), scale: rs),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      _jogButton(Icons.arrow_back, () => _jog('X', -1.0), rs),
+                      JogArrowButton(icon: Icons.arrow_back, onTap: () => _jog('X', -1.0), scale: rs),
                       SizedBox(width: 40 * rs),
-                      _jogButton(Icons.arrow_forward, () => _jog('X', 1.0), rs),
+                      JogArrowButton(icon: Icons.arrow_forward, onTap: () => _jog('X', 1.0), scale: rs),
                     ],
                   ),
-                  _jogButton(Icons.arrow_downward, () => _jog('Y', -1.0), rs),
+                  JogArrowButton(icon: Icons.arrow_downward, onTap: () => _jog('Y', -1.0), scale: rs),
                 ],
               ),
             ),
@@ -224,24 +328,54 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.black,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12 * rs)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12 * rs),
+                  ),
                 ),
-                child: _isUploading 
-                  ? const CircularProgressIndicator(color: Colors.black)
-                  : Text('설정 저장 및 하드웨어 전송', style: TextStyle(fontSize: 16 * rs, fontWeight: FontWeight.bold)),
+                child: _isUploading
+                    ? const CircularProgressIndicator(color: Colors.black)
+                    : Text(
+                        '설정 저장 및 하드웨어 전송',
+                        style: TextStyle(
+                          fontSize: 16 * rs,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
               ),
             ),
             SizedBox(height: 24 * rs),
-            Text('테스트 실행', style: TextStyle(color: Colors.white, fontSize: 18 * rs, fontWeight: FontWeight.bold)),
+            Text(
+              '테스트 실행',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 18 * rs,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             SizedBox(height: 12 * rs),
             Wrap(
               spacing: 8 * rs,
               runSpacing: 8 * rs,
               children: [
-                _testButton('원점 (0,0)', () => _testPress(0, 0), rs),
-                _testButton('우측 끝', () => _testPress((int.tryParse(_colsCtrl.text) ?? 1) - 1, 0), rs),
-                _testButton('좌측 하단', () => _testPress(0, (int.tryParse(_rowsCtrl.text) ?? 1) - 1), rs),
-                _testButton('우측 하단', () => _testPress((int.tryParse(_colsCtrl.text) ?? 1) - 1, (int.tryParse(_rowsCtrl.text) ?? 1) - 1), rs),
+                MappingActionChip(label: '원점 (0,0)', onTap: () => _testPress(0, 0), scale: rs),
+                MappingActionChip(
+                  label: '우측 끝',
+                  onTap: () => _testPress((int.tryParse(_colsCtrl.text) ?? 1) - 1, 0),
+                  scale: rs,
+                ),
+                MappingActionChip(
+                  label: '좌측 하단',
+                  onTap: () => _testPress(0, (int.tryParse(_rowsCtrl.text) ?? 1) - 1),
+                  scale: rs,
+                ),
+                MappingActionChip(
+                  label: '우측 하단',
+                  onTap: () => _testPress(
+                    (int.tryParse(_colsCtrl.text) ?? 1) - 1,
+                    (int.tryParse(_rowsCtrl.text) ?? 1) - 1,
+                  ),
+                  scale: rs,
+                ),
               ],
             ),
             SizedBox(height: 40 * rs),
@@ -251,59 +385,4 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
     );
   }
 
-  Widget _buildTextField(String label, TextEditingController ctrl, double rs) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: TextStyle(color: const Color(0xFF888888), fontSize: 12 * rs)),
-        SizedBox(height: 6 * rs),
-        TextField(
-          controller: ctrl,
-          keyboardType: TextInputType.number,
-          style: const TextStyle(color: Colors.white),
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: const Color(0xFF1A1A1A),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8 * rs), borderSide: BorderSide.none),
-            contentPadding: EdgeInsets.symmetric(horizontal: 12 * rs, vertical: 8 * rs),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _jogButton(IconData icon, VoidCallback onTap, double rs) {
-    return IconButton(
-      onPressed: onTap,
-      icon: Icon(icon, color: AppColors.primary, size: 32 * rs),
-      style: IconButton.styleFrom(
-        backgroundColor: const Color(0xFF1A1A1A),
-        padding: EdgeInsets.all(12 * rs),
-      ),
-    );
-  }
-
-  Widget _testButton(String label, VoidCallback onTap, double rs) {
-    return ElevatedButton(
-      onPressed: onTap,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF2A2A2A),
-        foregroundColor: Colors.white,
-        padding: EdgeInsets.symmetric(horizontal: 16 * rs, vertical: 8 * rs),
-      ),
-      child: Text(label),
-    );
-  }
-
-  Widget _buildTestButton(String text, VoidCallback onPressed, double rs) {
-    return ElevatedButton(
-      onPressed: onPressed,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF333333),
-        foregroundColor: Colors.white,
-        padding: EdgeInsets.symmetric(horizontal: 16 * rs, vertical: 12 * rs),
-      ),
-      child: Text(text, style: TextStyle(fontSize: 14 * rs)),
-    );
-  }
 }

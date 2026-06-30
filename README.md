@@ -216,6 +216,9 @@ lib/
 - [x] QR 스캔 (`mobile_scanner`)
 - [x] 버튼 매핑 데이터 영속화
 - [x] 기기 목록 동적 관리
+- [x] 디자인 토큰 확장(보조 강조색/그라디언트) + 공용 위젯·핵심 화면 비주얼 리뉴얼 (2026-06-27)
+- [x] 대형 화면/서비스 파일 구조 분리 — `voice_listening_screen`, `home_screen`, `photo_mapping_screen`, `ble_service`, `developer_console_screen`, `manual_mapping_screen` 등을 책임별 위젯/서비스 파일로 분리 (2026-06-27)
+- [x] `home_devices` 저장소를 6곳 중복 코드에서 `HomeDeviceStore` 서비스로 단일화 (2026-06-27)
 - [ ] BLE 실기기 검증 고도화 (재연결/타임아웃/센서 피드백)
 
 ---

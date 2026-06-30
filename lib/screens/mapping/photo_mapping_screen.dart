@@ -1,9 +1,15 @@
+import 'dart:ui' as ui;
 import 'dart:io';
 import 'package:flutter/material.dart';
+import '../../services/mapping_coordinate_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
-import 'widgets/button_marker.dart';
+import '../../theme/app_colors.dart';
 import 'widgets/mapping_header.dart';
+import 'widgets/calibration_prompt.dart';
+import 'widgets/mapping_image_view.dart';
+import 'widgets/mapping_markers_layer.dart';
+import 'widgets/point_actions_sheet.dart';
 import 'photo_mapping_view_model.dart';
 
 class PhotoMappingScreen extends StatefulWidget {
@@ -15,8 +21,8 @@ class PhotoMappingScreen extends StatefulWidget {
   final String? bleName;
 
   const PhotoMappingScreen({
-    super.key, 
-    required this.deviceId, 
+    super.key,
+    required this.deviceId,
     this.imagePath,
     this.applianceName,
     this.applianceType,
@@ -30,6 +36,8 @@ class PhotoMappingScreen extends StatefulWidget {
 
 class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
   late PhotoMappingViewModel _viewModel;
+  final GlobalKey _mappingAreaKey = GlobalKey();
+  Size? _imageSize;
 
   @override
   void initState() {
@@ -43,9 +51,10 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
       bleName: widget.bleName,
     );
     _viewModel.addListener(_onViewModelUpdate);
-    
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _viewModel.initialize();
+      _loadImageSize();
     });
   }
 
@@ -60,21 +69,49 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
     super.dispose();
   }
 
-  void _handleTap(TapUpDetails details, GlobalKey imageKey) {
-    final RenderBox? renderBox = imageKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox == null) return;
-    
-    final localPosition = renderBox.globalToLocal(details.globalPosition);
-    final relativeX = (localPosition.dx / renderBox.size.width).clamp(0.0, 1.0);
-    final relativeY = (localPosition.dy / renderBox.size.height).clamp(0.0, 1.0);
+  Future<void> _loadImageSize() async {
+    final imagePath = widget.imagePath;
+    if (imagePath == null ||
+        imagePath.isEmpty ||
+        imagePath.startsWith('http')) {
+      return;
+    }
 
-    _viewModel.addPoint(Offset(relativeX, relativeY));
+    try {
+      final file = File(imagePath);
+      if (!await file.exists()) return;
+      final bytes = await file.readAsBytes();
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      final size = Size(
+        frame.image.width.toDouble(),
+        frame.image.height.toDouble(),
+      );
+      frame.image.dispose();
+      if (mounted) setState(() => _imageSize = size);
+    } catch (e) {
+      debugPrint('Failed to read mapping image size: $e');
+    }
+  }
+
+  void _handleTap(TapUpDetails details, Rect imageRect) {
+    final RenderBox? renderBox =
+        _mappingAreaKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+
+    final localPosition = renderBox.globalToLocal(details.globalPosition);
+    final normalized = MappingCoordinateService.normalizedFromLocal(
+      localPosition: localPosition,
+      imageRect: imageRect,
+    );
+    if (normalized == null) return;
+
+    _viewModel.addPoint(normalized);
   }
 
   @override
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
-    final GlobalKey imageKey = GlobalKey();
 
     return Scaffold(
       backgroundColor: const Color(0xFF041329),
@@ -84,7 +121,10 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
         actions: [
           TextButton(
             onPressed: _viewModel.clearPoints,
-            child: Text('초기화', style: TextStyle(color: Colors.white70, fontSize: 14 * rs)),
+            child: Text(
+              '초기화',
+              style: TextStyle(color: Colors.white70, fontSize: 14 * rs),
+            ),
           ),
         ],
       ),
@@ -107,119 +147,147 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
               Expanded(
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16 * rs),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      GestureDetector(
-                        onTapUp: (d) => _handleTap(d, imageKey),
-                        child: _buildImage(imageKey),
-                      ),
-                      IgnorePointer(child: Container(color: Colors.black.withValues(alpha: 0.3))),
-                      if (_viewModel.isAiAnalyzing)
-                        Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const CircularProgressIndicator(color: Color(0xFFFFEB00)),
-                              SizedBox(height: 16 * rs),
-                              Text('AI 분석 중...', style: TextStyle(color: Colors.white, fontSize: 16 * rs, fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                        ),
-                      LayoutBuilder(
-                        builder: (context, constraints) => Stack(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final imageRect =
+                          MappingCoordinateService.fittedImageRect(
+                            containerSize: Size(
+                              constraints.maxWidth,
+                              constraints.maxHeight,
+                            ),
+                            imageSize: _imageSize,
+                          );
+                      return GestureDetector(
+                        key: _mappingAreaKey,
+                        behavior: HitTestBehavior.opaque,
+                        onTapUp: (d) => _handleTap(d, imageRect),
+                        child: Stack(
+                          fit: StackFit.expand,
                           children: [
-                            if (_viewModel.redMarkerPosition != null)
-                              Positioned(
-                                left: _viewModel.redMarkerPosition!.dx * constraints.maxWidth - (20 * rs),
-                                top: _viewModel.redMarkerPosition!.dy * constraints.maxHeight - (20 * rs),
-                                child: GestureDetector(
-                                  onPanUpdate: (details) {
-                                    _viewModel.redMarkerPosition = Offset(
-                                      (_viewModel.redMarkerPosition!.dx + details.delta.dx / constraints.maxWidth).clamp(0.0, 1.0),
-                                      (_viewModel.redMarkerPosition!.dy + details.delta.dy / constraints.maxHeight).clamp(0.0, 1.0),
-                                    );
-                                  },
-                                  child: Container(
-                                    width: 40 * rs, height: 40 * rs,
-                                    decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.8), shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2 * rs)),
-                                    child: Icon(Icons.gps_fixed_rounded, color: Colors.white, size: 20 * rs),
-                                  ),
+                            Container(color: Colors.black),
+                            Positioned.fromRect(
+                              rect: imageRect,
+                              child: MappingImageView(imagePath: widget.imagePath),
+                            ),
+                            Positioned.fromRect(
+                              rect: imageRect,
+                              child: IgnorePointer(
+                                child: Container(
+                                  color: Colors.black.withValues(alpha: 0.3),
                                 ),
                               ),
-                            ..._viewModel.points.asMap().entries.map((entry) {
-                              final idx = entry.key; final point = entry.value;
-                              return Positioned(
-                                left: point.position.dx * constraints.maxWidth - (20 * rs),
-                                top: point.position.dy * constraints.maxHeight - (20 * rs),
-                                child: ButtonMarker(
-                                  index: idx,
-                                  label: point.label,
-                                  rs: rs,
-                                  onTap: () => _viewModel.removePoint(idx),
-                                  onLongPress: () => _showEditLabelDialog(idx),
+                            ),
+                            MappingMarkersLayer(
+                              redMarkerPosition: _viewModel.redMarkerPosition,
+                              points: _viewModel.points,
+                              imageRect: imageRect,
+                              scale: rs,
+                              onRedMarkerDrag: (pos) =>
+                                  _viewModel.redMarkerPosition = pos,
+                              onMarkerTap: _showPointActions,
+                              onMarkerLongPress: _showEditLabelDialog,
+                            ),
+                            if (_viewModel.isAiAnalyzing)
+                              Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const CircularProgressIndicator(
+                                      color: AppColors.primary,
+                                    ),
+                                    SizedBox(height: 16 * rs),
+                                    Text(
+                                      'AI 분석 중...',
+                                      style: TextStyle(
+                                        color: AppColors.textPrimary,
+                                        fontSize: 16 * rs,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              );
-                            }),
+                              ),
+                            if (_viewModel.redMarkerPosition == null)
+                              CalibrationPrompt(scale: rs),
                           ],
                         ),
-                      ),
-                      if (_viewModel.redMarkerPosition == null)
-                        Center(
-                          child: Container(
-                            margin: EdgeInsets.all(24 * rs),
-                            padding: EdgeInsets.all(20 * rs),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.85),
-                              borderRadius: BorderRadius.circular(16 * rs),
-                              border: Border.all(color: const Color(0xFFFFEB00), width: 2 * rs),
-                              boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 12 * rs)],
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.gps_fixed_rounded, color: const Color(0xFFFFEB00), size: 40 * rs),
-                                SizedBox(height: 16 * rs),
-                                Text(
-                                  '초기 위치 설정 (Calibration)',
-                                  style: TextStyle(color: const Color(0xFFFFEB00), fontSize: 18 * rs, fontWeight: FontWeight.bold),
-                                  textAlign: TextAlign.center,
-                                ),
-                                SizedBox(height: 8 * rs),
-                                Text(
-                                  '가전기기의 기준점(0,0) 위치를\n이미지 위에서 터치해 주세요.',
-                                  style: TextStyle(color: Colors.white, fontSize: 14 * rs, height: 1.5),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                    ],
+                      );
+                    },
                   ),
                 ),
               ),
               SizedBox(height: 16 * rs),
               Container(
                 padding: EdgeInsets.all(12 * rs),
-                decoration: BoxDecoration(color: const Color(0xFF0D1C32), borderRadius: BorderRadius.circular(12 * rs)),
-                child: Row(children: [
-                  Icon(Icons.info_outline_rounded, color: const Color(0xFFFDE047), size: 18 * rs),
-                  SizedBox(width: 8 * rs),
-                  Text('현재 ${_viewModel.points.length}/9개 매핑됨', style: TextStyle(color: Colors.white70, fontSize: 13 * rs)),
-                ]),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0D1C32),
+                  borderRadius: BorderRadius.circular(12 * rs),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline_rounded,
+                      color: const Color(0xFFFDE047),
+                      size: 18 * rs,
+                    ),
+                    SizedBox(width: 8 * rs),
+                    Text(
+                      '현재 ${_viewModel.points.length}/9개 매핑됨',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13 * rs,
+                      ),
+                    ),
+                  ],
+                ),
               ),
               SizedBox(height: 16 * rs),
+              OutlinedButton.icon(
+                onPressed: (_viewModel.points.isEmpty || _viewModel.isUploading)
+                    ? null
+                    : _onTestAllPressed,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: BorderSide(
+                    color: AppColors.primary,
+                    width: 1.5 * rs,
+                  ),
+                  minimumSize: Size(double.infinity, 52 * rs),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14 * rs),
+                  ),
+                ),
+                icon: Icon(Icons.playlist_play_rounded, size: 24 * rs),
+                label: Text(
+                  '전체 버튼 테스트',
+                  style: TextStyle(
+                    fontSize: 16 * rs,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              SizedBox(height: 10 * rs),
               ElevatedButton(
-                onPressed: (_viewModel.points.isEmpty || _viewModel.isUploading) ? null : _onSavePressed,
+                onPressed: (_viewModel.points.isEmpty || _viewModel.isUploading)
+                    ? null
+                    : _onSavePressed,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFFEB00), foregroundColor: Colors.black,
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.black,
                   minimumSize: Size(double.infinity, 60 * rs),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16 * rs)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16 * rs),
+                  ),
                 ),
                 child: _viewModel.isUploading
-                  ? const CircularProgressIndicator(color: Colors.black)
-                  : Text('이 구성으로 저장하기', style: TextStyle(fontSize: 18 * rs, fontWeight: FontWeight.w900)),
+                    ? const CircularProgressIndicator(color: Colors.black)
+                    : Text(
+                        '이 구성으로 저장하기',
+                        style: TextStyle(
+                          fontSize: 18 * rs,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
               ),
               SizedBox(height: 20 * rs),
             ],
@@ -229,61 +297,35 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
     );
   }
 
-  Widget _buildImage(GlobalKey key) {
-    final imagePath = widget.imagePath;
-    if (imagePath != null && imagePath.isNotEmpty) {
-      if (imagePath.startsWith('http')) {
-        return Image.network(
-          imagePath, 
-          key: key, 
-          fit: BoxFit.cover, 
-          errorBuilder: (c, e, s) {
-            debugPrint('Error loading network image: $e');
-            return Container(color: Colors.black26);
-          }
-        );
-      } else {
-        final file = File(imagePath);
-        if (!file.existsSync()) {
-          debugPrint('Image file does not exist at path: $imagePath');
-          return Container(color: Colors.black45, child: const Center(child: Icon(Icons.broken_image, color: Colors.white54)));
-        }
-        return Image.file(
-          file, 
-          key: key, 
-          fit: BoxFit.cover, 
-          errorBuilder: (c, e, s) {
-            debugPrint('Error loading file image: $e');
-            return Container(color: Colors.black26);
-          }
-        );
-      }
-    }
-    return Image.network(
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuBnqtd9QhBxdz_JPVKIqregy0_eQ3-Kmm7GhJ8UoFacsWE5PEO-nYQkiuURtdw1a2Cs-HJLoqEIedm0jvg30rAPgKdOP31oZW5vxfMBJbKgF91uW3lKKboV4zYLwECV2iUnU_UEVKndaTiSpa38QlC_tjoqt7_M9_T9vRF0bU4s2DcqnJHCe6dAFIbehXzzPXMcudEPtJGpt2aY-AFAF4Mn3vw5n7xiaxpHljgqh7f0myzhl1b-copBdl6DRlJsKMDkY-1Pm1K4y8ZO',
-      key: key, fit: BoxFit.cover, errorBuilder: (c, e, s) => Container(color: Colors.black26),
-    );
-  }
-
   Future<void> _onSavePressed() async {
     final message = await _viewModel.save();
     if (!mounted) return;
-    
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-    
-    // [FIX] 등록 프로세스에서 pushReplacement를 여러 번 사용했으므로, 
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+
+    // [FIX] 등록 프로세스에서 pushReplacement를 여러 번 사용했으므로,
     // 단순 pop이 아닌 Home 화면까지 안전하게 돌아가도록 popUntil 사용
     Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
+  Future<void> _onTestAllPressed() async {
+    final message = await _viewModel.testAllPoints();
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _showEditLabelDialog(int index) async {
     final point = _viewModel.points[index];
     final controller = TextEditingController(text: point.label);
-    
+
     final newLabel = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
+        backgroundColor: AppColors.surfaceElevated,
         title: const Text('버튼 이름 설정', style: TextStyle(color: Colors.white)),
         content: TextField(
           controller: controller,
@@ -292,14 +334,21 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
           decoration: const InputDecoration(
             hintText: '예: 시작, 30초, 해동',
             hintStyle: TextStyle(color: Colors.white30),
-            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFFFEB00))),
+            enabledBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: AppColors.primary),
+            ),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('취소')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('취소'),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFEB00)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+            ),
             child: const Text('확인', style: TextStyle(color: Colors.black)),
           ),
         ],
@@ -309,5 +358,22 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
     if (newLabel != null && newLabel.isNotEmpty) {
       _viewModel.updatePointLabel(index, newLabel);
     }
+  }
+
+  void _showPointActions(int index) {
+    final point = _viewModel.points[index];
+    final rs = ResponsiveScale.factor(context);
+    showPointActionsSheet(
+      context: context,
+      label: point.label,
+      scale: rs,
+      onTestTouch: () async {
+        final message = await _viewModel.testPoint(index);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      },
+      onRename: () => _showEditLabelDialog(index),
+      onDelete: () => _viewModel.removePoint(index),
+    );
   }
 }
