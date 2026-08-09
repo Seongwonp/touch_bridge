@@ -537,6 +537,11 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       outcome = EmergencyStopOutcome.fromAck(ack);
     }
 
+    if (outcome.acknowledged) {
+      FeedbackService.instance.playSuccess();
+    } else {
+      FeedbackService.instance.playFailure();
+    }
     await _speak(outcome.message, interrupt: true);
     if (!mounted) return;
     if (outcome.acknowledged) {
@@ -670,8 +675,11 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     switch (action) {
       case 'IMMEDIATE_PRESS':
         final immediateSent = await _sendBleSequence(commands);
-        if (!immediateSent) return; // 실패 안내는 _sendBleSequence가 이미 함
-        FeedbackService.instance.vibrateSuccess();
+        if (!immediateSent) {
+          FeedbackService.instance.playFailure(); // 실패 안내는 _sendBleSequence가 함
+          return;
+        }
+        FeedbackService.instance.signalSuccess();
         await _speak(message);
         return;
 
@@ -709,8 +717,11 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
             inferredSeconds ??
             MicrowaveCommandService.calculateSeconds(commands);
         final microwaveSent = await _sendBleSequence(commands);
-        if (!microwaveSent) return; // 실패 시 성공 진동/안내/카운트다운 이동 금지
-        FeedbackService.instance.vibrateSuccess(); // 성공 진동
+        if (!microwaveSent) {
+          FeedbackService.instance.playFailure(); // 실패: 성공 피드백/이동 금지
+          return;
+        }
+        FeedbackService.instance.signalSuccess(); // 성공: 상승음 + 진동
         final spokenMessage = forceExecution && confirmationMessage.isNotEmpty
             ? confirmationMessage
             : message;

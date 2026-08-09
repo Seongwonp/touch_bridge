@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../services/active_device_service.dart';
 import '../../services/ble_service.dart';
 import '../../services/emergency_intent.dart';
+import '../../services/feedback_service.dart';
 import '../../services/timer_service.dart';
 import '../../services/tts_service.dart';
 import '../../services/accessibility_experiment_service.dart';
@@ -158,6 +159,11 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     // 실제 하드웨어로 중단 명령을 보내고, 확인 결과를 정직하게 안내한다.
     // (이전 구현은 아무 명령도 보내지 않고 "멈췄습니다"라고만 말했다.)
     final outcome = await _sendStop();
+    if (outcome.acknowledged) {
+      FeedbackService.instance.playSuccess();
+    } else {
+      FeedbackService.instance.playFailure();
+    }
     await _speak(outcome.message, interrupt: true);
 
     if (!mounted) return;
