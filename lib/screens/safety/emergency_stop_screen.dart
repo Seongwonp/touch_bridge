@@ -43,6 +43,9 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   bool _speechEnabled = false;
   bool _isStartingListening = false;
   bool _stopInProgress = false;
+  // 완료/중단 화면으로 넘어갈 때는 dispose에서 TTS를 끊지 않는다
+  // (다음 화면의 안내가 "작동이..."처럼 잘리는 문제 방지).
+  bool _keepTtsOnDispose = false;
 
   @override
   void initState() {
@@ -109,8 +112,11 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
       onFinished: () {
         if (mounted) {
           AccessibilityExperimentService.instance.recordTaskCompleted();
+          _keepTtsOnDispose = true;
           Navigator.of(context).pushReplacement(
-            MaterialPageRoute<void>(builder: (_) => const StopDoneScreen()),
+            MaterialPageRoute<void>(
+              builder: (_) => const StopDoneScreen(completed: true),
+            ),
           );
         }
       },
@@ -169,6 +175,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     if (!mounted) return;
     if (outcome.acknowledged) {
       // 기기 정지가 확인된 경우에만 "안전하게 중단" 완료 화면으로 이동한다.
+      _keepTtsOnDispose = true;
       Navigator.of(
         context,
       ).push(MaterialPageRoute<void>(builder: (_) => const StopDoneScreen()));
@@ -201,7 +208,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   void dispose() {
     _timerService.stop();
     _holdController.dispose();
-    _tts.stop();
+    if (!_keepTtsOnDispose) _tts.stop();
     _speech.stop();
     super.dispose();
   }
@@ -214,155 +221,140 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
       backgroundColor: const Color(0xFF041329),
       appBar: TopAppBar(title: '${widget.deviceName} 작동 중', showBack: true),
       body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                child: IntrinsicHeight(
-                  child: Padding(
-                    padding: EdgeInsets.all(24 * rs),
-                    child: Column(
-                      children: [
-                        SizedBox(height: 20 * rs),
-                        Text(
-                          '남은 시간',
-                          style: TextStyle(
-                            color: const Color(0xFFCEC6AD),
-                            fontSize: 18 * rs,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 4,
-                          ),
-                        ),
-                        SizedBox(height: ResponsiveScale.v(context, 8)),
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            _formatMMSS(_secondsLeft),
-                            style: TextStyle(
-                              color: const Color(0xFFFDE047),
-                              fontSize: 90 * rs,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: -2,
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 24 * rs),
-                        Container(
-                          width: double.infinity,
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 20 * rs,
-                            vertical: 18 * rs,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0x660D1C32),
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(color: const Color(0xFF27354C)),
-                          ),
-                          child: Text(
-                            '중단하려면 아래 버튼을 3초간 누르세요',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: const Color(0xFFD6E3FF),
-                              fontSize: 16 * rs,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: ResponsiveScale.v(context, 20)),
-                        Column(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(999),
-                              child: Container(
-                                height: 8 * rs,
-                                width: double.infinity,
-                                color: const Color(0xFF27354C),
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: AnimatedBuilder(
-                                    animation: _holdController,
-                                    builder: (context, child) =>
-                                        FractionallySizedBox(
-                                          widthFactor: _holdController.value,
-                                          child: child,
-                                        ),
-                                    child: Container(
-                                      decoration: const BoxDecoration(
-                                        color: Color(0xFFFDE047),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            SizedBox(height: ResponsiveScale.v(context, 16)),
-                            Semantics(
-                              button: true,
-                              label: '비상 정지',
-                              hint: '길게 눌러 기기를 즉시 중단합니다',
-                              onLongPress: _onHoldCompleted,
-                              child: GestureDetector(
-                                onLongPressStart: (_) => _onHoldStart(),
-                                onLongPressEnd: (_) => _onHoldEnd(),
-                                onLongPressCancel: _onHoldEnd,
-                                child: Container(
-                                  width: double.infinity,
-                                  constraints: BoxConstraints(
-                                    minHeight: 160 * rs,
-                                    maxHeight: 220 * rs,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    gradient: const LinearGradient(
-                                      colors: [
-                                        Color(0xFFFF5252),
-                                        Color(0xFF93000A),
-                                      ],
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
-                                    ),
-                                    borderRadius: BorderRadius.circular(
-                                      32 * rs,
-                                    ),
-                                    border: Border.all(
-                                      color: _isHolding
-                                          ? Colors.white
-                                          : const Color(0xFFFFB4AB),
-                                      width: 4 * rs,
-                                    ),
-                                  ),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.back_hand,
-                                        size: 70 * rs,
-                                        color: Colors.white,
-                                      ),
-                                      SizedBox(height: 8 * rs),
-                                      Text(
-                                        '길게 눌러 중단',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 28 * rs,
-                                          fontWeight: FontWeight.w900,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 20 * rs),
-                      ],
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: EdgeInsets.all(24 * rs),
+            child: Column(
+              children: [
+                SizedBox(height: 20 * rs),
+                Text(
+                  '남은 시간',
+                  style: TextStyle(
+                    color: const Color(0xFFCEC6AD),
+                    fontSize: 18 * rs,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 4,
+                  ),
+                ),
+                SizedBox(height: ResponsiveScale.v(context, 8)),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    _formatMMSS(_secondsLeft),
+                    style: TextStyle(
+                      color: const Color(0xFFFDE047),
+                      fontSize: 90 * rs,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -2,
                     ),
                   ),
                 ),
-              ),
-            );
-          },
+                SizedBox(height: 24 * rs),
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 20 * rs,
+                    vertical: 18 * rs,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0x660D1C32),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: const Color(0xFF27354C)),
+                  ),
+                  child: Text(
+                    '중단하려면 아래 버튼을 3초간 누르세요',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: const Color(0xFFD6E3FF),
+                      fontSize: 16 * rs,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                SizedBox(height: ResponsiveScale.v(context, 20)),
+                Column(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: Container(
+                        height: 8 * rs,
+                        width: double.infinity,
+                        color: const Color(0xFF27354C),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: AnimatedBuilder(
+                            animation: _holdController,
+                            builder: (context, child) => FractionallySizedBox(
+                              widthFactor: _holdController.value,
+                              child: child,
+                            ),
+                            child: Container(
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFFDE047),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: ResponsiveScale.v(context, 16)),
+                    Semantics(
+                      button: true,
+                      label: '비상 정지',
+                      hint: '길게 눌러 기기를 즉시 중단합니다',
+                      onLongPress: _onHoldCompleted,
+                      child: GestureDetector(
+                        onLongPressStart: (_) => _onHoldStart(),
+                        onLongPressEnd: (_) => _onHoldEnd(),
+                        onLongPressCancel: _onHoldEnd,
+                        child: Container(
+                          width: double.infinity,
+                          constraints: BoxConstraints(
+                            minHeight: 160 * rs,
+                            maxHeight: 220 * rs,
+                          ),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFFF5252), Color(0xFF93000A)],
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                            ),
+                            borderRadius: BorderRadius.circular(32 * rs),
+                            border: Border.all(
+                              color: _isHolding
+                                  ? Colors.white
+                                  : const Color(0xFFFFB4AB),
+                              width: 4 * rs,
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.back_hand,
+                                size: 70 * rs,
+                                color: Colors.white,
+                              ),
+                              SizedBox(height: 8 * rs),
+                              Text(
+                                '길게 눌러 중단',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 28 * rs,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 20 * rs),
+              ],
+            ),
+          ),
         ),
       ),
     );
