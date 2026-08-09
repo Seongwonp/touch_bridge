@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../services/active_device_service.dart';
+import '../../services/ble_service.dart';
+import '../../services/emergency_intent.dart';
 import '../../services/timer_service.dart';
 import '../../services/tts_service.dart';
 import '../../services/accessibility_experiment_service.dart';
@@ -38,6 +41,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   bool _isHolding = false;
   bool _speechEnabled = false;
   bool _isStartingListening = false;
+  bool _stopInProgress = false;
 
   @override
   void initState() {
@@ -79,10 +83,8 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     try {
       await _speech.listen(
         onResult: (result) {
-          final words = result.recognizedWords.toLowerCase();
-          if (words.contains('멈춰') ||
-              words.contains('정지') ||
-              words.contains('stop')) {
+          final words = result.recognizedWords;
+          if (EmergencyIntent.matches(words)) {
             _onHoldCompleted();
           }
         },
@@ -123,8 +125,9 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   Future<void> _speak(
     String message, {
     String source = 'emergencystopScreen',
+    bool interrupt = false,
   }) async {
-    await _tts.speak(message, source: source);
+    await _tts.speak(message, source: source, interrupt: interrupt);
   }
 
   void _onHoldStart() {
@@ -142,7 +145,8 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   }
 
   Future<void> _onHoldCompleted() async {
-    if (!mounted) return;
+    if (!mounted || _stopInProgress) return;
+    _stopInProgress = true;
     setState(() {
       _isHolding = false;
     });
@@ -150,11 +154,41 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     _timerService.stop();
     await AccessibilityExperimentService.instance.recordEmergencyStop();
     HapticFeedback.heavyImpact();
-    await _speak('즉시 중단했습니다. 기기가 멈췄습니다.');
+
+    // 실제 하드웨어로 중단 명령을 보내고, 확인 결과를 정직하게 안내한다.
+    // (이전 구현은 아무 명령도 보내지 않고 "멈췄습니다"라고만 말했다.)
+    final outcome = await _sendStop();
+    await _speak(outcome.message, interrupt: true);
+
     if (!mounted) return;
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const StopDoneScreen()));
+    if (outcome.acknowledged) {
+      // 기기 정지가 확인된 경우에만 "안전하게 중단" 완료 화면으로 이동한다.
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute<void>(builder: (_) => const StopDoneScreen()));
+    } else {
+      // 전송만 됐거나 실패한 경우: 완료 화면으로 넘기지 않고 재시도할 수 있게 둔다.
+      _stopInProgress = false;
+    }
+  }
+
+  Future<EmergencyStopOutcome> _sendStop() async {
+    final connectedId = BleService.instance.connectedDeviceId;
+    final targetId = connectedId.isNotEmpty
+        ? connectedId
+        : (ActiveDeviceService.instance.getActiveBleId() ?? '');
+    if (targetId.isEmpty) {
+      return const EmergencyStopOutcome(
+        acknowledged: false,
+        sent: false,
+        message: '연결된 기기가 없습니다. 기기 전원을 확인해 주세요.',
+      );
+    }
+    if (!BleService.instance.isConnected) {
+      await BleService.instance.ensureConnected(targetId);
+    }
+    final ack = await BleService.instance.sendEmergencyStop(targetId);
+    return EmergencyStopOutcome.fromAck(ack);
   }
 
   @override
@@ -257,51 +291,59 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                               ),
                             ),
                             SizedBox(height: ResponsiveScale.v(context, 16)),
-                            GestureDetector(
-                              onLongPressStart: (_) => _onHoldStart(),
-                              onLongPressEnd: (_) => _onHoldEnd(),
-                              onLongPressCancel: _onHoldEnd,
-                              child: Container(
-                                width: double.infinity,
-                                constraints: BoxConstraints(
-                                  minHeight: 160 * rs,
-                                  maxHeight: 220 * rs,
-                                ),
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      Color(0xFFFF5252),
-                                      Color(0xFF93000A),
-                                    ],
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
+                            Semantics(
+                              button: true,
+                              label: '비상 정지',
+                              hint: '길게 눌러 기기를 즉시 중단합니다',
+                              onLongPress: _onHoldCompleted,
+                              child: GestureDetector(
+                                onLongPressStart: (_) => _onHoldStart(),
+                                onLongPressEnd: (_) => _onHoldEnd(),
+                                onLongPressCancel: _onHoldEnd,
+                                child: Container(
+                                  width: double.infinity,
+                                  constraints: BoxConstraints(
+                                    minHeight: 160 * rs,
+                                    maxHeight: 220 * rs,
                                   ),
-                                  borderRadius: BorderRadius.circular(32 * rs),
-                                  border: Border.all(
-                                    color: _isHolding
-                                        ? Colors.white
-                                        : const Color(0xFFFFB4AB),
-                                    width: 4 * rs,
-                                  ),
-                                ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.back_hand,
-                                      size: 70 * rs,
-                                      color: Colors.white,
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [
+                                        Color(0xFFFF5252),
+                                        Color(0xFF93000A),
+                                      ],
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
                                     ),
-                                    SizedBox(height: 8 * rs),
-                                    Text(
-                                      '길게 눌러 중단',
-                                      style: TextStyle(
+                                    borderRadius: BorderRadius.circular(
+                                      32 * rs,
+                                    ),
+                                    border: Border.all(
+                                      color: _isHolding
+                                          ? Colors.white
+                                          : const Color(0xFFFFB4AB),
+                                      width: 4 * rs,
+                                    ),
+                                  ),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.back_hand,
+                                        size: 70 * rs,
                                         color: Colors.white,
-                                        fontSize: 28 * rs,
-                                        fontWeight: FontWeight.w900,
                                       ),
-                                    ),
-                                  ],
+                                      SizedBox(height: 8 * rs),
+                                      Text(
+                                        '길게 눌러 중단',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 28 * rs,
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
