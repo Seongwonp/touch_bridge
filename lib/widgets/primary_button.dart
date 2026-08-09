@@ -26,11 +26,12 @@ class PrimaryButton extends StatefulWidget {
   State<PrimaryButton> createState() => _PrimaryButtonState();
 }
 
-class _PrimaryButtonState extends State<PrimaryButton> with SingleTickerProviderStateMixin {
+class _PrimaryButtonState extends State<PrimaryButton>
+    with SingleTickerProviderStateMixin {
   final TtsService _tts = TtsService();
   Timer? _confirmResetTimer;
   bool _armed = false;
-  
+
   late AnimationController _scaleController;
   late Animation<double> _scaleAnimation;
 
@@ -41,9 +42,10 @@ class _PrimaryButtonState extends State<PrimaryButton> with SingleTickerProvider
       duration: const Duration(milliseconds: 100),
       vsync: this,
     );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
-      CurvedAnimation(parent: _scaleController, curve: Curves.easeOut),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.95,
+    ).animate(CurvedAnimation(parent: _scaleController, curve: Curves.easeOut));
   }
 
   Future<void> _handleTap() async {
@@ -63,7 +65,7 @@ class _PrimaryButtonState extends State<PrimaryButton> with SingleTickerProvider
       HapticFeedback.mediumImpact();
 
       _confirmResetTimer?.cancel();
-      _confirmResetTimer = Timer(const Duration(seconds: 4), () {
+      _confirmResetTimer = Timer(const Duration(seconds: 15), () {
         if (!mounted) {
           return;
         }
@@ -134,7 +136,9 @@ class _PrimaryButtonState extends State<PrimaryButton> with SingleTickerProvider
               ),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.shadowPrimary.withValues(alpha: _armed ? 0.15 : 0.6),
+                  color: AppColors.shadowPrimary.withValues(
+                    alpha: _armed ? 0.15 : 0.6,
+                  ),
                   blurRadius: _armed ? 4 : 14,
                   spreadRadius: _armed ? 0 : 1,
                 ),
@@ -151,11 +155,19 @@ class _PrimaryButtonState extends State<PrimaryButton> with SingleTickerProvider
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(widget.icon ?? Icons.arrow_forward, size: 28, color: Colors.black),
+                      Icon(
+                        widget.icon ?? Icons.arrow_forward,
+                        size: 28,
+                        color: Colors.black,
+                      ),
                       const SizedBox(width: 12),
                       Text(
                         _armed ? '${widget.label} (다시 누르기)' : widget.label,
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
+                        ),
                       ),
                     ],
                   ),
@@ -168,4 +180,3 @@ class _PrimaryButtonState extends State<PrimaryButton> with SingleTickerProvider
     );
   }
 }
-

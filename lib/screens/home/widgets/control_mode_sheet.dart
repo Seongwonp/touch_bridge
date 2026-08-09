@@ -102,7 +102,7 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
       setState(() => _armedActionId = id);
       FeedbackService.instance.vibrateSuccess();
       _actionResetTimer?.cancel();
-      _actionResetTimer = Timer(const Duration(seconds: 4), () {
+      _actionResetTimer = Timer(const Duration(seconds: 15), () {
         if (mounted) setState(() => _armedActionId = null);
       });
       await _tts.speak(guide, source: 'ControlModeSheet', interrupt: true);
