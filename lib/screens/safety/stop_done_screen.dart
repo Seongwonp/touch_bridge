@@ -47,7 +47,7 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
       setState(() => _armedHomeButton = true);
       HapticFeedback.mediumImpact();
       await _tts.speak('홈으로 돌아가기 버튼입니다. 한 번 더 누르면 홈으로 이동합니다.');
-      Future.delayed(const Duration(seconds: 4), () {
+      Future.delayed(const Duration(seconds: 15), () {
         if (mounted) setState(() => _armedHomeButton = false);
       });
       return;
