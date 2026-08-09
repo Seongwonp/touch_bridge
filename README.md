@@ -13,10 +13,26 @@
 
 ---
 
+## 데모 화면
+
+<table>
+  <tr>
+    <td align="center" width="25%"><img src="docs/screenshots/home.png" width="200" alt="홈 화면"><br><b>홈 · 내 기기</b><br><sub>큰 말하기 버튼 · 현재 기기</sub></td>
+    <td align="center" width="25%"><img src="docs/screenshots/control_sheet.png" width="200" alt="제어 방식 선택"><br><b>제어 방식 선택</b><br><sub>음성·이미지·코스·숫자패드</sub></td>
+    <td align="center" width="25%"><img src="docs/screenshots/emergency.png" width="200" alt="비상 정지"><br><b>비상 정지</b><br><sub>즉시 중단 · 이중 확인</sub></td>
+    <td align="center" width="25%"><img src="docs/screenshots/settings.png" width="200" alt="접근성·모드 설정"><br><b>접근성 · 모드</b><br><sub>큰 글씨·고대비·보호자/개발자</sub></td>
+  </tr>
+</table>
+
+> 고대비 다크 테마 · 큰 터치 영역 · **2단계 탭**(첫 탭 안내 → 둘째 탭 실행) · 하단 3탭(홈 / 비상 / 설정) 구조.
+> (스크린샷은 데모 데이터 기준)
+
+---
+
 ## 주요 기능
 
 ### 음성 명령 (STT + Gemini AI)
-- `speech_to_text`로 음성 수집 → Gemini 2.5 Flash로 의도 파싱
+- `speech_to_text`로 음성 수집 → 백엔드/Gemini로 의도 파싱
 - 지원 명령: 기기 작동(초 단위), 비상 정지, 화면 이동
 - 5초 침묵 감지 자동 타임아웃 + 재시도 안내
 
@@ -29,8 +45,10 @@
 - 카운트다운 중 5초 이하 → 매초 음성 안내
 - 완료 시 기기명 포함 TTS
 
-### 이중 탭 확인 패턴
-- 중요한 액션은 탭 → 안내 → 4초 내 재탭으로 실행 (오작동 방지)
+### 이중 탭(2단계) 확인 패턴
+- 하드웨어를 실제로 누르는 모든 동작은 **첫 탭에서 안내 + 대기 강조, 둘째 탭에서 실행** (오작동 방지)
+- 제어 시트·이미지 제어·간편 코스·숫자 패드·비상 정지 전 화면에서 일관 적용
+- 대기(armed) 시간은 스크린리더/저시력 사용자를 배려해 15초 (WCAG 2.2.1)
 
 ### Gemini Vision 버튼 자동 매핑
 - 가전기기 사진 촬영 → Gemini Vision API로 버튼 위치 인식
@@ -148,14 +166,17 @@ flutter run -d ios
 lib/
 ├── main.dart                              # 앱 진입점, dotenv·설정 로드
 ├── screens/
-│   ├── main_navigation_screen.dart        # 4탭 하단 내비게이션
+│   ├── main_navigation_screen.dart        # 사용자/보호자 모드별 하단 내비게이션
 │   ├── home/home_screen.dart              # 기기 카드 스와이프 (PageView)
 │   ├── control/remote_control_screen.dart # 타이머 제어 키패드
 │   ├── voice/voice_listening_screen.dart  # STT + Gemini AI 음성 명령
 │   ├── safety/
 │   │   ├── emergency_stop_screen.dart     # 비상 정지 (3초 홀드 / 음성)
 │   │   └── stop_done_screen.dart          # 정지 완료 확인
-│   ├── settings/settings_screen.dart      # 접근성·연락처 설정
+│   ├── settings/
+│   │   ├── settings_screen.dart           # 접근성·연락처·보호자/개발자 설정
+│   │   ├── device_management_screen.dart  # 보호자용 기기 관리
+│   │   └── developer_console_screen.dart  # 개발자용 ESP/G-code/XYZ 테스트
 │   ├── connection/
 │   │   ├── device_connect_screen.dart     # 기기 연결 (QR/BLE/NFC)
 │   │   └── qr_scan_screen.dart            # QR 스캔
@@ -163,6 +184,9 @@ lib/
 ├── services/
 │   ├── tts_service.dart                   # TTS Singleton
 │   ├── accessibility_settings.dart        # 설정 Singleton + SharedPreferences
+│   ├── device_mapping_service.dart        # 기기별 매핑/XYZ 모션 프로필 저장
+│   ├── mapping_execution_service.dart     # BT-xx → X/Y/Z G-code 실행 변환
+│   ├── ble_service.dart                   # BLE 스캔/연결/raw 명령 전송
 │   └── timer_service.dart                 # 카운트다운 타이머
 ├── theme/                                 # 고대비 다크 테마
 └── widgets/                               # 재사용 위젯
@@ -177,7 +201,7 @@ lib/
   "action": "MICROWAVE_CONTROL | EMERGENCY_STOP | NAVIGATE | NONE",
   "device": "전자레인지",
   "seconds": 30,
-  "commands": ["start"],
+  "commands": ["BT-02", "BT-05"],
   "target": "connection | mapping | settings",
   "message": "알겠어요. 전자레인지 30초 돌릴게요."
 }
@@ -187,22 +211,37 @@ lib/
 
 ## 하드웨어 연동
 
-하드웨어는 CNC 그리드 방식을 따르며, BLE를 통해 텍스트 기반 명령을 수신합니다.
+현재 하드웨어 방향은 기존 28BYJ-48 기반 프로토타입에서 **NK1704S 42각 스텝모터 3개 + TB6600 3개 + Arduino Uno GRBL + ESP32 브릿지** 구조로 전환하는 것입니다. 상세 기준은 [`docs/HARDWARE_MIGRATION_PLAN.md`](docs/HARDWARE_MIGRATION_PLAN.md)를 따릅니다.
 
-**명령어 종류:**
-- `BTN_n`: n번째 버튼(인덱스)을 터치 (예: `BTN_1`, `BTN_5`)
-- `SET_GRID rows cols ox oy px py`: 그리드 설정 동기화
-- `STOP`: 비상 정지 및 원점 복귀
+**현재 구성:**
+- X/Y/Z: `NK1704S` 42각 스텝모터 3개
+- 드라이버: `TB6600` 3개
+- 제어: `Arduino Uno + GRBL`
+- 통신: 앱 → BLE(향후 Wi-Fi 검토) → ESP32 → UART → Arduino Uno GRBL
+- 전원: 모터는 12V 배럴잭 별도 전원, MCU 전원과 분리, 공통 GND 유지
 
-**좌표 계산 방식:**
-- 버튼 번호 = `(y * cols) + x + 1` (좌상단 0,0 기준)
-- 예: 3x3 그리드에서 (1,1) 위치는 `(1 * 3) + 1 + 1 = BTN_5`
+**권장 실행 흐름:**
+- AI는 물리 좌표를 만들지 않고 논리 버튼 ID(`BT-xx`)만 반환합니다.
+- 앱은 저장된 `DeviceMappingProfile`로 `BT-xx → row/col → X/Y mm → Z 누름 G-code`를 생성합니다.
+- ESP32는 raw G-code를 Arduino Uno GRBL로 전달합니다.
+- `BTN_n`, `SET_GRID`, `PRESS x y`는 레거시/호환 경로로만 유지합니다.
+
+**예시 G-code 시퀀스:**
+```gcode
+G90
+G21
+G0 Z5 F200
+G0 X120 Y80 F1200
+G1 Z-2 F200
+G4 P0.2
+G0 Z5 F200
+```
 
 ---
 
 ## 개발 현황
 
-- [x] 4탭 내비게이션 + 이중 탭 확인 패턴
+- [x] 사용자/보호자 모드별 하단 내비게이션 + 이중 탭 확인 패턴
 - [x] TTS Singleton (설정 영속화)
 - [x] STT + Gemini AI 음성 명령 (침묵 감지 포함)
 - [x] 비상 정지 (홀드 / 음성 / 카운트다운)
@@ -219,7 +258,20 @@ lib/
 - [x] 디자인 토큰 확장(보조 강조색/그라디언트) + 공용 위젯·핵심 화면 비주얼 리뉴얼 (2026-06-27)
 - [x] 대형 화면/서비스 파일 구조 분리 — `voice_listening_screen`, `home_screen`, `photo_mapping_screen`, `ble_service`, `developer_console_screen`, `manual_mapping_screen` 등을 책임별 위젯/서비스 파일로 분리 (2026-06-27)
 - [x] `home_devices` 저장소를 6곳 중복 코드에서 `HomeDeviceStore` 서비스로 단일화 (2026-06-27)
+- [x] 기본 사용자 모드 시작, 보호자/개발자 기능 격리
+- [x] `BT-xx → X/Y/Z G-code` dry-run 변환 및 개발자 콘솔 로그
+- [x] 개발자 콘솔 `$H`, `STOP`, Z축 테스트, 작은 화면 반응형 보강
+- [x] **접근성 고도화 (2026-08)** — 상세: [`docs/ACCESSIBILITY_GUIDELINES_RESEARCH.md`](docs/ACCESSIBILITY_GUIDELINES_RESEARCH.md)
+  - 비상정지가 실제로 하드웨어에 정지 명령 전송 + ACK로 정직하게 안내 (이전엔 미전송/무조건 완료)
+  - 성공/실패 구분 earcon(합성음) + TTS와 겹치지 않도록 오디오 세션 분리(mixWithOthers)
+  - TTS 직렬 큐 + 우선순위 중재자 — 안내가 드롭·겹침 없이 순서대로 재생
+  - 시스템 글자 확대 존중(200%) · 보조 텍스트 대비 AA · "작동 완료"와 "중단" 구분
+  - 하드웨어 실행 동작을 전 화면 2단계 탭으로 통일 + 이중 탭 만료 15초
+  - 스크린리더(VoiceOver/TalkBack) 활성 시 앱 TTS 이중 낭독 억제 + 롱프레스 기능에 접근성 액션 대안
+  - 좌표 매핑(설정)은 보호자 모드 전용으로 격리
 - [ ] BLE 실기기 검증 고도화 (재연결/타임아웃/센서 피드백)
+- [ ] GRBL `ok/error/ALARM` 응답을 사용자 문구로 번역
+- [ ] 사진 매핑 화면의 좌표 이동/Z축 테스트/미세 조정 UX 고도화
 
 ---
 
@@ -232,7 +284,11 @@ lib/
 - [심사 요약서](docs/JUDGING_BRIEF.md)
 - [3분 데모 스크립트](docs/DEMO_SCRIPT_3MIN.md)
 - [재현 가이드/런북](docs/REPRO_RUNBOOK.md)
-- [앱-하드웨어 연동 계약서 (enum/주의점/가변 그리드)](docs/HW_APP_INTEGRATION_CONTRACT_KO.md)
+- [접근성 지침·법률 조사 (WCAG 2.2 / KS X 3253 / 장애인차별금지법)](docs/ACCESSIBILITY_GUIDELINES_RESEARCH.md)
+- [앱-하드웨어 연동 계약서 (BLE/Wi-Fi, XYZ G-code, 레거시 명령)](docs/HW_APP_INTEGRATION_CONTRACT_KO.md)
+- [하드웨어 마이그레이션 계획서](docs/HARDWARE_MIGRATION_PLAN.md)
+- [하드웨어 작업 및 안전 체크리스트](docs/HARDWARE_TASKS.md)
+- [AI 시스템 통합 가이드](docs/AI_SYSTEM_OVERVIEW_KO.md)
 
 ## 테스트
 
@@ -242,7 +298,7 @@ flutter test
 ```
 
 - 단위 테스트: 전자레인지 명령 규칙/시간 계산/버튼 좌표 매핑
-- 위젯 테스트: 홈 화면 스모크 테스트, BLE 연결 흐름(검색 없음/연결 성공)
+- 위젯 테스트: 홈 화면 스모크 테스트, BLE 연결 흐름, 개발자 콘솔 작은 화면 반응형
 
 ## 접근성 실험 지표
 
@@ -261,11 +317,13 @@ flutter test
 하드웨어는 프로토타입 수준에서 동작하지만, 설치·운영 전 반드시 물리적 안전 조치를 수행해야 합니다. 자세한 체크리스트와 회로 권장 사항은 `docs/HARDWARE_TASKS.md`를 먼저 확인하세요.
 
 간단히 확인해야 할 항목:
+- TB6600 3개의 DIP 전류 설정이 NK1704S 정격 이내인지 확인
+- 12V 모터 전원과 로직 전원(Uno/ESP32) 분리
 - ESP32(3.3V) ↔ Arduino(5V) UART 라인 레벨시프터 적용
 - 공통 GND 연결 확인
-- 모터 전원과 MCU 전원 분리 및 적정 퓨즈 장착
+- 리미트 스위치와 `$H` homing 확인
+- 적정 퓨즈 장착
 - 하드웨어 비상정지(E‑STOP) 회로 구성(필수)
 
 보안 관련 권장사항은 `docs/SECURITY.md`에 정리되어 있습니다. 프로덕션 전환 전 BLE LE Secure Connections 및 OTA 서명 도입을 권장합니다.
-
 
