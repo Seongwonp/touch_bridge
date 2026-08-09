@@ -19,7 +19,6 @@ void main() async {
   runApp(const TouchBridgeApp());
 }
 
-
 class TouchBridgeApp extends StatelessWidget {
   const TouchBridgeApp({super.key});
 
@@ -29,7 +28,9 @@ class TouchBridgeApp extends StatelessWidget {
       animation: AccessibilitySettings.instance,
       builder: (context, _) {
         final settings = AccessibilitySettings.instance;
-        final textScale = settings.largeTextEnabled ? 1.18 : 1.0;
+        // 앱 "큰 글씨"는 시스템 글자 확대(접근성 설정)를 덮어쓰지 않고
+        // 최소 배율(하한)로만 사용한다. 저시력 사용자의 200% 확대를 잃지 않게 함.
+        final appMinScale = settings.largeTextEnabled ? 1.18 : 1.0;
 
         return MaterialApp(
           title: 'Touch Bridge',
@@ -39,7 +40,12 @@ class TouchBridgeApp extends StatelessWidget {
             final media = MediaQuery.of(context);
             return MediaQuery(
               data: media.copyWith(
-                textScaler: TextScaler.linear(textScale),
+                // 시스템 글자 확대를 보존하되, 앱 "큰 글씨"를 하한으로 적용하고
+                // 레이아웃 보호를 위해 2.0배를 상한으로 둔다.
+                textScaler: media.textScaler.clamp(
+                  minScaleFactor: appMinScale,
+                  maxScaleFactor: 2.0,
+                ),
                 boldText: settings.highContrastEnabled,
               ),
               child: child ?? const SizedBox.shrink(),

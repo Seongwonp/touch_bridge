@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/active_device_service.dart';
 import '../../services/ble_service.dart';
+import '../../services/emergency_intent.dart';
 import '../../services/feedback_service.dart';
 import '../../services/tts_service.dart';
 import '../../theme/app_colors.dart';
@@ -54,15 +55,26 @@ class _EmergencyAccessScreenState extends State<EmergencyAccessScreen> {
 
     await _tts.speak('즉시 중단합니다.', interrupt: true);
     if (!BleService.instance.isConnected) {
-      await BleService.instance.ensureConnected(targetId);
+      final connected = await BleService.instance.ensureConnected(targetId);
+      if (!connected) {
+        await _tts.speak('기기에 연결하지 못했습니다. 기기 전원을 확인해 주세요.', interrupt: true);
+        if (mounted) setState(() => _isStopping = false);
+        return;
+      }
     }
-    await BleService.instance.sendEmergencyStop(targetId);
+
+    // 전송 성공만으로 "완료"라고 말하지 않는다. ACK 결과로 문구를 분기한다.
+    final ack = await BleService.instance.sendEmergencyStop(targetId);
+    final outcome = EmergencyStopOutcome.fromAck(ack);
+    await _tts.speak(outcome.message, interrupt: true);
 
     if (!mounted) return;
     setState(() => _isStopping = false);
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const StopDoneScreen()));
+    if (outcome.acknowledged) {
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute<void>(builder: (_) => const StopDoneScreen()));
+    }
   }
 
   @override

@@ -106,7 +106,7 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
     );
 
     if (!result.ok) {
-      _tts.speak(result.message);
+      _tts.speak(result.userMessage);
       return;
     }
 

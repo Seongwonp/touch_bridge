@@ -300,7 +300,9 @@ class BleService {
 
     final action = payload['action'] as String?;
     if (action == null || !_nonAuthActions.contains(action)) {
-      final ok = await _security.ensureAuthenticated(sendAndWaitAck: _sendAndWaitAck);
+      final ok = await _security.ensureAuthenticated(
+        sendAndWaitAck: _sendAndWaitAck,
+      );
       if (!ok) return 'ERROR:AUTH_REQUIRED';
     }
 
@@ -466,8 +468,14 @@ class BleService {
     }, timeout: const Duration(seconds: 5));
   }
 
-  Future<void> sendEmergencyStop(String deviceId) async {
-    await _sendAndWaitAck({
+  /// 비상 정지 명령을 전송하고 controller ACK 결과 문자열을 그대로 반환한다.
+  ///
+  /// 반환값: 'OK'/ACK 문자열(응답 확인), 또는
+  /// 'ERROR:NOT_CONNECTED' / 'ERROR:TIMEOUT' / 'ERROR:WRITE_FAILED' 등.
+  /// 호출부는 이 값을 [EmergencyStopOutcome.fromAck]로 해석해 사용자에게
+  /// 정직한 상태(멈춤 확인 vs 전송만 됨 vs 실패)를 안내해야 한다.
+  Future<String> sendEmergencyStop(String deviceId) async {
+    return _sendAndWaitAck({
       'action': HardwareProtocol.actionStop,
       'deviceId': deviceId,
     }, timeout: const Duration(seconds: 1));

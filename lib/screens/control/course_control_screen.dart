@@ -55,7 +55,7 @@ class _CourseControlScreenState extends State<CourseControlScreen> {
         betweenPressDelay: const Duration(milliseconds: 1000),
       );
       if (!result.ok) {
-        _tts.speak(result.message);
+        _tts.speak(result.userMessage);
         return;
       }
 
@@ -70,7 +70,7 @@ class _CourseControlScreenState extends State<CourseControlScreen> {
         );
       }
     } catch (e) {
-      _tts.speak('코스 실행 중 오류가 발생했습니다.');
+      _tts.speak('코스를 실행하지 못했습니다. 잠시 후 다시 시도해 주세요.');
     } finally {
       if (mounted) setState(() => _isExecuting = false);
     }
