@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -34,10 +35,20 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
   bool _isLoading = true;
   Size? _imageSize;
 
+  // 2단계 탭(첫 탭 안내 → 둘째 탭 실행) 상태
+  String? _armedButtonId;
+  Timer? _armResetTimer;
+
   @override
   void initState() {
     super.initState();
     _loadMapping();
+  }
+
+  @override
+  void dispose() {
+    _armResetTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadMapping() async {
@@ -90,11 +101,29 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
       return;
     }
 
-    FeedbackService.instance.vibrateSuccess();
-    _tts.speak('$label 누름');
+    // 2단계 탭: 첫 탭은 안내만, 둘째 탭에서 실제 하드웨어를 누른다(오작동 방지).
+    if (_armedButtonId != btId) {
+      setState(() => _armedButtonId = btId);
+      FeedbackService.instance.vibrateSuccess();
+      _armResetTimer?.cancel();
+      _armResetTimer = Timer(const Duration(seconds: 15), () {
+        if (mounted) setState(() => _armedButtonId = null);
+      });
+      _tts.speak('$label 버튼. 다시 누르면 실행합니다.', interrupt: true);
+      return;
+    }
+
+    _armResetTimer?.cancel();
+    setState(() => _armedButtonId = null);
+    await _executePress(btId, label);
+  }
+
+  Future<void> _executePress(String btId, String label) async {
+    _tts.speak('$label 실행합니다.', interrupt: true);
 
     final profile = _profile;
     if (profile == null) {
+      FeedbackService.instance.playFailure();
       _tts.speak('매핑 데이터를 불러오지 못했습니다.');
       return;
     }
@@ -299,9 +328,11 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
 
   Widget _buildButtonMarker(String btId, int row, int col, double rs) {
     final label = _getButtonLabel(btId);
+    final armed = _armedButtonId == btId;
 
     return Semantics(
       label: '$label 버튼',
+      hint: armed ? '다시 누르면 실행합니다' : '한 번 누르면 안내합니다',
       button: true,
       child: GestureDetector(
         onTap: () => _handleButtonPress(btId, row, col, label),
@@ -313,8 +344,17 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
               decoration: BoxDecoration(
                 color: AppColors.primary.withValues(alpha: 0.9),
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 2 * rs),
+                border: Border.all(
+                  color: Colors.white,
+                  width: (armed ? 4 : 2) * rs,
+                ),
                 boxShadow: [
+                  if (armed)
+                    BoxShadow(
+                      color: AppColors.primary,
+                      blurRadius: 16 * rs,
+                      spreadRadius: 2 * rs,
+                    ),
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.5),
                     blurRadius: 8 * rs,
