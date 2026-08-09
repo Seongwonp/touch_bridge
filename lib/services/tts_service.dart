@@ -75,6 +75,10 @@ class TtsService {
     }
   }
 
+  /// VoiceOver/TalkBack 등 스크린리더가 활성인지.
+  bool get _screenReaderActive =>
+      PlatformDispatcher.instance.accessibilityFeatures.accessibleNavigation;
+
   String _normalize(String text) {
     return text.trim().replaceAll(RegExp(r'\s+'), ' ');
   }
@@ -135,6 +139,14 @@ class TtsService {
       var pr = priority;
       if (interrupt && pr.index < TtsPriority.result.index) {
         pr = TtsPriority.result;
+      }
+
+      // 스크린리더 활성 시: 화면 안내·부가 설명(navigation/info)은 스크린리더가
+      // 요소 포커스로 대신 읽으므로 앱 TTS를 억제해 이중 낭독을 막는다.
+      // 결과(result)·비상(emergency)은 스크린리더가 자동 안내하지 않으므로 유지.
+      if (_screenReaderActive && pr.index < TtsPriority.result.index) {
+        _addLog('(SUPPRESSED: 스크린리더 활성)', source);
+        return;
       }
 
       // 동일 멘트 반복 억제 (8초 이내). emergency/force는 예외.
