@@ -15,10 +15,19 @@ class FeedbackService {
   AudioPlayer? _playerInstance;
   AudioPlayer get _player => _playerInstance ??= AudioPlayer();
 
+  // earcon이 TTS 오디오 세션을 독점하지 않도록 다른 오디오와 섞는다.
+  // play()의 ctx 인자로 넘기면 audioplayers가 컨텍스트 적용을 기다린 뒤 재생한다.
+  AudioContext get _earconAudioContext =>
+      AudioContextConfig(focus: AudioContextConfigFocus.mixWithOthers).build();
+
   Future<void> _playEarcon(String file) async {
     try {
       await _player.stop();
-      await _player.play(AssetSource('sounds/$file'));
+      await _player.play(
+        AssetSource('sounds/$file'),
+        volume: 0.7,
+        ctx: _earconAudioContext,
+      );
     } catch (_) {
       // 오디오 미지원 환경(테스트/일부 데스크톱)에서는 시스템 사운드로 폴백한다.
       try {
