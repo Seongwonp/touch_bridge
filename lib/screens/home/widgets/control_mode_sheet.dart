@@ -10,6 +10,7 @@ import '../../control/course_control_screen.dart';
 import '../../mapping/manual_mapping_screen.dart';
 import '../../../services/device_mapping_service.dart';
 import '../../../services/ble_service.dart';
+import '../../../services/accessibility_settings.dart';
 import '../../../services/active_device_service.dart';
 import '../../../services/feedback_service.dart';
 import '../../../services/tts_service.dart';
@@ -44,9 +45,13 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
   void initState() {
     super.initState();
     // 여는 즉시 "무엇을 선택했고 어떤 제어가 있는지" 안내한다.
+    // 좌표 매핑은 보호자 설정 기능이라 보호자 모드일 때만 안내/노출한다.
+    final guardian = AccessibilitySettings.instance.guardianModeEnabled;
+    final options = guardian
+        ? '음성으로 제어, 이미지로 제어, 간편 코스, 숫자 패드, 좌표 매핑이 있습니다.'
+        : '음성으로 제어, 이미지로 제어, 간편 코스, 숫자 패드가 있습니다.';
     _tts.speak(
-      '${widget.deviceName}를 선택했습니다. 제어 방식을 선택하세요. '
-      '음성으로 제어, 이미지로 제어, 간편 코스, 숫자 패드, 좌표 매핑이 있습니다. '
+      '${widget.deviceName}를 선택했습니다. 제어 방식을 선택하세요. $options '
       '각 버튼은 한 번 누르면 안내하고, 다시 누르면 실행합니다.',
       source: 'ControlModeSheet',
       interrupt: true,
@@ -118,6 +123,7 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
   @override
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
+    final guardianMode = AccessibilitySettings.instance.guardianModeEnabled;
 
     return Container(
       decoration: BoxDecoration(
@@ -314,26 +320,29 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
                 },
               ),
             ),
-            SizedBox(height: ResponsiveScale.v(context, 12)),
-            _buildActionButton(
-              rs: rs,
-              icon: Icons.settings_overscan_rounded,
-              label: '좌표 매핑 (보호자용)',
-              hint: '버튼 위치를 다시 설정합니다. 보호자용 설정입니다',
-              armed: _armedActionId == 'mapping',
-              onPressed: () => _armAndRun(
-                id: 'mapping',
-                guide: '좌표 매핑. 보호자용 설정입니다. 다시 누르면 엽니다.',
-                onConfirmed: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const ManualMappingScreen(),
-                    ),
-                  );
-                },
+            // 좌표 매핑은 보호자 설정 기능 → 보호자 모드일 때만 노출.
+            if (guardianMode) ...[
+              SizedBox(height: ResponsiveScale.v(context, 12)),
+              _buildActionButton(
+                rs: rs,
+                icon: Icons.settings_overscan_rounded,
+                label: '좌표 매핑 (보호자용)',
+                hint: '버튼 위치를 다시 설정합니다. 보호자용 설정입니다',
+                armed: _armedActionId == 'mapping',
+                onPressed: () => _armAndRun(
+                  id: 'mapping',
+                  guide: '좌표 매핑. 보호자용 설정입니다. 다시 누르면 엽니다.',
+                  onConfirmed: () {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const ManualMappingScreen(),
+                      ),
+                    );
+                  },
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),

@@ -1,14 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import '../../../widgets/responsive_scale.dart';
 import '../../../theme/app_colors.dart';
 
 class HomeDeviceCard extends StatelessWidget {
+  // 스크린리더 커스텀 액션은 재빌드마다 새로 만들지 않도록 한 번만 생성한다.
+  static final CustomSemanticsAction _manageAction = CustomSemanticsAction(
+    label: '기기 관리 및 삭제',
+  );
+
   const HomeDeviceCard({
     super.key,
     required this.device,
     required this.onTap,
     this.onLongPressStart,
     this.onLongPressEnd,
+    this.onManage,
     this.managementEnabled = false,
   });
 
@@ -16,6 +23,10 @@ class HomeDeviceCard extends StatelessWidget {
   final VoidCallback onTap;
   final Function(LongPressStartDetails)? onLongPressStart;
   final Function(LongPressEndDetails)? onLongPressEnd;
+
+  /// 스크린리더 접근성: 5초 길게 누르기(삭제)의 대안 액션.
+  /// VoiceOver 로터 / TalkBack 액션 메뉴에서 바로 실행할 수 있게 한다.
+  final VoidCallback? onManage;
   final bool managementEnabled;
 
   @override
@@ -29,6 +40,9 @@ class HomeDeviceCard extends StatelessWidget {
             ? '${device['name']}. 현재 상태 ${device['status']}. 선택하려면 두 번 누르세요. 관리하려면 5초간 길게 누르세요.'
             : '${device['name']}. 현재 상태 ${device['status']}. 선택하려면 두 번 누르세요.',
         button: true,
+        customSemanticsActions: (managementEnabled && onManage != null)
+            ? {_manageAction: onManage!}
+            : null,
         child: GestureDetector(
           onTap: onTap,
           onLongPressStart: onLongPressStart,

@@ -227,7 +227,10 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         title: const Text(
           '기기 삭제',
-          style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         content: Text(
           '$deviceName 기기를 삭제하시겠습니까?',
@@ -236,14 +239,19 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('아니오', style: TextStyle(color: AppColors.textTertiary)),
+            child: const Text(
+              '아니오',
+              style: TextStyle(color: AppColors.textTertiary),
+            ),
           ),
           ElevatedButton(
             onPressed: () {
               Navigator.of(ctx).pop();
               _deleteDevice(index);
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.emergency),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.emergency,
+            ),
             child: const Text(
               '예',
               style: TextStyle(
@@ -317,11 +325,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         SizedBox(height: 24 * rs),
                       ] else ...[
                         HomeVoiceActionButton(
-                          deviceName: _currentDeviceIndex >= 0 &&
+                          deviceName:
+                              _currentDeviceIndex >= 0 &&
                                   _currentDeviceIndex < _devices.length
-                              ? (_devices[_currentDeviceIndex]['name'] as String? ?? '선택된 기기')
+                              ? (_devices[_currentDeviceIndex]['name']
+                                        as String? ??
+                                    '선택된 기기')
                               : '선택된 기기',
-                          enabled: _currentDeviceIndex >= 0 &&
+                          enabled:
+                              _currentDeviceIndex >= 0 &&
                               _currentDeviceIndex < _devices.length,
                           scale: rs,
                           onTap: _openVoiceForCurrentDevice,
@@ -374,6 +386,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               onLongPressEnd: guardianMode
                                   ? (_) => _onLongPressEnd()
                                   : null,
+                              onManage: guardianMode
+                                  ? () => _showDeleteConfirmation(index)
+                                  : null,
                             );
                           },
                         ),
@@ -399,5 +414,4 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
 }
