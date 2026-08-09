@@ -33,7 +33,7 @@ class _EmergencyButtonState extends State<EmergencyButton> {
       HapticFeedback.heavyImpact();
 
       _confirmResetTimer?.cancel();
-      _confirmResetTimer = Timer(const Duration(seconds: 4), () {
+      _confirmResetTimer = Timer(const Duration(seconds: 15), () {
         if (!mounted) {
           return;
         }

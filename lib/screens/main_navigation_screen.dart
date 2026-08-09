@@ -114,7 +114,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       setState(() => _armedNavIndex = index);
       FeedbackService.instance.vibrateSuccess();
       _navResetTimer?.cancel();
-      _navResetTimer = Timer(const Duration(seconds: 4), () {
+      _navResetTimer = Timer(const Duration(seconds: 15), () {
         if (mounted) setState(() => _armedNavIndex = null);
       });
       await _tts.speak(
@@ -194,9 +194,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     children: [
                       Icon(
                         item.icon,
-                        color: isActive
-                            ? Colors.black
-                            : AppColors.textTertiary,
+                        color: isActive ? Colors.black : AppColors.textTertiary,
                         size: 24 * rs,
                       ),
                       SizedBox(height: ResponsiveScale.v(context, 4)),
