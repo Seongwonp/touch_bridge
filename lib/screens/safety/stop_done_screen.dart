@@ -12,7 +12,10 @@ import '../../theme/app_colors.dart';
 ///   이 화면에서 다른 탭으로 이동해도 실제로 화면이 바뀌지 않아 음성 안내와 동작이 불일치하는 문제가 있었음)
 /// - 시각장애인 접근성 최우선
 class StopDoneScreen extends StatefulWidget {
-  const StopDoneScreen({super.key});
+  const StopDoneScreen({super.key, this.completed = false});
+
+  /// true면 타이머가 정상적으로 끝난 "작동 완료", false면 사용자/비상 "중단".
+  final bool completed;
 
   @override
   State<StopDoneScreen> createState() => _StopDoneScreenState();
@@ -25,7 +28,12 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
   @override
   void initState() {
     super.initState();
-    _tts.speak('즉시 중단했습니다. 홈으로 돌아가려면 버튼을 누르세요.', interrupt: true);
+    _tts.speak(
+      widget.completed
+          ? '작동이 끝났습니다. 홈으로 돌아가려면 버튼을 누르세요.'
+          : '즉시 중단했습니다. 홈으로 돌아가려면 버튼을 누르세요.',
+      interrupt: true,
+    );
   }
 
   Future<void> _goHome() async {
@@ -58,6 +66,14 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
   @override
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
+    final headline = widget.completed ? '작동이\n끝났습니다' : '작동이 안전하게\n중단되었습니다';
+    final headlineLabel = widget.completed ? '작동이 끝났습니다.' : '작동이 안전하게 중단되었습니다.';
+    final circleLabel = widget.completed
+        ? '작동이 끝났습니다. 확인 완료.'
+        : '작동이 안전하게 중단되었습니다. 확인 완료.';
+    final descText = widget.completed
+        ? '작동이 정상적으로 끝났습니다.\n홈으로 돌아가려면 버튼을 탭하세요.'
+        : '모든 동작이 중단되었습니다.\n홈으로 돌아가려면 버튼을 탭하세요.';
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -110,16 +126,14 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
                       children: [
                         // 체크 원
                         Semantics(
-                          label: '작동이 안전하게 중단되었습니다. 확인 완료.',
+                          label: circleLabel,
                           child: Container(
                             width: ResponsiveScale.v(context, 170),
                             height: ResponsiveScale.v(context, 170),
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: AppColors.surfaceElevated,
-                              border: Border.all(
-                                color: AppColors.borderFocus,
-                              ),
+                              border: Border.all(color: AppColors.borderFocus),
                               boxShadow: const [
                                 BoxShadow(
                                   color: AppColors.shadowPrimary,
@@ -150,9 +164,9 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
                         SizedBox(height: ResponsiveScale.v(context, 20)),
                         // 제목
                         Semantics(
-                          label: '작동이 안전하게 중단되었습니다.',
+                          label: headlineLabel,
                           child: Text(
-                            '작동이 안전하게\n중단되었습니다',
+                            headline,
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: AppColors.primary,
@@ -166,7 +180,7 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
                         SizedBox(height: ResponsiveScale.v(context, 14)),
                         // 설명 텍스트
                         Semantics(
-                          label: '모든 동작이 중단되었습니다. 홈으로 돌아가려면 버튼을 탭하세요.',
+                          label: descText,
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 18,
@@ -179,8 +193,8 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
                                 color: AppColors.borderDefault,
                               ),
                             ),
-                            child: const Text(
-                              '모든 동작이 중단되었습니다.\n홈으로 돌아가려면 버튼을 탭하세요.',
+                            child: Text(
+                              descText,
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: AppColors.textSecondary,

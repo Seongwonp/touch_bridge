@@ -106,9 +106,12 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
     );
 
     if (!result.ok) {
+      FeedbackService.instance.playFailure();
       _tts.speak(result.userMessage);
       return;
     }
+
+    FeedbackService.instance.playSuccess();
 
     // 만약 시작 버튼(BT-05)이라면 비상 정지 화면으로 이동 (예시 로직)
     if (btId == 'BT-05' && mounted) {
