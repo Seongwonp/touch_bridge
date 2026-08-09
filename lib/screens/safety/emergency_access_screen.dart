@@ -66,6 +66,11 @@ class _EmergencyAccessScreenState extends State<EmergencyAccessScreen> {
     // 전송 성공만으로 "완료"라고 말하지 않는다. ACK 결과로 문구를 분기한다.
     final ack = await BleService.instance.sendEmergencyStop(targetId);
     final outcome = EmergencyStopOutcome.fromAck(ack);
+    if (outcome.acknowledged) {
+      FeedbackService.instance.playSuccess();
+    } else {
+      FeedbackService.instance.playFailure();
+    }
     await _tts.speak(outcome.message, interrupt: true);
 
     if (!mounted) return;
