@@ -21,8 +21,8 @@ graph TD
     User((사용자)) -- "음성/터치" --> App[Flutter App]
     App -- "음성 텍스트" --> Gemini[Gemini AI / Backend]
     Gemini -- "명령 JSON (BT-xx)" --> App
-    App -- "BLE JSON (action: press)" --> ESP32[ESP32]
-    ESP32 -- "UART (PRESS x y / BTN_n)" --> AVR[AVR / GRBL]
+    App -- "BLE raw text / JSON" --> ESP32[ESP32]
+    ESP32 -- "UART (SET_GRID / BTN_n / G-code)" --> AVR[AVR / GRBL]
     AVR -- "모터 제어" --> HW[Touch Hardware]
 ```
 
@@ -40,7 +40,7 @@ graph TD
 ## 4. 통신 프로토콜 (Protocol Contract)
 
 ### 4-1. 앱 -> ESP32 (BLE JSON)
-앱에서 ESP32로 전송하는 데이터 포맷입니다.
+앱에서 ESP32로 전송하는 BLE 채널입니다. 현재 제어 경로는 텍스트 명령을 우선 사용하고, JSON 액션은 레거시/보안 제어용으로 유지합니다.
 - **Service UUID**: `0000FFE0-0000-1000-8000-00805F9B34FB`
 - **Characteristic UUID**: `0000FFE1-0000-1000-8000-00805F9B34FB`
 
@@ -58,6 +58,7 @@ ESP32가 하드웨어 컨트롤러로 전달하는 직렬 명령입니다.
 - `BT-<n>`: 앱의 논리 버튼 ID 호환 (예: `BT-05`)
 - `PRESS <x> <y>`: 0-index 기반 좌표 (예: `PRESS 1 2`)
 - `SET_GRID <rows> <cols> ...`: 그리드 설정 (동적 그리드 대응용)
+- `G91` + `G1 <axis><value> F<feed>` + `G90`: 개발자/수동 조이스틱 안정 이동
 
 ---
 
@@ -69,6 +70,10 @@ ESP32가 하드웨어 컨트롤러로 전달하는 직렬 명령입니다.
     - `BT-01`: 10초 추가 / `BT-02`: 30초 추가 / `BT-03`: 1분 추가
     - `BT-05`: 시작 / `BT-06`: 취소
 - **응답 형식**: 조리 시간(`inferred_seconds`), 안내 메시지(`message`)를 포함한 JSON 반환.
+- **실행 우선순위**:
+  1. 활성 기기의 `DeviceMappingProfile.buttonMap`과 `grid`를 우선 사용한다.
+  2. 저장 매핑/그리드가 없을 때만 `docs/MOCK_MAPPING_DATA.md`의 검증된 데모 물리 좌표를 fallback으로 사용한다.
+  3. AI는 좌표를 만들지 않고 논리 버튼 ID(`BT-xx`) 시퀀스만 만든다.
 
 ---
 
@@ -78,7 +83,7 @@ ESP32가 하드웨어 컨트롤러로 전달하는 직렬 명령입니다.
 - `rows`, `cols`: 그리드 크기
 - `originX`, `originY`: 첫 번째 버튼의 물리적 좌표
 - `pitchX`, `pitchY`: 버튼 간의 간격
-- `buttonMap`: 논리 ID(`BT-01`)와 물리 좌표(`{x, y}`)의 매핑 테이블
+- `buttonMap`: 논리 ID(`BT-01`)와 그리드 좌표(`{row, col}`)의 매핑 테이블
 
 ---
 
@@ -88,4 +93,4 @@ ESP32가 하드웨어 컨트롤러로 전달하는 직렬 명령입니다.
 3.  **피드백 루프**: 하드웨어에서 전송되는 `TOUCH_OK` 또는 `ERROR` 응답을 확인하여 앱 로그와 TTS로 사용자에게 알려야 합니다.
 
 ---
-*최종 업데이트: 2026-05-21*
+*최종 업데이트: 2026-06-23*

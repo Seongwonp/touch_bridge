@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../services/ble_service.dart';
 import '../../services/course_service.dart';
 import '../../services/device_mapping_service.dart';
 import '../../services/tts_service.dart';
 import '../../services/feedback_service.dart';
+import '../../services/mapping_execution_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../../theme/app_colors.dart';
@@ -27,10 +30,20 @@ class _CourseControlScreenState extends State<CourseControlScreen> {
   final TtsService _tts = TtsService();
   bool _isExecuting = false;
 
+  // 2단계 탭(첫 탭 안내 → 둘째 탭 실행) 상태
+  String? _armedCourseName;
+  Timer? _armResetTimer;
+
   @override
   void initState() {
     super.initState();
     _tts.speak('코스 선택 화면입니다. 원하시는 간편 조리 코스를 선택해 주세요.');
+  }
+
+  @override
+  void dispose() {
+    _armResetTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _runCourse(Course course) async {
@@ -40,39 +53,44 @@ class _CourseControlScreenState extends State<CourseControlScreen> {
       return;
     }
 
+    // 2단계 탭: 첫 탭은 안내만, 둘째 탭에서 실제 코스를 실행한다(오작동 방지).
+    if (_armedCourseName != course.name) {
+      setState(() => _armedCourseName = course.name);
+      FeedbackService.instance.vibrateSuccess();
+      _armResetTimer?.cancel();
+      _armResetTimer = Timer(const Duration(seconds: 15), () {
+        if (mounted) setState(() => _armedCourseName = null);
+      });
+      _tts.speak('${course.name} 코스. 다시 누르면 시작합니다.', interrupt: true);
+      return;
+    }
+
+    _armResetTimer?.cancel();
+    setState(() => _armedCourseName = null);
+    await _executeCourse(course);
+  }
+
+  Future<void> _executeCourse(Course course) async {
     setState(() => _isExecuting = true);
-    _tts.speak('${course.name} 코스를 시작합니다.');
+    _tts.speak('${course.name} 코스를 시작합니다.', interrupt: true);
     FeedbackService.instance.vibrateSuccess();
 
     try {
       final profile = await DeviceMappingService.instance.load(widget.deviceId);
-      
-      // 1. 그리드 동기화
-      await BleService.instance.sendSetGrid(
-        rows: profile.rows,
-        cols: profile.cols,
-        originX: profile.originX,
-        originY: profile.originY,
-        pitchX: profile.pitchX,
-        pitchY: profile.pitchY,
-        deviceId: widget.deviceId,
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 500));
 
-      // 2. 시퀀스 실행
-      for (final btId in course.buttonIds) {
-        final mapped = profile.buttonMap[btId];
-        if (mapped != null) {
-          await BleService.instance.sendPress(
-            x: mapped.col,
-            y: mapped.row,
-            cols: profile.cols,
-            deviceId: widget.deviceId,
-          );
-          await Future<void>.delayed(const Duration(milliseconds: 1000));
-        }
+      final result = await MappingExecutionService.instance.pressSequence(
+        deviceId: widget.deviceId,
+        profile: profile,
+        buttonIds: course.buttonIds,
+        betweenPressDelay: const Duration(milliseconds: 1000),
+      );
+      if (!result.ok) {
+        FeedbackService.instance.playFailure();
+        _tts.speak(result.userMessage);
+        return;
       }
 
+      FeedbackService.instance.playSuccess();
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
@@ -84,7 +102,7 @@ class _CourseControlScreenState extends State<CourseControlScreen> {
         );
       }
     } catch (e) {
-      _tts.speak('코스 실행 중 오류가 발생했습니다.');
+      _tts.speak('코스를 실행하지 못했습니다. 잠시 후 다시 시도해 주세요.');
     } finally {
       if (mounted) setState(() => _isExecuting = false);
     }
@@ -117,32 +135,57 @@ class _CourseControlScreenState extends State<CourseControlScreen> {
               itemCount: courses.length,
               itemBuilder: (context, index) {
                 final c = courses[index];
-                return Card(
-                  color: const Color(0xFF1A1A1A),
-                  margin: EdgeInsets.only(bottom: 16 * rs),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16 * rs),
-                    side: const BorderSide(color: Color(0xFF333333)),
-                  ),
-                  child: ListTile(
-                    contentPadding: EdgeInsets.all(16 * rs),
-                    leading: Container(
-                      padding: EdgeInsets.all(12 * rs),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
+                final armed = _armedCourseName == c.name;
+                return Semantics(
+                  button: true,
+                  label: '${c.name} 코스',
+                  hint: armed ? '다시 누르면 시작합니다' : '한 번 누르면 안내합니다',
+                  child: Card(
+                    color: armed
+                        ? AppColors.primary.withValues(alpha: 0.12)
+                        : const Color(0xFF1A1A1A),
+                    margin: EdgeInsets.only(bottom: 16 * rs),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16 * rs),
+                      side: BorderSide(
+                        color: armed ? Colors.white : const Color(0xFF333333),
+                        width: armed ? 2.5 : 1,
                       ),
-                      child: Icon(Icons.stars_rounded, color: AppColors.primary, size: 28 * rs),
                     ),
-                    title: Text(
-                      c.name,
-                      style: TextStyle(color: Colors.white, fontSize: 18 * rs, fontWeight: FontWeight.bold),
+                    child: ListTile(
+                      contentPadding: EdgeInsets.all(16 * rs),
+                      leading: Container(
+                        padding: EdgeInsets.all(12 * rs),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.stars_rounded,
+                          color: AppColors.primary,
+                          size: 28 * rs,
+                        ),
+                      ),
+                      title: Text(
+                        c.name,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18 * rs,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      subtitle: Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          c.description,
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14 * rs,
+                          ),
+                        ),
+                      ),
+                      onTap: () => _runCourse(c),
                     ),
-                    subtitle: Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(c.description, style: TextStyle(color: Colors.white70, fontSize: 14 * rs)),
-                    ),
-                    onTap: () => _runCourse(c),
                   ),
                 );
               },

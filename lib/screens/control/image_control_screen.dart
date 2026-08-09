@@ -1,9 +1,13 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../../services/ble_service.dart';
 import '../../services/device_mapping_service.dart';
 import '../../services/tts_service.dart';
 import '../../services/feedback_service.dart';
+import '../../services/mapping_coordinate_service.dart';
+import '../../services/mapping_execution_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../../theme/app_colors.dart';
@@ -29,11 +33,22 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
   final TtsService _tts = TtsService();
   DeviceMappingProfile? _profile;
   bool _isLoading = true;
+  Size? _imageSize;
+
+  // 2단계 탭(첫 탭 안내 → 둘째 탭 실행) 상태
+  String? _armedButtonId;
+  Timer? _armResetTimer;
 
   @override
   void initState() {
     super.initState();
     _loadMapping();
+  }
+
+  @override
+  void dispose() {
+    _armResetTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadMapping() async {
@@ -43,6 +58,7 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
         _profile = profile;
         _isLoading = false;
       });
+      _loadImageSize(profile.imagePath ?? widget.imagePath);
       _tts.speak('${widget.deviceName} 제어 화면입니다. 이미지의 버튼을 눌러 조작하세요.');
     } catch (e) {
       setState(() => _isLoading = false);
@@ -50,40 +66,81 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
     }
   }
 
-  Future<void> _handleButtonPress(String btId, int row, int col, String label) async {
+  Future<void> _loadImageSize(String? imagePath) async {
+    if (imagePath == null ||
+        imagePath.isEmpty ||
+        imagePath.startsWith('http')) {
+      return;
+    }
+
+    try {
+      final file = File(imagePath);
+      if (!await file.exists()) return;
+      final bytes = await file.readAsBytes();
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      final size = Size(
+        frame.image.width.toDouble(),
+        frame.image.height.toDouble(),
+      );
+      frame.image.dispose();
+      if (mounted) setState(() => _imageSize = size);
+    } catch (e) {
+      debugPrint('Failed to read control image size: $e');
+    }
+  }
+
+  Future<void> _handleButtonPress(
+    String btId,
+    int row,
+    int col,
+    String label,
+  ) async {
     if (!BleService.instance.isConnected) {
       _tts.speak('블루투스가 연결되어 있지 않습니다.');
       return;
     }
 
-    FeedbackService.instance.vibrateSuccess();
-    _tts.speak('$label 누름');
-
-    // 1. 그리드 설정 동기화 (최신 프로필 보장)
-    if (_profile != null) {
-      await BleService.instance.sendSetGrid(
-        rows: _profile!.rows,
-        cols: _profile!.cols,
-        originX: _profile!.originX,
-        originY: _profile!.originY,
-        pitchX: _profile!.pitchX,
-        pitchY: _profile!.pitchY,
-        deviceId: widget.deviceId,
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 200));
+    // 2단계 탭: 첫 탭은 안내만, 둘째 탭에서 실제 하드웨어를 누른다(오작동 방지).
+    if (_armedButtonId != btId) {
+      setState(() => _armedButtonId = btId);
+      FeedbackService.instance.vibrateSuccess();
+      _armResetTimer?.cancel();
+      _armResetTimer = Timer(const Duration(seconds: 15), () {
+        if (mounted) setState(() => _armedButtonId = null);
+      });
+      _tts.speak('$label 버튼. 다시 누르면 실행합니다.', interrupt: true);
+      return;
     }
 
-    // 2. 좌표 전송
-    final ok = await BleService.instance.sendPress(
-      x: col,
-      y: row,
-      cols: _profile?.cols ?? 3,
+    _armResetTimer?.cancel();
+    setState(() => _armedButtonId = null);
+    await _executePress(btId, label);
+  }
+
+  Future<void> _executePress(String btId, String label) async {
+    _tts.speak('$label 실행합니다.', interrupt: true);
+
+    final profile = _profile;
+    if (profile == null) {
+      FeedbackService.instance.playFailure();
+      _tts.speak('매핑 데이터를 불러오지 못했습니다.');
+      return;
+    }
+
+    final result = await MappingExecutionService.instance.pressButton(
       deviceId: widget.deviceId,
+      profile: profile,
+      buttonId: btId,
     );
 
-    if (!ok) {
-      _tts.speak('명령 전송에 실패했습니다.');
+    if (!result.ok) {
+      FeedbackService.instance.playFailure();
+      _tts.speak(result.userMessage);
+      return;
     }
+
+    FeedbackService.instance.playSuccess();
 
     // 만약 시작 버튼(BT-05)이라면 비상 정지 화면으로 이동 (예시 로직)
     if (btId == 'BT-05' && mounted) {
@@ -105,7 +162,9 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: AppColors.background,
-        body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+        body: Center(
+          child: CircularProgressIndicator(color: AppColors.primary),
+        ),
       );
     }
 
@@ -130,48 +189,68 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
                             borderRadius: BorderRadius.circular(24 * rs),
                             child: AspectRatio(
                               aspectRatio: 3 / 4, // 일반적인 사진 비율 유지
-                              child: Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  // 배경 이미지
-                                  _buildImage(),
-
-                                  // 반투명 오버레이
-                                  Container(
-                                      color: Colors.black.withValues(alpha: 0.2)),
-
-                                  // 매핑된 버튼들
-                                  if (_profile != null)
-                                    LayoutBuilder(
-                                      builder: (context, stackConstraints) {
-                                        return Stack(
+                              child: LayoutBuilder(
+                                builder: (context, stackConstraints) {
+                                  final imageRect =
+                                      MappingCoordinateService.fittedImageRect(
+                                        containerSize: Size(
+                                          stackConstraints.maxWidth,
+                                          stackConstraints.maxHeight,
+                                        ),
+                                        imageSize: _imageSize,
+                                      );
+                                  return Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      Container(color: Colors.black),
+                                      Positioned.fromRect(
+                                        rect: imageRect,
+                                        child: _buildImage(),
+                                      ),
+                                      Positioned.fromRect(
+                                        rect: imageRect,
+                                        child: Container(
+                                          color: Colors.black.withValues(
+                                            alpha: 0.2,
+                                          ),
+                                        ),
+                                      ),
+                                      if (_profile != null)
+                                        Stack(
                                           children: buttonPoints.map((entry) {
                                             final btId = entry.key;
                                             final row = entry.value.row;
                                             final col = entry.value.col;
 
-                                            // 버튼 위치 계산 (그리드 중심점)
-                                            final xRatio =
-                                                (col + 0.5) / _profile!.cols;
-                                            final yRatio =
-                                                (row + 0.5) / _profile!.rows;
+                                            final savedPosition =
+                                                _profile!.buttonPositions[btId];
+                                            final normalized = Offset(
+                                              savedPosition?.x ??
+                                                  (col + 0.5) / _profile!.cols,
+                                              savedPosition?.y ??
+                                                  (row + 0.5) / _profile!.rows,
+                                            );
+                                            final local =
+                                                MappingCoordinateService.localFromNormalized(
+                                                  normalized: normalized,
+                                                  imageRect: imageRect,
+                                                );
 
                                             return Positioned(
-                                              left: xRatio *
-                                                      stackConstraints.maxWidth -
-                                                  (24 * rs),
-                                              top: yRatio *
-                                                      stackConstraints
-                                                          .maxHeight -
-                                                  (24 * rs),
+                                              left: local.dx - (24 * rs),
+                                              top: local.dy - (24 * rs),
                                               child: _buildButtonMarker(
-                                                  btId, row, col, rs),
+                                                btId,
+                                                row,
+                                                col,
+                                                rs,
+                                              ),
                                             );
                                           }).toList(),
-                                        );
-                                      },
-                                    ),
-                                ],
+                                        ),
+                                    ],
+                                  );
+                                },
                               ),
                             ),
                           ),
@@ -204,12 +283,13 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
   }
 
   Widget _buildImage() {
-    if (widget.imagePath != null && widget.imagePath!.isNotEmpty) {
-      final file = File(widget.imagePath!);
+    final imagePath = _profile?.imagePath ?? widget.imagePath;
+    if (imagePath != null && imagePath.isNotEmpty) {
+      final file = File(imagePath);
       if (file.existsSync()) {
         return Image.file(
           file,
-          fit: BoxFit.cover,
+          fit: BoxFit.fill,
           errorBuilder: (context, error, stackTrace) {
             return _buildPlaceholder(rs: 1.0, error: '이미지를 불러올 수 없습니다.');
           },
@@ -248,9 +328,11 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
 
   Widget _buildButtonMarker(String btId, int row, int col, double rs) {
     final label = _getButtonLabel(btId);
-    
+    final armed = _armedButtonId == btId;
+
     return Semantics(
       label: '$label 버튼',
+      hint: armed ? '다시 누르면 실행합니다' : '한 번 누르면 안내합니다',
       button: true,
       child: GestureDetector(
         onTap: () => _handleButtonPress(btId, row, col, label),
@@ -262,8 +344,17 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
               decoration: BoxDecoration(
                 color: AppColors.primary.withValues(alpha: 0.9),
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 2 * rs),
+                border: Border.all(
+                  color: Colors.white,
+                  width: (armed ? 4 : 2) * rs,
+                ),
                 boxShadow: [
+                  if (armed)
+                    BoxShadow(
+                      color: AppColors.primary,
+                      blurRadius: 16 * rs,
+                      spreadRadius: 2 * rs,
+                    ),
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.5),
                     blurRadius: 8 * rs,
@@ -272,12 +363,19 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
                 ],
               ),
               child: const Center(
-                child: Icon(Icons.touch_app_rounded, color: Colors.black, size: 24),
+                child: Icon(
+                  Icons.touch_app_rounded,
+                  color: Colors.black,
+                  size: 24,
+                ),
               ),
             ),
             SizedBox(height: 4 * rs),
             Container(
-              padding: EdgeInsets.symmetric(horizontal: 8 * rs, vertical: 2 * rs),
+              padding: EdgeInsets.symmetric(
+                horizontal: 8 * rs,
+                vertical: 2 * rs,
+              ),
               decoration: BoxDecoration(
                 color: Colors.black87,
                 borderRadius: BorderRadius.circular(8 * rs),

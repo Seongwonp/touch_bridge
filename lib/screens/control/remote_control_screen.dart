@@ -35,7 +35,10 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     _speak('${widget.deviceName} 제어 화면입니다. 숫자 버튼을 입력하여 시간을 설정하세요.');
   }
 
-  Future<void> _speak(String message, {String source = 'RemoteControlScreen'}) async {
+  Future<void> _speak(
+    String message, {
+    String source = 'RemoteControlScreen',
+  }) async {
     await _tts.speak(message, source: source);
   }
 
@@ -51,7 +54,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
       FeedbackService.instance.vibrateSuccess();
 
       _actionResetTimer?.cancel();
-      _actionResetTimer = Timer(const Duration(seconds: 4), () {
+      _actionResetTimer = Timer(const Duration(seconds: 15), () {
         if (!mounted) return;
         setState(() {
           _armedActionId = null;
@@ -122,7 +125,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     } else {
       _speak('${_formatMMSS(_secondsLeft)} 시작합니다.');
     }
-    
+
     AccessibilityExperimentService.instance.recordTaskStarted(TaskMode.manual);
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -139,7 +142,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
       label: '$number 숫자 버튼',
       button: true,
       child: _ActionKey(
-        borderColor: const Color(0xFF2A2A2A),
+        borderColor: AppColors.borderDefault,
         armed: isArmed,
         onTap: () {
           _armAndRun(
@@ -170,21 +173,21 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
         borderColor: const Color(0xFF3A1A1A),
         armed: isArmed,
         onTap: () {
-          _armAndRun(
-            id: 'cancel',
-            guide: '취소',
-            onConfirmed: _cancelTimer,
-          );
+          _armAndRun(id: 'cancel', guide: '취소', onConfirmed: _cancelTimer);
         },
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.cancel_rounded, color: const Color(0xFFFF4444), size: 24 * rs),
+            Icon(
+              Icons.cancel_rounded,
+              color: AppColors.emergency,
+              size: 24 * rs,
+            ),
             SizedBox(height: 4 * rs),
             Text(
               '취소',
               style: TextStyle(
-                color: const Color(0xFFFF4444),
+                color: AppColors.emergency,
                 fontSize: 12 * rs,
                 fontWeight: FontWeight.w800,
               ),
@@ -201,8 +204,8 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
       label: '지우기 버튼',
       button: true,
       child: _ActionKey(
-        color: const Color(0xFF1A1A1A),
-        borderColor: const Color(0xFF2A2A2A),
+        color: AppColors.surfaceElevated,
+        borderColor: AppColors.borderDefault,
         armed: isArmed,
         onTap: () {
           _armAndRun(
@@ -214,12 +217,16 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.backspace_rounded, color: const Color(0xFF888888), size: 22 * rs),
+            Icon(
+              Icons.backspace_rounded,
+              color: AppColors.textTertiary,
+              size: 22 * rs,
+            ),
             SizedBox(height: 4 * rs),
             Text(
               '지우기',
               style: TextStyle(
-                color: const Color(0xFF888888),
+                color: AppColors.textTertiary,
                 fontSize: 12 * rs,
                 fontWeight: FontWeight.w800,
               ),
@@ -248,16 +255,21 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             return SingleChildScrollView(
-              padding: EdgeInsets.symmetric(horizontal: 20 * rs, vertical: 12 * rs),
+              padding: EdgeInsets.symmetric(
+                horizontal: 20 * rs,
+                vertical: 12 * rs,
+              ),
               child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight - (24 * rs)),
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - (24 * rs),
+                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       '남은 시간',
                       style: TextStyle(
-                        color: const Color(0xFF888888),
+                        color: AppColors.textTertiary,
                         fontSize: 13 * rs,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 1.5,
@@ -269,7 +281,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                       child: Text(
                         _formatMMSS(_secondsLeft),
                         style: TextStyle(
-                          color: const Color(0xFFFFEB00),
+                          color: AppColors.primary,
                           fontSize: 72 * rs,
                           fontWeight: FontWeight.w900,
                           height: 1.1,
@@ -285,10 +297,18 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                       mainAxisSpacing: 12 * rs,
                       childAspectRatio: 1.3, // 명도와 크기를 위해 비율 조정
                       children: [
-                        _numberKey(1, rs), _numberKey(2, rs), _numberKey(3, rs),
-                        _numberKey(4, rs), _numberKey(5, rs), _numberKey(6, rs),
-                        _numberKey(7, rs), _numberKey(8, rs), _numberKey(9, rs),
-                        _cancelKey(rs), _numberKey(0, rs), _backspaceKey(rs),
+                        _numberKey(1, rs),
+                        _numberKey(2, rs),
+                        _numberKey(3, rs),
+                        _numberKey(4, rs),
+                        _numberKey(5, rs),
+                        _numberKey(6, rs),
+                        _numberKey(7, rs),
+                        _numberKey(8, rs),
+                        _numberKey(9, rs),
+                        _cancelKey(rs),
+                        _numberKey(0, rs),
+                        _backspaceKey(rs),
                       ],
                     ),
                     SizedBox(height: ResponsiveScale.v(context, 24)),
@@ -307,18 +327,26 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                             );
                           },
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFFFEB00),
+                            backgroundColor: AppColors.primary,
                             foregroundColor: Colors.black,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16 * rs),
-                              side: _armedActionId == 'start' ? const BorderSide(color: Colors.white, width: 3) : BorderSide.none,
+                              side: _armedActionId == 'start'
+                                  ? const BorderSide(
+                                      color: Colors.white,
+                                      width: 3,
+                                    )
+                                  : BorderSide.none,
                             ),
                             elevation: 0,
                           ),
                           icon: Icon(Icons.play_arrow_rounded, size: 32 * rs),
                           label: Text(
                             '조리 시작',
-                            style: TextStyle(fontSize: 22 * rs, fontWeight: FontWeight.w900),
+                            style: TextStyle(
+                              fontSize: 22 * rs,
+                              fontWeight: FontWeight.w900,
+                            ),
                           ),
                         ),
                       ),
@@ -339,8 +367,8 @@ class _ActionKey extends StatelessWidget {
   const _ActionKey({
     required this.child,
     required this.onTap,
-    this.color = const Color(0xFF111111),
-    this.borderColor = const Color(0xFF2A2A2A),
+    this.color = AppColors.surfaceElevated,
+    this.borderColor = AppColors.borderDefault,
     this.armed = false,
   });
 
@@ -353,7 +381,7 @@ class _ActionKey extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
-    
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16 * rs),

@@ -7,6 +7,7 @@ import '../../services/recommendation_service.dart';
 import '../../services/tts_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
+import '../../theme/app_colors.dart';
 import '../mapping/photo_mapping_screen.dart';
 
 class ApplianceSelectionScreen extends StatefulWidget {
@@ -16,7 +17,8 @@ class ApplianceSelectionScreen extends StatefulWidget {
   const ApplianceSelectionScreen({super.key, this.bleId, this.bleName});
 
   @override
-  State<ApplianceSelectionScreen> createState() => _ApplianceSelectionScreenState();
+  State<ApplianceSelectionScreen> createState() =>
+      _ApplianceSelectionScreenState();
 }
 
 class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
@@ -37,15 +39,38 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
   Future<String?> _chooseImageForMapping(BuildContext context) async {
     final choice = await showModalBottomSheet<int>(
       context: context,
-      backgroundColor: const Color(0xFF111111),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      backgroundColor: AppColors.surfaceElevated,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          ListTile(leading: const Icon(Icons.camera_alt, color: Colors.white), title: const Text('사진 촬영', style: TextStyle(color: Colors.white)), onTap: () => Navigator.of(ctx).pop(0)),
-          ListTile(leading: const Icon(Icons.photo_library, color: Colors.white), title: const Text('갤러리에서 선택', style: TextStyle(color: Colors.white)), onTap: () => Navigator.of(ctx).pop(1)),
-          ListTile(leading: const Icon(Icons.image, color: Colors.white), title: const Text('샘플 이미지 사용', style: TextStyle(color: Colors.white)), onTap: () => Navigator.of(ctx).pop(2)),
-          const SizedBox(height: 12),
-        ]),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt, color: Colors.white),
+              title: const Text('사진 촬영', style: TextStyle(color: Colors.white)),
+              onTap: () => Navigator.of(ctx).pop(0),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library, color: Colors.white),
+              title: const Text(
+                '갤러리에서 선택',
+                style: TextStyle(color: Colors.white),
+              ),
+              onTap: () => Navigator.of(ctx).pop(1),
+            ),
+            ListTile(
+              leading: const Icon(Icons.image, color: Colors.white),
+              title: const Text(
+                '샘플 이미지 사용',
+                style: TextStyle(color: Colors.white),
+              ),
+              onTap: () => Navigator.of(ctx).pop(2),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
       ),
     );
 
@@ -56,20 +81,20 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
       // [CRITICAL] iOS 리소스 격리: 모든 고부하 작업 중지
       await _tts.stop();
       // 블루투스 스캔 중이면 중지 (필요 시)
-      
+
       // iOS XPC 세션 안정화를 위해 충분한 대기
       await Future.delayed(const Duration(milliseconds: 1500));
-      
+
       final ImagePicker isolatedPicker = ImagePicker();
       final xfile = await isolatedPicker.pickImage(
-        source: choice == 0 ? ImageSource.camera : ImageSource.gallery, 
+        source: choice == 0 ? ImageSource.camera : ImageSource.gallery,
         maxWidth: 1024, // 해상도 하향 조정으로 메모리 부담 완화
         imageQuality: 80,
       );
-      
+
       // 피커 종료 후 다시 대기
       await Future.delayed(const Duration(milliseconds: 800));
-      
+
       return xfile?.path;
     } catch (e) {
       debugPrint('Error picking image (Critical Isolation): $e');
@@ -101,34 +126,36 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
             appliance: appliance,
             onTap: () {
               HapticFeedback.selectionClick();
-              _tts.speak('${appliance.name} 선택.', source: 'ApplianceSelectionScreen');
+              _tts.speak(
+                '${appliance.name} 선택.',
+                source: 'ApplianceSelectionScreen',
+              );
             },
             onStartMapping: (sheetCtx, ap) async {
               if (Navigator.of(sheetCtx).canPop()) {
                 Navigator.of(sheetCtx).pop();
               }
-              
+
               final result = await _chooseImageForMapping(context);
-              if (!mounted) return;
-              
+              if (!context.mounted) return;
+
               // [CRITICAL] 피커 종료 후 OS 리소스 안정화를 위해 추가 대기
               await Future.delayed(const Duration(milliseconds: 500));
-              
-              if (mounted) {
-                Navigator.push(
-                  context, 
-                  MaterialPageRoute(
-                    builder: (_) => PhotoMappingScreen(
-                      deviceId: _newDeviceId(ap.name.replaceAll(' ', '_')), 
-                      imagePath: result,
-                      applianceName: ap.name,
-                      applianceType: ap.type.name,
-                      bleId: widget.bleId,
-                      bleName: widget.bleName,
-                    )
-                  )
-                );
-              }
+
+              if (!context.mounted) return;
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => PhotoMappingScreen(
+                    deviceId: _newDeviceId(ap.name.replaceAll(' ', '_')),
+                    imagePath: result,
+                    applianceName: ap.name,
+                    applianceType: ap.type.name,
+                    bleId: widget.bleId,
+                    bleName: widget.bleName,
+                  ),
+                ),
+              );
             },
           );
         },
@@ -141,16 +168,25 @@ class _ApplianceCard extends StatelessWidget {
   final ApplianceConfig appliance;
   final VoidCallback onTap;
   final Future<void> Function(BuildContext, ApplianceConfig) onStartMapping;
-  
-  const _ApplianceCard({required this.appliance, required this.onTap, required this.onStartMapping});
+
+  const _ApplianceCard({
+    required this.appliance,
+    required this.onTap,
+    required this.onStartMapping,
+  });
 
   IconData _getIcon() {
     switch (appliance.type) {
-      case ApplianceType.washer: return Icons.wash_rounded;
-      case ApplianceType.microwave: return Icons.microwave_rounded;
-      case ApplianceType.dryer: return Icons.dry_cleaning_rounded;
-      case ApplianceType.airConditioner: return Icons.ac_unit_rounded;
-      default: return Icons.settings_remote_rounded;
+      case ApplianceType.washer:
+        return Icons.wash_rounded;
+      case ApplianceType.microwave:
+        return Icons.microwave_rounded;
+      case ApplianceType.dryer:
+        return Icons.dry_cleaning_rounded;
+      case ApplianceType.airConditioner:
+        return Icons.ac_unit_rounded;
+      default:
+        return Icons.settings_remote_rounded;
     }
   }
 
@@ -159,25 +195,62 @@ class _ApplianceCard extends StatelessWidget {
     final rs = ResponsiveScale.factor(context);
     return Container(
       margin: EdgeInsets.only(bottom: 16 * rs),
-      decoration: BoxDecoration(color: const Color(0xFF111111), borderRadius: BorderRadius.circular(16 * rs), border: Border.all(color: const Color(0xFF2A2A2A))),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(16 * rs),
+        border: Border.all(color: AppColors.borderDefault),
+      ),
       child: InkWell(
-        onTap: () { onTap(); _showGuide(context, rs); },
+        onTap: () {
+          onTap();
+          _showGuide(context, rs);
+        },
         borderRadius: BorderRadius.circular(16 * rs),
         child: Padding(
           padding: EdgeInsets.all(20 * rs),
           child: Row(
             children: [
               Container(
-                width: 60 * rs, height: 60 * rs,
-                decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(12 * rs)),
-                child: Icon(_getIcon(), color: const Color(0xFFFFEB00), size: 32 * rs),
+                width: 60 * rs,
+                height: 60 * rs,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceElevated,
+                  borderRadius: BorderRadius.circular(12 * rs),
+                ),
+                child: Icon(
+                  _getIcon(),
+                  color: AppColors.primary,
+                  size: 32 * rs,
+                ),
               ),
               SizedBox(width: 18 * rs),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(appliance.name, style: TextStyle(color: Colors.white, fontSize: 18 * rs, fontWeight: FontWeight.bold)),
-                Text('추천 킷: ${appliance.recommendedKit}', style: TextStyle(color: const Color(0xFF888888), fontSize: 13 * rs)),
-              ])),
-              Icon(Icons.arrow_forward_ios_rounded, color: const Color(0xFF444444), size: 16 * rs),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      appliance.name,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18 * rs,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      '추천 킷: ${appliance.recommendedKit}',
+                      style: TextStyle(
+                        color: AppColors.textTertiary,
+                        fontSize: 13 * rs,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                color: const Color(0xFF444444),
+                size: 16 * rs,
+              ),
             ],
           ),
         ),
@@ -187,53 +260,124 @@ class _ApplianceCard extends StatelessWidget {
 
   void _showGuide(BuildContext context, double rs) {
     showModalBottomSheet(
-      context: context, backgroundColor: const Color(0xFF111111), isScrollControlled: true,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24 * rs))),
+      context: context,
+      backgroundColor: AppColors.surfaceElevated,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24 * rs)),
+      ),
       builder: (context) => Padding(
         padding: EdgeInsets.fromLTRB(24 * rs, 24 * rs, 24 * rs, 40 * rs),
         child: Column(
-          mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(children: [
-              Icon(_getIcon(), color: const Color(0xFFFFEB00), size: 24 * rs),
-              SizedBox(width: 8 * rs),
-              Text(appliance.name, style: TextStyle(color: Colors.white, fontSize: 20 * rs, fontWeight: FontWeight.bold)),
-            ]),
+            Row(
+              children: [
+                Icon(_getIcon(), color: AppColors.primary, size: 24 * rs),
+                SizedBox(width: 8 * rs),
+                Text(
+                  appliance.name,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20 * rs,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
             SizedBox(height: ResponsiveScale.v(context, 24)),
-            Text('필요한 부품 구성', style: TextStyle(color: const Color(0xFFFFEB00), fontWeight: FontWeight.bold, fontSize: 16 * rs)),
+            Text(
+              '필요한 부품 구성',
+              style: TextStyle(
+                color: AppColors.primary,
+                fontWeight: FontWeight.bold,
+                fontSize: 16 * rs,
+              ),
+            ),
             SizedBox(height: ResponsiveScale.v(context, 12)),
             SizedBox(
               height: 100 * rs,
               child: ListView.builder(
-                scrollDirection: Axis.horizontal, itemCount: appliance.parts.length,
+                scrollDirection: Axis.horizontal,
+                itemCount: appliance.parts.length,
                 itemBuilder: (context, index) {
                   final part = appliance.parts[index];
                   return Container(
-                    width: 90 * rs, margin: EdgeInsets.only(right: 12 * rs),
-                    decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(12 * rs), border: Border.all(color: const Color(0xFF2A2A2A))),
-                    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      Icon(part.icon, color: Colors.white70, size: 28 * rs),
-                      Text(part.name, style: TextStyle(color: Colors.white, fontSize: 11 * rs), textAlign: TextAlign.center),
-                      Text('${part.count}개', style: TextStyle(color: const Color(0xFFFFEB00), fontSize: 11 * rs, fontWeight: FontWeight.bold)),
-                    ]),
+                    width: 90 * rs,
+                    margin: EdgeInsets.only(right: 12 * rs),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceElevated,
+                      borderRadius: BorderRadius.circular(12 * rs),
+                      border: Border.all(color: AppColors.borderDefault),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(part.icon, color: Colors.white70, size: 28 * rs),
+                        Text(
+                          part.name,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 11 * rs,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        Text(
+                          '${part.count}개',
+                          style: TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 11 * rs,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
                   );
                 },
               ),
             ),
             SizedBox(height: ResponsiveScale.v(context, 24)),
-            Text('부착 가이드', style: TextStyle(color: const Color(0xFFFFEB00), fontWeight: FontWeight.bold, fontSize: 16 * rs)),
+            Text(
+              '부착 가이드',
+              style: TextStyle(
+                color: AppColors.primary,
+                fontWeight: FontWeight.bold,
+                fontSize: 16 * rs,
+              ),
+            ),
             SizedBox(height: ResponsiveScale.v(context, 8)),
-            Text(appliance.assemblyGuide, style: TextStyle(color: Colors.white70, height: 1.5, fontSize: 14 * rs)),
+            Text(
+              appliance.assemblyGuide,
+              style: TextStyle(
+                color: Colors.white70,
+                height: 1.5,
+                fontSize: 14 * rs,
+              ),
+            ),
             SizedBox(height: ResponsiveScale.v(context, 32)),
             SizedBox(
-              width: double.infinity, height: 60 * rs,
+              width: double.infinity,
+              height: 60 * rs,
               child: ElevatedButton(
                 onPressed: () async {
                   // Delegate to parent to handle id generation, image choice and navigation.
                   await onStartMapping(context, appliance);
                 },
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFEB00), foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14 * rs))),
-                child: Text('매핑 시작', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17 * rs)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14 * rs),
+                  ),
+                ),
+                child: Text(
+                  '매핑 시작',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 17 * rs,
+                  ),
+                ),
               ),
             ),
           ],

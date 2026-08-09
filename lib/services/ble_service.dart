@@ -4,15 +4,16 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'hardware_protocol.dart';
 import 'app_logger.dart';
-import 'package:crypto/crypto.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'ble_security_session.dart';
 
 // ESP32 GATT 스펙:
 // Service UUID   : 0000FFE0-0000-1000-8000-00805F9B34FB
 // Characteristic : 0000FFE1-0000-1000-8000-00805F9B34FB
 
 class BleService {
-  BleService._();
+  BleService._() {
+    _security = BleSecuritySession(onLog: _addLog);
+  }
   static final BleService instance = BleService._();
 
   static final Guid _serviceUuid = Guid(HardwareProtocol.serviceUuid);
@@ -41,11 +42,8 @@ class BleService {
   Future<List<BleDeviceInfo>> Function(Duration timeout)? _scanOverride;
   Future<bool> Function(String deviceId)? _connectOverride;
 
-  // Security/session
-  final _secureStorage = const FlutterSecureStorage();
-  String? _pairKey;
-  bool _sessionAuthenticated = false;
-  int _sessionAuthExpiryMs = 0;
+  // Security/session — challenge-response 인증은 BleSecuritySession에 위임
+  late final BleSecuritySession _security;
 
   static const _nonAuthActions = {
     'challenge',
@@ -93,58 +91,6 @@ class BleService {
       _addLog('어댑터 상태: ${state.name}');
     });
     _adapterState = FlutterBluePlus.adapterStateNow;
-  }
-
-  Future<void> _loadPairKey() async {
-    if (_pairKey != null) return;
-    try {
-      _pairKey = await _secureStorage.read(key: 'ble_pair_key');
-      if (_pairKey != null) _addLog('SEC: pair key loaded');
-    } catch (e) {
-      _addLog('SEC: load key error $e');
-    }
-  }
-
-  String _bytesToHex(List<int> bytes) {
-    final sb = StringBuffer();
-    for (final b in bytes) {
-      sb.write(b.toRadixString(16).padLeft(2, '0'));
-    }
-    return sb.toString();
-  }
-
-  String _hmacHex(String key, String data) {
-    final hmac = Hmac(sha256, utf8.encode(key));
-    final digest = hmac.convert(utf8.encode(data));
-    return _bytesToHex(digest.bytes);
-  }
-
-  Future<bool> _ensureSessionAuthenticated({
-    Duration timeout = const Duration(seconds: 5),
-  }) async {
-    if (_sessionAuthenticated && DateTime.now().millisecondsSinceEpoch < _sessionAuthExpiryMs) {
-      return true;
-    }
-
-    await _loadPairKey();
-    if (_pairKey == null) return false; // not provisioned
-
-    // Request nonce (challenge)
-    final nonceResp = await _sendAndWaitAck({'action': 'challenge'}, timeout: timeout);
-    if (!nonceResp.startsWith('NONCE:')) return false;
-    final nonce = nonceResp.substring(6);
-
-    final mac = _hmacHex(_pairKey!, nonce);
-    final authResp = await _sendAndWaitAck({'action': 'auth', 'mac': mac}, timeout: timeout);
-
-    if (authResp.toUpperCase().contains('AUTH_OK')) {
-      _sessionAuthenticated = true;
-      _sessionAuthExpiryMs = DateTime.now().millisecondsSinceEpoch + (5 * 60 * 1000); // 5 minutes
-      _addLog('SEC: session authenticated');
-      return true;
-    }
-    _addLog('SEC: authentication failed');
-    return false;
   }
 
   Future<List<BleDeviceInfo>> scan({
@@ -264,7 +210,7 @@ class BleService {
           _connectedDevice = null;
           _commandCharacteristic = null;
           _notifySub?.cancel();
-          _sessionAuthenticated = false;
+          _security.reset();
         }
       });
 
@@ -340,7 +286,7 @@ class BleService {
       _connectedDevice = null;
       _commandCharacteristic = null;
       _notifySub = null;
-      _sessionAuthenticated = false;
+      _security.reset();
     }
   }
 
@@ -354,13 +300,15 @@ class BleService {
 
     final action = payload['action'] as String?;
     if (action == null || !_nonAuthActions.contains(action)) {
-      final ok = await _ensureSessionAuthenticated();
+      final ok = await _security.ensureAuthenticated(
+        sendAndWaitAck: _sendAndWaitAck,
+      );
       if (!ok) return 'ERROR:AUTH_REQUIRED';
     }
 
     final json = jsonEncode(payload);
     _addLog('SEND: $json');
-    
+
     if (!waitAck) {
       try {
         await c.write(utf8.encode(json), withoutResponse: false);
@@ -397,10 +345,31 @@ class BleService {
     }
   }
 
-  Future<String?> readResponse({Duration timeout = const Duration(seconds: 2)}) async {
+  Future<bool> sendRelativeMove({
+    required String axis,
+    required double value,
+    int feedRate = 800,
+  }) async {
+    final normalizedAxis = axis.toUpperCase();
+    if (!const {'X', 'Y', 'Z'}.contains(normalizedAxis)) {
+      _addLog('상대 이동 오류: 잘못된 축 $axis');
+      return false;
+    }
+
+    final okMode = await sendRaw('G91');
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    final okMove = await sendRaw('G1 $normalizedAxis$value F$feedRate');
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    final okReset = await sendRaw('G90');
+    return okMode && okMove && okReset;
+  }
+
+  Future<String?> readResponse({
+    Duration timeout = const Duration(seconds: 2),
+  }) async {
     final c = _commandCharacteristic;
     if (c == null) return null;
-    
+
     _ackCompleter = Completer<String>();
     try {
       final res = await _ackCompleter!.future.timeout(timeout);
@@ -421,12 +390,14 @@ class BleService {
   }) async {
     final btnNum = (y * cols) + x + 1;
     final startTime = DateTime.now();
-    debugPrint('[BLE_HW] Sending PRESS command: x=$x, y=$y (btnNum=$btnNum, device=$deviceId)');
-    
+    debugPrint(
+      '[BLE_HW] Sending PRESS command: x=$x, y=$y (btnNum=$btnNum, device=$deviceId)',
+    );
+
     // 하드웨어(GRBL)는 BTN_n 형식을 인식함
     final cmd = '${HardwareProtocol.uartBtnPrefix}$btnNum';
     final success = await sendRaw(cmd);
-    
+
     if (success) {
       final endTime = DateTime.now();
       final latency = endTime.difference(startTime).inMilliseconds;
@@ -437,7 +408,7 @@ class BleService {
       });
       debugPrint('[BLE_LATENCY] Press command latency: ${latency}ms');
     }
-    
+
     return success;
   }
 
@@ -454,10 +425,13 @@ class BleService {
     final oy10 = (originY * 10).toInt();
     final px10 = (pitchX * 10).toInt();
     final py10 = (pitchY * 10).toInt();
-    debugPrint('[BLE_HW] Sending SET_GRID: rows=$rows, cols=$cols, ox10=$ox10, oy10=$oy10, px10=$px10, py10=$py10 (device=$deviceId)');
-    
+    debugPrint(
+      '[BLE_HW] Sending SET_GRID: rows=$rows, cols=$cols, ox10=$ox10, oy10=$oy10, px10=$px10, py10=$py10 (device=$deviceId)',
+    );
+
     // JSON 대신 하드웨어가 직접 인식하는 텍스트 명령 전송
-    final cmd = '${HardwareProtocol.uartSetGridPrefix} $rows $cols $ox10 $oy10 $px10 $py10';
+    final cmd =
+        '${HardwareProtocol.uartSetGridPrefix} $rows $cols $ox10 $oy10 $px10 $py10';
     return await sendRaw(cmd);
   }
 
@@ -494,8 +468,14 @@ class BleService {
     }, timeout: const Duration(seconds: 5));
   }
 
-  Future<void> sendEmergencyStop(String deviceId) async {
-    await _sendAndWaitAck({
+  /// 비상 정지 명령을 전송하고 controller ACK 결과 문자열을 그대로 반환한다.
+  ///
+  /// 반환값: 'OK'/ACK 문자열(응답 확인), 또는
+  /// 'ERROR:NOT_CONNECTED' / 'ERROR:TIMEOUT' / 'ERROR:WRITE_FAILED' 등.
+  /// 호출부는 이 값을 [EmergencyStopOutcome.fromAck]로 해석해 사용자에게
+  /// 정직한 상태(멈춤 확인 vs 전송만 됨 vs 실패)를 안내해야 한다.
+  Future<String> sendEmergencyStop(String deviceId) async {
+    return _sendAndWaitAck({
       'action': HardwareProtocol.actionStop,
       'deviceId': deviceId,
     }, timeout: const Duration(seconds: 1));
@@ -507,18 +487,10 @@ class BleService {
   Future<bool> provisionPairKey(String secret) async {
     final c = _commandCharacteristic;
     if (c == null) return false;
-    final res = await _sendAndWaitAck({'action': 'provision', 'secret': secret});
-    if (res.toUpperCase().contains('PROVISION_OK')) {
-      try {
-        await _secureStorage.write(key: 'ble_pair_key', value: secret);
-        _pairKey = secret;
-        _addLog('SEC: pair key stored');
-        return true;
-      } catch (e) {
-        _addLog('SEC: store key failed $e');
-      }
-    }
-    return false;
+    return _security.provisionPairKey(
+      secret,
+      sendAndWaitAck: (payload) => _sendAndWaitAck(payload),
+    );
   }
 
   @visibleForTesting

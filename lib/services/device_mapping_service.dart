@@ -11,6 +11,7 @@ class DeviceMappingProfile {
     required this.pitchX,
     required this.pitchY,
     required this.buttonMap,
+    this.buttonPositions = const {},
     this.customLabels = const {},
     this.homeRow = 0,
     this.homeCol = 0,
@@ -24,51 +25,81 @@ class DeviceMappingProfile {
   final double pitchX;
   final double pitchY;
   final Map<String, ({int row, int col})> buttonMap;
+  final Map<String, ({double x, double y})> buttonPositions;
   final Map<String, String> customLabels;
   final int homeRow;
   final int homeCol;
   final String? imagePath;
 
   Map<String, dynamic> toJson() => {
-        'grid': {
-          'rows': rows,
-          'cols': cols,
-          'originX': originX,
-          'originY': originY,
-          'pitchX': pitchX,
-          'pitchY': pitchY,
-        },
-        'buttonMap': {
-          for (final e in buttonMap.entries) e.key: {'row': e.value.row, 'col': e.value.col},
-        },
-        'customLabels': customLabels,
-        'homePosition': {
-          'row': homeRow,
-          'col': homeCol,
-        },
-        'imagePath': imagePath,
-      };
+    'grid': {
+      'rows': rows,
+      'cols': cols,
+      'originX': originX,
+      'originY': originY,
+      'pitchX': pitchX,
+      'pitchY': pitchY,
+    },
+    'buttonMap': {
+      for (final e in buttonMap.entries)
+        e.key: {'row': e.value.row, 'col': e.value.col},
+    },
+    'buttonPositions': {
+      for (final e in buttonPositions.entries)
+        e.key: {'x': e.value.x, 'y': e.value.y},
+    },
+    'customLabels': customLabels,
+    'homePosition': {'row': homeRow, 'col': homeCol},
+    'imagePath': imagePath,
+  };
 
   factory DeviceMappingProfile.fromJson(Map<String, dynamic> j) {
     final grid = (j['grid'] as Map<String, dynamic>? ?? const {});
     final buttonRaw = (j['buttonMap'] as Map<String, dynamic>? ?? const {});
+    final positionRaw =
+        (j['buttonPositions'] as Map<String, dynamic>? ?? const {});
     final labelsRaw = (j['customLabels'] as Map<String, dynamic>? ?? const {});
     final homePos = (j['homePosition'] as Map<String, dynamic>? ?? const {});
-    
+
     final map = <String, ({int row, int col})>{};
     for (final e in buttonRaw.entries) {
       final v = e.value as Map<String, dynamic>;
-      map[e.key] = (row: (v['row'] as num).toInt(), col: (v['col'] as num).toInt());
+      map[e.key] = (
+        row: (v['row'] as num).toInt(),
+        col: (v['col'] as num).toInt(),
+      );
     }
 
+    final positions = <String, ({double x, double y})>{};
+    for (final e in positionRaw.entries) {
+      final v = e.value as Map<String, dynamic>;
+      positions[e.key] = (
+        x: ((v['x'] as num?)?.toDouble() ?? 0).clamp(0.0, 1.0),
+        y: ((v['y'] as num?)?.toDouble() ?? 0).clamp(0.0, 1.0),
+      );
+    }
+
+    final rows = (grid['rows'] as num?)?.toInt() ?? 3;
+    final cols = (grid['cols'] as num?)?.toInt() ?? 3;
+    final migratedPositions = positions.isNotEmpty
+        ? positions
+        : {
+            for (final e in map.entries)
+              e.key: (
+                x: ((e.value.col + 0.5) / cols).clamp(0.0, 1.0),
+                y: ((e.value.row + 0.5) / rows).clamp(0.0, 1.0),
+              ),
+          };
+
     return DeviceMappingProfile(
-      rows: (grid['rows'] as num?)?.toInt() ?? 3,
-      cols: (grid['cols'] as num?)?.toInt() ?? 3,
+      rows: rows,
+      cols: cols,
       originX: (grid['originX'] as num?)?.toDouble() ?? 0,
       originY: (grid['originY'] as num?)?.toDouble() ?? 0,
       pitchX: (grid['pitchX'] as num?)?.toDouble() ?? 1,
       pitchY: (grid['pitchY'] as num?)?.toDouble() ?? 1,
       buttonMap: map,
+      buttonPositions: migratedPositions,
       customLabels: labelsRaw.cast<String, String>(),
       homeRow: (homePos['row'] as num?)?.toInt() ?? 0,
       homeCol: (homePos['col'] as num?)?.toInt() ?? 0,
@@ -76,10 +107,8 @@ class DeviceMappingProfile {
     );
   }
 
-  static DeviceMappingProfile defaultGrid({
-    int rows = 3,
-    int cols = 3,
-  }) => DeviceMappingProfile(
+  static DeviceMappingProfile defaultGrid({int rows = 3, int cols = 3}) =>
+      DeviceMappingProfile(
         rows: rows,
         cols: cols,
         originX: 0,
@@ -87,6 +116,7 @@ class DeviceMappingProfile {
         pitchX: 1,
         pitchY: 1,
         buttonMap: const {},
+        buttonPositions: const {},
         homeRow: 0,
         homeCol: 0,
       );
@@ -103,7 +133,9 @@ class DeviceMappingService {
     final prefs = await SharedPreferences.getInstance();
     final profileRaw = prefs.getString(_profileKey(deviceId));
     if (profileRaw != null) {
-      return DeviceMappingProfile.fromJson(jsonDecode(profileRaw) as Map<String, dynamic>);
+      return DeviceMappingProfile.fromJson(
+        jsonDecode(profileRaw) as Map<String, dynamic>,
+      );
     }
 
     final legacyGrid = prefs.getString(_legacyGridKey(deviceId));

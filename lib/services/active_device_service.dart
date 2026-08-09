@@ -1,7 +1,7 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'ble_service.dart';
+import 'home_device_store.dart';
 
 class ActiveDeviceService {
   ActiveDeviceService._();
@@ -77,15 +77,11 @@ class ActiveDeviceService {
   /// 기기가 선택되어 있지 않을 때, 등록된 기기 중 첫 번째를 자동으로 활성화함
   Future<bool> autoPickFirstDevice() async {
     if (_activeDeviceId != null && _activeDeviceId!.isNotEmpty) return true;
-    
-    final prefs = await SharedPreferences.getInstance();
-    final jsonStr = prefs.getString('home_devices');
-    if (jsonStr == null) return false;
-    
-    final List<dynamic> devices = jsonDecode(jsonStr);
+
+    final devices = await HomeDeviceStore.loadDevices();
     if (devices.isEmpty) return false;
-    
-    final first = devices.first as Map<String, dynamic>;
+
+    final first = devices.first;
     await setActiveDevice(
       deviceId: first['id'] ?? '',
       deviceName: first['name'],

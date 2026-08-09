@@ -1,21 +1,25 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/tts_service.dart';
 import '../../services/accessibility_settings.dart';
 import '../../services/active_device_service.dart';
+import '../../services/home_device_store.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../../theme/app_colors.dart';
+import '../voice/voice_listening_screen.dart';
 
 import 'widgets/home_empty_state.dart';
 import 'widgets/home_device_card.dart';
 import 'widgets/home_add_device_card.dart';
 import 'widgets/control_mode_sheet.dart';
+import 'widgets/home_header.dart';
+import 'widgets/home_voice_action_button.dart';
+import 'widgets/device_page_indicator.dart';
+import 'widgets/home_footer_nav_hint.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -31,35 +35,28 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentDeviceIndex = 0;
   List<Map<String, dynamic>> _devices = [];
   bool _isLoading = true;
+  int _quickVoiceTapCount = 0;
+  Timer? _quickVoiceTapTimer;
 
   @override
   void initState() {
     super.initState();
     _loadDevices();
     // 기기 목록 갱신 감지 리스너 등록
-    ActiveDeviceService.instance.deviceListUpdateNotifier.addListener(_loadDevices);
+    ActiveDeviceService.instance.deviceListUpdateNotifier.addListener(
+      _loadDevices,
+    );
   }
 
   Future<void> _loadDevices() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final jsonStr = prefs.getString('home_devices');
-      if (jsonStr != null) {
-        if (!mounted) return;
-        final List<dynamic> decoded = jsonDecode(jsonStr);
-        setState(() {
-          _devices = decoded.cast<Map<String, dynamic>>();
-          _isLoading = false;
-        });
-        await _announceScreen();
-      } else {
-        _devices = [];
-        if (!mounted) return;
-        setState(() {
-          _isLoading = false;
-        });
-        await _announceScreen();
-      }
+      final devices = await HomeDeviceStore.loadDevices();
+      if (!mounted) return;
+      setState(() {
+        _devices = devices;
+        _isLoading = false;
+      });
+      await _announceScreen();
     } catch (e) {
       debugPrint('Error loading devices: $e');
       if (mounted) {
@@ -73,8 +70,8 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_devices.isEmpty) {
       await _tts.speak(
         guardianMode
-            ? '홈 화면입니다. 등록된 기기가 없습니다. 보호자께서는 연결 탭에서 먼저 기기를 추가해 주세요.'
-            : '홈 화면입니다. 등록된 기기가 없습니다. 연결 탭에서 기기를 추가해 주세요.',
+            ? '홈입니다. 등록된 기기가 없습니다. 기기 관리에서 새 기기를 추가하세요.'
+            : '홈입니다. 등록된 기기가 없습니다. 보호자에게 기기 추가를 요청하세요.',
         source: 'HomeScreen',
         interrupt: true,
       );
@@ -83,8 +80,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
     await _tts.speak(
       guardianMode
-          ? '홈 화면입니다. 등록된 기기 ${_devices.length}개가 있습니다. 기기를 두 번 눌러 제어하고, 음성 탭에서 만두 데워줘처럼 말씀하실 수 있습니다.'
-          : '홈 화면입니다. 등록된 기기 ${_devices.length}개가 있습니다.',
+          ? '홈입니다. 등록된 기기 ${_devices.length}개가 있습니다. 기기를 선택하거나 말하기 버튼을 누르세요.'
+          : '홈입니다. 등록된 기기 ${_devices.length}개가 있습니다. 기기를 선택한 뒤 말하기 버튼을 누르세요.',
       source: 'HomeScreen',
       interrupt: true,
     );
@@ -92,8 +89,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _quickVoiceTapTimer?.cancel();
     _pageController.dispose();
-    ActiveDeviceService.instance.deviceListUpdateNotifier.removeListener(_loadDevices);
+    ActiveDeviceService.instance.deviceListUpdateNotifier.removeListener(
+      _loadDevices,
+    );
     _tts.stop();
     super.dispose();
   }
@@ -105,7 +105,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final deviceName = device['name'] as String? ?? '스마트 기기';
     final bleId = device['bleId'] as String?;
     final bleName = device['bleName'] as String?;
-    
+
     if (deviceId.isNotEmpty) {
       await ActiveDeviceService.instance.setActiveDevice(
         deviceId: deviceId,
@@ -114,9 +114,9 @@ class _HomeScreenState extends State<HomeScreen> {
         bleName: bleName,
       );
     }
-    
+
     if (!mounted) return;
-    
+
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -132,17 +132,72 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _openVoiceForCurrentDevice() async {
+    final hasDevice =
+        _currentDeviceIndex >= 0 && _currentDeviceIndex < _devices.length;
+    if (!hasDevice) {
+      await _tts.speak(
+        '선택된 기기가 없습니다. 보호자에게 기기 추가를 요청하세요.',
+        source: 'HomeScreen',
+        interrupt: true,
+      );
+      return;
+    }
+
+    HapticFeedback.mediumImpact();
+    final device = _devices[_currentDeviceIndex];
+    final deviceId = device['id'] as String? ?? '';
+    final deviceName = device['name'] as String? ?? '스마트 기기';
+    if (deviceId.isNotEmpty) {
+      await ActiveDeviceService.instance.setActiveDevice(
+        deviceId: deviceId,
+        deviceName: deviceName,
+        bleId: device['bleId'] as String?,
+        bleName: device['bleName'] as String?,
+      );
+    }
+
+    if (!mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => VoiceListeningScreen(
+          deviceId: deviceId,
+          deviceName: deviceName,
+          autoStart: true,
+        ),
+      ),
+    );
+  }
+
+  void _handleQuickVoiceTap() {
+    if (_devices.isEmpty) return;
+
+    _quickVoiceTapTimer?.cancel();
+    _quickVoiceTapCount += 1;
+
+    if (_quickVoiceTapCount >= 3) {
+      _quickVoiceTapCount = 0;
+      HapticFeedback.heavyImpact();
+      _tts.speak('음성 명령을 시작합니다.', source: 'HomeScreen', interrupt: true);
+      _openVoiceForCurrentDevice();
+      return;
+    }
+
+    _quickVoiceTapTimer = Timer(const Duration(milliseconds: 900), () {
+      _quickVoiceTapCount = 0;
+    });
+  }
+
   Future<void> _deleteDevice(int index) async {
     try {
       final deviceName = _devices[index]['name'];
-      final prefs = await SharedPreferences.getInstance();
       setState(() {
         _devices.removeAt(index);
         if (_currentDeviceIndex >= _devices.length && _devices.isNotEmpty) {
           _currentDeviceIndex = _devices.length - 1;
         }
       });
-      await prefs.setString('home_devices', jsonEncode(_devices));
+      await HomeDeviceStore.saveDevices(_devices);
       await _tts.speak(
         '$deviceName 기기가 삭제되었습니다.',
         source: 'HomeScreen',
@@ -165,26 +220,38 @@ class _HomeScreenState extends State<HomeScreen> {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
+        backgroundColor: AppColors.surfaceElevated,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.borderDefault),
+        ),
         title: const Text(
           '기기 삭제',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         content: Text(
           '$deviceName 기기를 삭제하시겠습니까?',
-          style: TextStyle(color: Colors.white70),
+          style: const TextStyle(color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('아니오', style: TextStyle(color: Colors.white54)),
+            child: const Text(
+              '아니오',
+              style: TextStyle(color: AppColors.textTertiary),
+            ),
           ),
           ElevatedButton(
             onPressed: () {
               Navigator.of(ctx).pop();
               _deleteDevice(index);
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.emergency,
+            ),
             child: const Text(
               '예',
               style: TextStyle(
@@ -219,12 +286,14 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
+    final guardianMode = AccessibilitySettings.instance.guardianModeEnabled;
+    final itemCount = _devices.length + (guardianMode ? 1 : 0);
 
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: AppColors.background,
         body: Center(
-          child: CircularProgressIndicator(color: Color(0xFFFFEB00)),
+          child: CircularProgressIndicator(color: AppColors.primary),
         ),
       );
     }
@@ -233,167 +302,115 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: AppColors.background,
       appBar: const TopAppBar(title: 'Touch Bridge'),
       body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                  ResponsiveScale.v(context, 20),
-                  ResponsiveScale.v(context, 10),
-                  ResponsiveScale.v(context, 20),
-                  0,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildHeader(rs),
-                    SizedBox(height: 16 * rs),
-                    if (_devices.isEmpty) ...[
-                      const HomeEmptyState(),
-                      SizedBox(height: 24 * rs),
-                    ] else ...[
-                      _buildPageIndicator(rs),
-                      SizedBox(height: 12 * rs),
-                    ],
-                    Expanded(
-                      child: PageView.builder(
-                        controller: _pageController,
-                        onPageChanged: (index) {
-                          setState(() {
-                            _currentDeviceIndex = index;
-                          });
-                          HapticFeedback.selectionClick();
-                          if (index < _devices.length) {
-                            _tts.speak(
-                              '${_devices[index]['name']}. ${_devices[index]['status']}.',
-                              source: 'HomeScreen',
-                              interrupt: true,
-                            );
-                          } else {
-                            _tts.speak(
-                              '새 기기 추가하기.',
-                              source: 'HomeScreen',
-                              interrupt: true,
-                            );
-                          }
-                        },
-                        itemCount: _devices.length + 1,
-                        itemBuilder: (context, index) {
-                          if (index == _devices.length) {
-                            return HomeAddDeviceCard(
-                              onDeviceAdded: _loadDevices,
-                            );
-                          }
+        child: Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerUp: (_) => _handleQuickVoiceTap(),
+          child: Column(
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    ResponsiveScale.v(context, 20),
+                    ResponsiveScale.v(context, 10),
+                    ResponsiveScale.v(context, 20),
+                    0,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      HomeHeader(scale: rs),
+                      SizedBox(height: 16 * rs),
+                      if (_devices.isEmpty) ...[
+                        HomeEmptyState(guardianModeEnabled: guardianMode),
+                        SizedBox(height: 24 * rs),
+                      ] else ...[
+                        HomeVoiceActionButton(
+                          deviceName:
+                              _currentDeviceIndex >= 0 &&
+                                  _currentDeviceIndex < _devices.length
+                              ? (_devices[_currentDeviceIndex]['name']
+                                        as String? ??
+                                    '선택된 기기')
+                              : '선택된 기기',
+                          enabled:
+                              _currentDeviceIndex >= 0 &&
+                              _currentDeviceIndex < _devices.length,
+                          scale: rs,
+                          onTap: _openVoiceForCurrentDevice,
+                        ),
+                        SizedBox(height: 14 * rs),
+                        DevicePageIndicator(
+                          count: _devices.length + (guardianMode ? 1 : 0),
+                          currentIndex: _currentDeviceIndex,
+                          scale: rs,
+                        ),
+                        SizedBox(height: 12 * rs),
+                      ],
+                      Expanded(
+                        child: PageView.builder(
+                          controller: _pageController,
+                          onPageChanged: (index) {
+                            setState(() {
+                              _currentDeviceIndex = index;
+                            });
+                            HapticFeedback.selectionClick();
+                            if (index < _devices.length) {
+                              _tts.speak(
+                                '${_devices[index]['name']}. ${_devices[index]['status']}.',
+                                source: 'HomeScreen',
+                                interrupt: true,
+                              );
+                            } else {
+                              _tts.speak(
+                                guardianMode ? '새 기기 추가하기.' : '마지막 기기입니다.',
+                                source: 'HomeScreen',
+                                interrupt: true,
+                              );
+                            }
+                          },
+                          itemCount: itemCount,
+                          itemBuilder: (context, index) {
+                            if (guardianMode && index == _devices.length) {
+                              return HomeAddDeviceCard(
+                                onDeviceAdded: _loadDevices,
+                              );
+                            }
 
-                          return HomeDeviceCard(
-                            device: _devices[index],
-                            onTap: () => _openDeviceControl(index),
-                            onLongPressStart: (_) => _onLongPressStart(index),
-                            onLongPressEnd: (_) => _onLongPressEnd(),
-                          );
-                        },
+                            return HomeDeviceCard(
+                              device: _devices[index],
+                              onTap: () => _openDeviceControl(index),
+                              managementEnabled: guardianMode,
+                              onLongPressStart: guardianMode
+                                  ? (_) => _onLongPressStart(index)
+                                  : null,
+                              onLongPressEnd: guardianMode
+                                  ? (_) => _onLongPressEnd()
+                                  : null,
+                              onManage: guardianMode
+                                  ? () => _showDeleteConfirmation(index)
+                                  : null,
+                            );
+                          },
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-            _buildFooterNavigation(rs),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader(double rs) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '내 기기',
-          style: TextStyle(
-            fontSize: 24 * rs,
-            fontWeight: FontWeight.w800,
-            color: Colors.white,
+              HomeFooterNavHint(
+                scale: rs,
+                onPrevious: () => _pageController.previousPage(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOut,
+                ),
+                onNext: () => _pageController.nextPage(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOut,
+                ),
+              ),
+            ],
           ),
         ),
-        SizedBox(height: ResponsiveScale.v(context, 2)),
-        Text(
-          '기기를 눌러 제어하세요',
-          style: TextStyle(
-            fontSize: 13 * rs,
-            fontWeight: FontWeight.w500,
-            color: const Color(0xFF888888),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPageIndicator(double rs) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(_devices.length + 1, (index) {
-        final bool active = index == _currentDeviceIndex;
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          margin: EdgeInsets.symmetric(horizontal: 4 * rs),
-          width: active ? 32 * rs : 8 * rs,
-          height: 4 * rs,
-          decoration: BoxDecoration(
-            color: active ? const Color(0xFFFFEB00) : const Color(0xFF333333),
-            borderRadius: BorderRadius.circular(2 * rs),
-          ),
-        );
-      }),
-    );
-  }
-
-  Widget _buildFooterNavigation(double rs) {
-    return Padding(
-      padding: EdgeInsets.only(
-        top: ResponsiveScale.v(context, 12),
-        bottom: ResponsiveScale.v(context, 8),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          IconButton(
-            onPressed: () {
-              _pageController.previousPage(
-                duration: const Duration(milliseconds: 220),
-                curve: Curves.easeOut,
-              );
-            },
-            icon: Icon(
-              Icons.chevron_left_rounded,
-              color: const Color(0xFF555555),
-              size: 28 * rs,
-            ),
-          ),
-          Text(
-            '좌우로 밀어서 기기 전환',
-            style: TextStyle(
-              fontSize: 12 * rs,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.3,
-              color: const Color(0xFF555555),
-            ),
-          ),
-          IconButton(
-            onPressed: () {
-              _pageController.nextPage(
-                duration: const Duration(milliseconds: 220),
-                curve: Curves.easeOut,
-              );
-            },
-            icon: Icon(
-              Icons.chevron_right_rounded,
-              color: const Color(0xFF555555),
-              size: 28 * rs,
-            ),
-          ),
-        ],
       ),
     );
   }

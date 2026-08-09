@@ -1,43 +1,68 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import '../../../widgets/responsive_scale.dart';
+import '../../../theme/app_colors.dart';
 
 class HomeDeviceCard extends StatelessWidget {
+  // 스크린리더 커스텀 액션은 재빌드마다 새로 만들지 않도록 한 번만 생성한다.
+  static final CustomSemanticsAction _manageAction = CustomSemanticsAction(
+    label: '기기 관리 및 삭제',
+  );
+
   const HomeDeviceCard({
     super.key,
     required this.device,
     required this.onTap,
-    required this.onLongPressStart,
-    required this.onLongPressEnd,
+    this.onLongPressStart,
+    this.onLongPressEnd,
+    this.onManage,
+    this.managementEnabled = false,
   });
 
   final Map<String, dynamic> device;
   final VoidCallback onTap;
-  final Function(LongPressStartDetails) onLongPressStart;
-  final Function(LongPressEndDetails) onLongPressEnd;
+  final Function(LongPressStartDetails)? onLongPressStart;
+  final Function(LongPressEndDetails)? onLongPressEnd;
+
+  /// 스크린리더 접근성: 5초 길게 누르기(삭제)의 대안 액션.
+  /// VoiceOver 로터 / TalkBack 액션 메뉴에서 바로 실행할 수 있게 한다.
+  final VoidCallback? onManage;
+  final bool managementEnabled;
 
   @override
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
-    
+
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 6 * rs),
       child: Semantics(
-        label:
-            '${device['name']}. 현재 상태 ${device['status']}. 선택하려면 두 번 누르세요. 삭제하려면 5초간 길게 누르세요.',
+        label: managementEnabled
+            ? '${device['name']}. 현재 상태 ${device['status']}. 선택하려면 두 번 누르세요. 관리하려면 5초간 길게 누르세요.'
+            : '${device['name']}. 현재 상태 ${device['status']}. 선택하려면 두 번 누르세요.',
         button: true,
+        customSemanticsActions: (managementEnabled && onManage != null)
+            ? {_manageAction: onManage!}
+            : null,
         child: GestureDetector(
           onTap: onTap,
           onLongPressStart: onLongPressStart,
           onLongPressEnd: onLongPressEnd,
-          onLongPressCancel: () => onLongPressEnd(LongPressEndDetails()),
+          onLongPressCancel: onLongPressEnd == null
+              ? null
+              : () => onLongPressEnd!(LongPressEndDetails()),
           child: Container(
-            padding: EdgeInsets.all(28 * rs),
+            padding: EdgeInsets.all(22 * rs),
             decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A),
+              color: AppColors.surfaceElevated,
               borderRadius: BorderRadius.circular(24 * rs),
-              border: Border.all(
-                color: const Color(0xFF2A2A2A),
-              ),
+              border: Border.all(color: AppColors.borderDefault),
+              boxShadow: const [
+                BoxShadow(
+                  color: AppColors.shadowSecondaryGlow,
+                  blurRadius: 16,
+                  spreadRadius: 1,
+                ),
+              ],
             ),
             child: Center(
               child: SingleChildScrollView(
@@ -46,14 +71,21 @@ class HomeDeviceCard extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      width: 120 * rs,
-                      height: 120 * rs,
+                      width: 100 * rs,
+                      height: 100 * rs,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1A1A1A),
-                        borderRadius: BorderRadius.circular(24 * rs),
-                        border: Border.all(
-                          color: const Color(0xFF333333),
+                        gradient: const LinearGradient(
+                          colors: AppColors.primaryGradient,
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         ),
+                        borderRadius: BorderRadius.circular(24 * rs),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: AppColors.shadowPrimary,
+                            blurRadius: 16,
+                          ),
+                        ],
                       ),
                       child: Center(
                         child: Icon(
@@ -61,18 +93,18 @@ class HomeDeviceCard extends StatelessWidget {
                             device['iconCodePoint'] as int,
                             fontFamily: 'MaterialIcons',
                           ),
-                          color: const Color(0xFFFFEB00),
-                          size: 56 * rs,
+                          color: Colors.black,
+                          size: 48 * rs,
                         ),
                       ),
                     ),
-                    SizedBox(height: ResponsiveScale.v(context, 24)),
+                    SizedBox(height: ResponsiveScale.v(context, 16)),
                     Text(
                       device['name'] as String,
                       style: TextStyle(
                         fontSize: 26 * rs,
                         fontWeight: FontWeight.w800,
-                        color: Colors.white,
+                        color: AppColors.textPrimary,
                         height: 1.2,
                       ),
                       textAlign: TextAlign.center,
@@ -85,7 +117,7 @@ class HomeDeviceCard extends StatelessWidget {
                           width: 8 * rs,
                           height: 8 * rs,
                           decoration: const BoxDecoration(
-                            color: Color(0xFF00FF88),
+                            color: AppColors.success,
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -95,17 +127,21 @@ class HomeDeviceCard extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 15 * rs,
                             fontWeight: FontWeight.w600,
-                            color: const Color(0xFFAAAAAA),
+                            color: AppColors.textSecondary,
                           ),
                         ),
                       ],
                     ),
-                    SizedBox(height: ResponsiveScale.v(context, 28)),
+                    SizedBox(height: ResponsiveScale.v(context, 18)),
                     Container(
                       width: double.infinity,
                       padding: EdgeInsets.symmetric(vertical: 14 * rs),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFFEB00),
+                        gradient: const LinearGradient(
+                          colors: AppColors.primaryGradient,
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        ),
                         borderRadius: BorderRadius.circular(12 * rs),
                       ),
                       child: Text(
