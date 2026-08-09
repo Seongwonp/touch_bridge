@@ -37,13 +37,17 @@ class HomeDeviceCard extends StatelessWidget {
               ? null
               : () => onLongPressEnd!(LongPressEndDetails()),
           child: Container(
-            padding: EdgeInsets.all(28 * rs),
+            padding: EdgeInsets.all(22 * rs),
             decoration: BoxDecoration(
               color: AppColors.surfaceElevated,
               borderRadius: BorderRadius.circular(24 * rs),
               border: Border.all(color: AppColors.borderDefault),
               boxShadow: const [
-                BoxShadow(color: AppColors.shadowSecondaryGlow, blurRadius: 16, spreadRadius: 1),
+                BoxShadow(
+                  color: AppColors.shadowSecondaryGlow,
+                  blurRadius: 16,
+                  spreadRadius: 1,
+                ),
               ],
             ),
             child: Center(
@@ -53,8 +57,8 @@ class HomeDeviceCard extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      width: 120 * rs,
-                      height: 120 * rs,
+                      width: 100 * rs,
+                      height: 100 * rs,
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
                           colors: AppColors.primaryGradient,
@@ -63,7 +67,10 @@ class HomeDeviceCard extends StatelessWidget {
                         ),
                         borderRadius: BorderRadius.circular(24 * rs),
                         boxShadow: const [
-                          BoxShadow(color: AppColors.shadowPrimary, blurRadius: 16),
+                          BoxShadow(
+                            color: AppColors.shadowPrimary,
+                            blurRadius: 16,
+                          ),
                         ],
                       ),
                       child: Center(
@@ -73,11 +80,11 @@ class HomeDeviceCard extends StatelessWidget {
                             fontFamily: 'MaterialIcons',
                           ),
                           color: Colors.black,
-                          size: 56 * rs,
+                          size: 48 * rs,
                         ),
                       ),
                     ),
-                    SizedBox(height: ResponsiveScale.v(context, 24)),
+                    SizedBox(height: ResponsiveScale.v(context, 16)),
                     Text(
                       device['name'] as String,
                       style: TextStyle(
@@ -111,7 +118,7 @@ class HomeDeviceCard extends StatelessWidget {
                         ),
                       ],
                     ),
-                    SizedBox(height: ResponsiveScale.v(context, 28)),
+                    SizedBox(height: ResponsiveScale.v(context, 18)),
                     Container(
                       width: double.infinity,
                       padding: EdgeInsets.symmetric(vertical: 14 * rs),

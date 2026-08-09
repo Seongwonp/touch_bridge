@@ -55,10 +55,12 @@ class _CourseControlScreenState extends State<CourseControlScreen> {
         betweenPressDelay: const Duration(milliseconds: 1000),
       );
       if (!result.ok) {
+        FeedbackService.instance.playFailure();
         _tts.speak(result.userMessage);
         return;
       }
 
+      FeedbackService.instance.playSuccess();
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(

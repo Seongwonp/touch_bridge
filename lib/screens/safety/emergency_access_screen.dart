@@ -48,6 +48,7 @@ class _EmergencyAccessScreenState extends State<EmergencyAccessScreen> {
     final targetId = connectedBleId.isNotEmpty ? connectedBleId : activeBleId;
 
     if (targetId == null || targetId.isEmpty) {
+      FeedbackService.instance.playFailure();
       await _tts.speak('연결된 기기가 없습니다. 기기 전원을 확인해 주세요.');
       if (mounted) setState(() => _isStopping = false);
       return;
@@ -57,6 +58,7 @@ class _EmergencyAccessScreenState extends State<EmergencyAccessScreen> {
     if (!BleService.instance.isConnected) {
       final connected = await BleService.instance.ensureConnected(targetId);
       if (!connected) {
+        FeedbackService.instance.playFailure();
         await _tts.speak('기기에 연결하지 못했습니다. 기기 전원을 확인해 주세요.', interrupt: true);
         if (mounted) setState(() => _isStopping = false);
         return;
