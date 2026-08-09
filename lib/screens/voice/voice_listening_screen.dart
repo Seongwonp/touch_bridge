@@ -10,10 +10,12 @@ import 'package:speech_to_text/speech_to_text.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../safety/emergency_stop_screen.dart';
+import '../safety/stop_done_screen.dart';
 import '../../services/app_logger.dart';
 import '../../services/ai_backend_service.dart';
 import '../../services/active_device_service.dart';
 import '../../services/ble_service.dart';
+import '../../services/emergency_intent.dart';
 import '../../services/microwave_command_service.dart';
 import '../../services/device_mapping_service.dart';
 import '../../services/feedback_service.dart';
@@ -156,8 +158,9 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   Future<void> _speak(
     String message, {
     String source = 'voicelisteningScreen',
+    bool interrupt = false,
   }) async {
-    await _tts.speak(message, source: source);
+    await _tts.speak(message, source: source, interrupt: interrupt);
   }
 
   void _resetSilenceTimer() {
@@ -400,6 +403,18 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       return;
     }
 
+    // 어떤 상태(확인 대기/기기 선택/AI 분석)보다 먼저 "멈춰/그만/정지"를 최우선 처리한다.
+    if (EmergencyIntent.matches(text)) {
+      AppLogger.info('voice.emergency_intercept', {'requestId': requestId});
+      _pendingCommandData = null;
+      setState(() {
+        _statusMessage = '중단';
+        _isProcessing = false;
+      });
+      await _handleEmergencyStop();
+      return;
+    }
+
     if (_pendingCommandData != null) {
       if (VoiceTextMatcher.isAffirmative(text)) {
         AppLogger.info('voice.response.affirmative', {'requestId': requestId});
@@ -499,7 +514,42 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     _speak('취소되었습니다.');
   }
 
-  Future<void> _sendBleSequence(List<dynamic> commands) async {
+  /// 어떤 흐름에서도 공용으로 쓰는 정직한 비상 정지 처리.
+  /// 실제 하드웨어에 정지 명령을 보내고, 확인 결과에 따라 안내를 분기한다.
+  Future<void> _handleEmergencyStop() async {
+    FeedbackService.instance.vibrateError();
+    final targetId = BleService.instance.connectedDeviceId.isNotEmpty
+        ? BleService.instance.connectedDeviceId
+        : (ActiveDeviceService.instance.getActiveBleId() ?? '');
+
+    EmergencyStopOutcome outcome;
+    if (targetId.isEmpty) {
+      outcome = const EmergencyStopOutcome(
+        acknowledged: false,
+        sent: false,
+        message: '연결된 기기가 없습니다. 기기 전원을 확인해 주세요.',
+      );
+    } else {
+      if (!BleService.instance.isConnected) {
+        await BleService.instance.ensureConnected(targetId);
+      }
+      final ack = await BleService.instance.sendEmergencyStop(targetId);
+      outcome = EmergencyStopOutcome.fromAck(ack);
+    }
+
+    await _speak(outcome.message, interrupt: true);
+    if (!mounted) return;
+    if (outcome.acknowledged) {
+      Navigator.push(
+        context,
+        MaterialPageRoute<void>(builder: (_) => const StopDoneScreen()),
+      );
+    }
+  }
+
+  /// 버튼 시퀀스를 기기에 전송한다. 전송 성공 시 true, 실패 시(연결/매핑 실패 등)
+  /// 사용자에게 원인을 안내하고 false를 반환한다. 호출부는 이 값으로 성공 피드백을 건다.
+  Future<bool> _sendBleSequence(List<dynamic> commands) async {
     // [DEMO PRIORITY] 이미 연결된 기기가 있다면 즉시 사용
     String deviceId = BleService.instance.connectedDeviceId;
 
@@ -508,15 +558,15 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       await ActiveDeviceService.instance.autoPickFirstDevice();
       final activeBleId = ActiveDeviceService.instance.getActiveBleId();
       if (activeBleId == null) {
-        _speak('먼저 기기 연결 화면에서 허브를 연결해 주세요.');
-        return;
+        _speak('먼저 보호자에게 기기 연결을 요청해 주세요.');
+        return false;
       }
 
       _speak('기기에 연결 중입니다...');
       final connected = await BleService.instance.ensureConnected(activeBleId);
       if (!connected) {
         _speak('연결에 실패했습니다. 기기 전원을 확인하세요.');
-        return;
+        return false;
       }
       deviceId = BleService.instance.connectedDeviceId;
     }
@@ -542,10 +592,10 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         buttonIds: commands.cast<String>(),
       );
       if (!result.ok) {
-        _speak(result.message);
-        return;
+        _speak(result.userMessage);
+        return false;
       }
-      return;
+      return true;
     }
 
     for (final dynamic raw in commands) {
@@ -586,11 +636,12 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         await BleService.instance.sendRaw('G1 X0 Y0 F1000'); // ★ 원점 복귀
         await Future<void>.delayed(const Duration(milliseconds: 800));
       } else {
-        _speak('$btn 버튼의 데모 좌표를 찾지 못했습니다.');
-        return;
+        _speak('등록되지 않은 동작입니다. 자주 쓰는 동작에서 골라 주세요.');
+        return false;
       }
       await Future<void>.delayed(const Duration(milliseconds: 800));
     }
+    return true;
   }
 
   Future<void> _handleCommand(
@@ -618,23 +669,14 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
     switch (action) {
       case 'IMMEDIATE_PRESS':
-        await _sendBleSequence(commands);
+        final immediateSent = await _sendBleSequence(commands);
+        if (!immediateSent) return; // 실패 안내는 _sendBleSequence가 이미 함
         FeedbackService.instance.vibrateSuccess();
         await _speak(message);
         return;
 
       case 'EMERGENCY_STOP':
-        FeedbackService.instance.vibrateError(); // 강한 진동
-        await _speak(message.isNotEmpty ? message : '중단합니다.');
-        final deviceId = BleService.instance.connectedDeviceId;
-        if (deviceId.isNotEmpty) {
-          await BleService.instance.sendEmergencyStop(deviceId);
-        }
-        if (!mounted) return;
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const EmergencyStopScreen()),
-        );
+        await _handleEmergencyStop();
         return;
 
       case 'MICROWAVE_CONTROL':
@@ -666,7 +708,8 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         final seconds =
             inferredSeconds ??
             MicrowaveCommandService.calculateSeconds(commands);
-        await _sendBleSequence(commands);
+        final microwaveSent = await _sendBleSequence(commands);
+        if (!microwaveSent) return; // 실패 시 성공 진동/안내/카운트다운 이동 금지
         FeedbackService.instance.vibrateSuccess(); // 성공 진동
         final spokenMessage = forceExecution && confirmationMessage.isNotEmpty
             ? confirmationMessage
