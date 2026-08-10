@@ -758,33 +758,43 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
                     child: Column(
                       children: [
                         SizedBox(height: 40 * rs),
-                        Text(
-                          _isProcessing
-                              ? '분석 중...'
-                              : (_isRecording ? 'Listening...' : '말씀해 주세요.'),
-                          style: TextStyle(
-                            color: (_isRecording || _isProcessing)
-                                ? AppColors.primary
-                                : Colors.white,
-                            fontSize: 34 * rs,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.5,
+                        // liveRegion: true — 스크린리더 활성 시 이 상태 변화는
+                        // 억제되는 navigation 우선순위 TTS를 대신해 스크린리더
+                        // 자체 채널로 안내된다(억제만 하고 대체 채널이 없으면
+                        // 사용자에게 아무 정보도 안 남는 문제를 막는다).
+                        Semantics(
+                          liveRegion: true,
+                          child: Text(
+                            _isProcessing
+                                ? '분석 중...'
+                                : (_isRecording ? 'Listening...' : '말씀해 주세요.'),
+                            style: TextStyle(
+                              color: (_isRecording || _isProcessing)
+                                  ? AppColors.primary
+                                  : Colors.white,
+                              fontSize: 34 * rs,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: -0.5,
+                            ),
+                            textAlign: TextAlign.center,
                           ),
-                          textAlign: TextAlign.center,
                         ),
                         SizedBox(height: ResponsiveScale.v(context, 10)),
-                        Text(
-                          _isProcessing
-                              ? _statusMessage
-                              : (_isRecording
-                                    ? '듣고 있습니다.'
-                                    : '버튼을 눌러 명령을 말씀해 주세요.'),
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 16 * rs,
-                            fontWeight: FontWeight.w500,
+                        Semantics(
+                          liveRegion: true,
+                          child: Text(
+                            _isProcessing
+                                ? _statusMessage
+                                : (_isRecording
+                                      ? '듣고 있습니다.'
+                                      : '버튼을 눌러 명령을 말씀해 주세요.'),
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 16 * rs,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            textAlign: TextAlign.center,
                           ),
-                          textAlign: TextAlign.center,
                         ),
                         SizedBox(height: 40 * rs),
                         VoiceWaveVisualizer(
