@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../../services/tts_service.dart';
 import 'package:speech_to_text/speech_to_text.dart';
+import 'package:speech_to_text/speech_recognition_result.dart';
 
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
@@ -18,6 +19,7 @@ import '../../services/ble_service.dart';
 import '../../services/emergency_intent.dart';
 import '../../services/help_intent.dart';
 import '../../services/microwave_command_service.dart';
+import '../../services/replay_intent.dart';
 import '../../services/device_mapping_service.dart';
 import '../../services/feedback_service.dart';
 import '../../services/voice_device_resolver.dart';
@@ -57,6 +59,14 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   bool _speechEnabled = false;
 
   String _lastWords = '';
+
+  // 부엌 소음 대응: STT 인식 신뢰도가 낮으면 바로 실행하지 않고 인식한
+  // 문장을 먼저 확인한다. missingConfidence(-1)일 때는 신뢰도를 신뢰할 수
+  // 없는 신호이므로 게이트를 걸지 않는다(플랫폼에 따라 항상 -1/1.0을 주는
+  // 경우가 있어, 없는 신호로 정상 동작을 막지 않기 위함).
+  double _lastConfidence = SpeechRecognitionWords.missingConfidence;
+  static const double _lowConfidenceThreshold = 0.5;
+  String? _pendingLowConfidenceText;
 
   Timer? _waveTimer;
   List<double> _waveHeights = const [
@@ -297,6 +307,12 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
                 _lastWords = result.recognizedWords;
                 _recognizedText = _lastWords;
               });
+              // 최종 결과일 때만 신뢰도를 갱신한다(부분 인식 중간값은 신뢰할
+              // 수 없다). 플랫폼이 신뢰도를 안 주면(missingConfidence) 그대로
+              // 둬 게이트가 걸리지 않게 한다.
+              if (result.finalResult) {
+                _lastConfidence = result.confidence;
+              }
               if (_lastWords.isNotEmpty) _resetSilenceTimer();
             }
           },
@@ -427,6 +443,65 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         _isProcessing = false;
       });
       await _speak(HelpIntent.buildResponse(), interrupt: true);
+      return;
+    }
+
+    // "다시 말해줘/뭐라고/안 들려"는 부엌 소음으로 안내를 놓쳤을 때 쓴다.
+    // 확인 대기 상태(_pendingCommandData/_pendingLowConfidenceText)는 지우지
+    // 않는다 — 놓친 게 확인 질문 자체일 수 있으므로 맥락을 그대로 유지한 채
+    // 마지막 안내만 다시 들려준다.
+    if (ReplayIntent.matches(text)) {
+      AppLogger.info('voice.replay_intercept', {'requestId': requestId});
+      setState(() => _isProcessing = false);
+      await _tts.replayLast();
+      return;
+    }
+
+    // 낮은 신뢰도로 확인을 요청했던 문장에 대한 예/아니오 응답 처리.
+    // 부엌 소음(후드·전자레인지 등)으로 오인식된 문장을 그대로 실행하지
+    // 않기 위한 안전장치 — _pendingCommandData(이미 파싱된 명령 확인)와는
+    // 별개로, "무엇을 들었는지" 자체를 먼저 확인한다.
+    if (_pendingLowConfidenceText != null) {
+      final pendingText = _pendingLowConfidenceText!;
+      _pendingLowConfidenceText = null;
+      if (VoiceTextMatcher.isAffirmative(text)) {
+        AppLogger.info('voice.low_confidence.confirmed', {
+          'requestId': requestId,
+        });
+        // 사용자가 직접 확인했으므로 재확인 루프에 빠지지 않게 신뢰도를
+        // 신뢰 가능한 값으로 리셋한 뒤 원문을 다시 처리한다.
+        _lastConfidence = 1.0;
+        await _sendTextToGemini(pendingText);
+        return;
+      }
+      if (VoiceTextMatcher.isNegative(text)) {
+        AppLogger.info('voice.low_confidence.rejected', {
+          'requestId': requestId,
+        });
+        setState(() {
+          _statusMessage = '취소됨';
+          _isProcessing = false;
+        });
+        await _speak('알겠습니다. 다시 말씀해 주세요.');
+        return;
+      }
+      // 예/아니오가 아니면 새로 들어온 문장을 새 명령으로 계속 처리한다.
+    }
+
+    // 소음 환경 등으로 인식 신뢰도가 낮으면 바로 실행하지 않고 들은 문장을
+    // 먼저 확인한다. missingConfidence(-1)일 때는 게이트를 걸지 않는다.
+    if (_lastConfidence != SpeechRecognitionWords.missingConfidence &&
+        _lastConfidence < _lowConfidenceThreshold) {
+      AppLogger.info('voice.low_confidence_confirm', {
+        'requestId': requestId,
+        'confidence': _lastConfidence,
+      });
+      _pendingLowConfidenceText = text;
+      setState(() {
+        _statusMessage = '다시 확인 중';
+        _isProcessing = false;
+      });
+      await _speak('"$text"라고 들었어요. 맞으면 다시 한 번 말씀해 주세요.', interrupt: true);
       return;
     }
 
