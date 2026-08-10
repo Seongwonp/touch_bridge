@@ -16,6 +16,7 @@ import '../../services/ai_backend_service.dart';
 import '../../services/active_device_service.dart';
 import '../../services/ble_service.dart';
 import '../../services/emergency_intent.dart';
+import '../../services/help_intent.dart';
 import '../../services/microwave_command_service.dart';
 import '../../services/device_mapping_service.dart';
 import '../../services/feedback_service.dart';
@@ -413,6 +414,19 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         _isProcessing = false;
       });
       await _handleEmergencyStop();
+      return;
+    }
+
+    // "무엇을 할 수 있어?" 류 발화도 AI를 거치지 않고 즉시 답한다. 화면의
+    // 예시 명령어 칩을 볼 수 없는 사용자를 위한 발견성 보완.
+    if (HelpIntent.matches(text)) {
+      AppLogger.info('voice.help_intercept', {'requestId': requestId});
+      _pendingCommandData = null;
+      setState(() {
+        _statusMessage = '도움말';
+        _isProcessing = false;
+      });
+      await _speak(HelpIntent.buildResponse(), interrupt: true);
       return;
     }
 
