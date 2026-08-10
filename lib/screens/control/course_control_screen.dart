@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../../services/ble_service.dart';
+import '../../services/command_feedback_service.dart';
 import '../../services/course_service.dart';
 import '../../services/device_mapping_service.dart';
 import '../../services/tts_service.dart';
@@ -86,12 +87,16 @@ class _CourseControlScreenState extends State<CourseControlScreen> {
         betweenPressDelay: const Duration(milliseconds: 1000),
       );
       if (!result.ok) {
-        FeedbackService.instance.playFailure();
-        _tts.speak(result.userMessage);
+        await CommandFeedbackService.instance.announce(
+          result.toCommandResult(),
+          source: 'CourseControlScreen',
+        );
         return;
       }
 
-      FeedbackService.instance.playSuccess();
+      // "성공"이 아니라 "전송됨"이다: pressSequence의 ok=true는 BLE write
+      // 성공일 뿐 GRBL 확인이 아니므로, 확인됨(success) earcon을 쓰지 않는다.
+      FeedbackService.instance.signalSent();
       if (!mounted) return;
 
       // 코스의 실제 소요 시간을 프리셋 버튼 구성으로 계산한다. 시간 프리셋이

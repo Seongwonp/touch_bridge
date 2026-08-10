@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../models/command_result.dart';
 import 'app_logger.dart';
 import 'ble_service.dart';
 import 'device_mapping_service.dart';
@@ -16,6 +17,7 @@ class MappingExecutionResult {
     this.y,
     this.gcode = const [],
     this.dryRun = false,
+    this.explicitUserMessage,
   });
 
   final bool ok;
@@ -28,10 +30,15 @@ class MappingExecutionResult {
   final List<String> gcode;
   final bool dryRun;
 
+  /// row/col 기반 자동 판정 대신 쓸 사용자 문구(선택). [pressPhysical]처럼
+  /// row/col을 쓰지 않는 경로가 아래 자동 판정 로직을 오판하지 않도록 한다.
+  final String? explicitUserMessage;
+
   /// 시각장애인 사용자에게 읽어줄 정직한 문구.
   /// 기술용어(G-code/XYZ/BT-xx)나 내부 좌표를 노출하지 않는다.
   /// (개발자 로그용 상세 문구는 [message]를 그대로 쓴다.)
   String get userMessage {
+    if (explicitUserMessage != null) return explicitUserMessage!;
     if (!ok) {
       final mappingMissing = row == null || col == null;
       if (mappingMissing) {
@@ -43,6 +50,22 @@ class MappingExecutionResult {
     // 전송 성공은 "기기 동작 확인"이 아니므로 "완료"라고 단언하지 않는다.
     return '기기에 동작을 전달했습니다.';
   }
+
+  /// [CommandFeedbackService]가 소비하는 신뢰 단계.
+  /// dry-run은 아무것도 전송하지 않았으므로 received, 실패는 failed,
+  /// 그 외(BLE write 성공)는 sent — 이 서비스에는 GRBL 확인 채널이 없으므로
+  /// "확인됨(confirmed)"으로 단정하지 않는다.
+  CommandPhase get phase {
+    if (!ok) return CommandPhase.failed;
+    if (dryRun) return CommandPhase.received;
+    return CommandPhase.sent;
+  }
+
+  CommandResult toCommandResult() => CommandResult(
+    phase: phase,
+    userMessage: userMessage,
+    developerMessage: message,
+  );
 }
 
 class MappingExecutionService {
@@ -156,6 +179,59 @@ class MappingExecutionService {
       message: dryRun ? 'dry-run 시퀀스 생성 완료' : '시퀀스 명령 전송 완료',
       gcode: dryRunGcode,
       dryRun: dryRun,
+    );
+  }
+
+  /// 저장된 매핑 프로필이 없을 때 쓰는 데모/목데이터 물리 좌표 기반 누름.
+  /// [MicrowaveCommandService.btnToPhysical]에 정의된 검증된 좌표로 직접
+  /// G-code를 조립해 전송한다. 저장 매핑이 있으면 [pressButton]을 쓴다.
+  /// (이전에는 이 로직이 voice_listening_screen.dart에 인라인으로 중복돼 있었다.)
+  Future<MappingExecutionResult> pressPhysical(String buttonId) async {
+    final phys = MicrowaveCommandService.btnToPhysical(buttonId);
+    if (phys == null) {
+      return MappingExecutionResult(
+        ok: false,
+        message: '$buttonId 데모 좌표를 찾지 못했습니다.',
+        buttonId: buttonId,
+        explicitUserMessage: '등록되지 않은 동작입니다. 자주 쓰는 동작에서 골라 주세요.',
+      );
+    }
+    final targetX = phys.$1;
+    final targetY = phys.$2;
+
+    // 각 전송 결과를 확인한다. 하나라도 실패하면 즉시 중단해, BLE가 중간에
+    // 끊겨도 "성공"으로 오판하지 않는다.
+    var ok = true;
+    ok &= await BleService.instance.sendRaw('G92.1'); // 모든 오프셋 취소
+    ok &= await BleService.instance.sendRaw('G92 X0 Y0'); // 현재 위치를 (0,0)으로 설정
+    ok &= await BleService.instance.sendRaw('G90'); // 절대 좌표 모드 명시
+    ok &= await BleService.instance.sendRaw('G1 X$targetX Y$targetY F1000');
+    await Future<void>.delayed(const Duration(milliseconds: 1500)); // 이동 시간 확보
+
+    // Z 터치 로직: 상대 좌표(G91)
+    ok &= await BleService.instance.sendRaw('G91');
+    ok &= await BleService.instance.sendRaw('G1 Z-1.0 F150'); // 1.0mm 내려가기
+    await Future<void>.delayed(const Duration(milliseconds: 800));
+
+    ok &= await BleService.instance.sendRaw('G4 P0.4'); // 터치 유지
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+
+    ok &= await BleService.instance.sendRaw('G1 Z1.0 F150'); // 1.0mm 올라오기
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    ok &= await BleService.instance.sendRaw('G90'); // 다시 절대 좌표 모드로 설정
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    ok &= await BleService.instance.sendRaw('G1 X0 Y0 F1000'); // 원점 복귀
+    await Future<void>.delayed(const Duration(milliseconds: 800));
+
+    return MappingExecutionResult(
+      ok: ok,
+      message: ok ? '$buttonId 물리 좌표 실행 명령 전송' : '$buttonId 물리 좌표 전송 실패',
+      buttonId: buttonId,
+      x: targetX,
+      y: targetY,
+      explicitUserMessage: ok
+          ? null // 기본 userMessage 로직("기기에 동작을 전달했습니다") 사용
+          : '명령을 보내지 못했습니다. 연결을 확인하고 다시 시도해 주세요.',
     );
   }
 

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/active_device_service.dart';
 import '../../services/ble_service.dart';
+import '../../services/command_feedback_service.dart';
 import '../../services/device_mapping_service.dart';
 import '../../services/mapping_execution_service.dart';
 import '../../services/microwave_command_service.dart';
@@ -176,12 +177,16 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
 
       if (!mounted) return;
       if (!result.ok) {
-        FeedbackService.instance.playFailure();
-        _speak(result.userMessage, interrupt: true);
+        await CommandFeedbackService.instance.announce(
+          result.toCommandResult(),
+          source: 'RemoteControlScreen',
+        );
         return; // 실패 시 작동 화면으로 이동하지 않는다(거짓 완료 방지).
       }
 
-      FeedbackService.instance.playSuccess();
+      // "성공"이 아니라 "전송됨"이다: pressSequence의 ok=true는 BLE write
+      // 성공일 뿐 GRBL 확인이 아니므로, 확인됨(success) earcon을 쓰지 않는다.
+      FeedbackService.instance.signalSent();
       AccessibilityExperimentService.instance.recordTaskStarted(
         TaskMode.manual,
       );
