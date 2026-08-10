@@ -34,7 +34,8 @@ class _EmergencyAccessScreenState extends State<EmergencyAccessScreen> {
 
   @override
   void dispose() {
-    _tts.stop();
+    // TtsService는 앱 전역 싱글톤 큐라 여기서 stop()을 부르면 다음 화면이
+    // 막 넣은 안내까지 지워버린다(화면 전환 시 안내가 잘리는 문제).
     super.dispose();
   }
 
