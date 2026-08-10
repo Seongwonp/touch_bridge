@@ -207,11 +207,15 @@ class TtsService {
         _lastSpokenAt = DateTime.now();
         _lastSpokenText = u.text;
         _speakCompleter = Completer<void>();
-        try {
-          _tts.speak(u.text);
-        } catch (_) {
-          _completeCurrent();
-        }
+        // fire-and-forget이므로 실패가 unhandled Future error로 새지 않게
+        // catchError로 반드시 받아준다(테스트/일부 플랫폼에서 TTS 플랫폼
+        // 채널이 없을 때 특히 중요 — 그 경우도 큐가 멈추지 않고 넘어가야 한다).
+        unawaited(
+          _tts.speak(u.text).catchError((_) {
+            _completeCurrent();
+            return null;
+          }),
+        );
         // 완료/취소/오류 이벤트 또는 안전 타임아웃까지 대기.
         try {
           await _speakCompleter!.future.timeout(const Duration(seconds: 20));
@@ -232,6 +236,19 @@ class TtsService {
     _completeCurrent();
     _lastSpokenText = '';
     _lastSpokenAt = DateTime.fromMillisecondsSinceEpoch(0);
+  }
+
+  /// 마지막으로 재생을 시작한 안내 문구. "다시 말해줘" 재생(replayLast)에 쓴다.
+  String get lastSpokenText => _lastSpokenText;
+
+  /// 마지막 안내를 다시 재생한다. 부엌 소음 등으로 못 들었을 때 쓴다.
+  /// force:true로 "동일 멘트 반복" 억제를 우회하고, interrupt로 즉시 재생한다.
+  Future<void> replayLast() async {
+    if (_lastSpokenText.isEmpty) {
+      await speak('다시 들려줄 안내가 없습니다.', interrupt: true);
+      return;
+    }
+    await speak(_lastSpokenText, force: true, interrupt: true);
   }
 
   Future<void> setLanguage(String languageCode) async {
