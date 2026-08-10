@@ -28,6 +28,35 @@ class MicrowaveCommandService {
     return total;
   }
 
+  /// 목표 시간(초)을 실제 프리셋 버튼(5분/1분/30초/10초) 조합 + 시작(BT-05)
+  /// 시퀀스로 변환한다. 이 기기는 숫자 키패드가 아니라 프리셋 버튼만 물리적으로
+  /// 존재하므로, 숫자 패드에서 입력한 시간도 반드시 이 조합으로 눌러야 한다.
+  /// 프리셋 최소 단위(10초)로 반올림하며, 반올림 여부를 [roundedFrom]으로 알린다.
+  static ({List<String> buttons, int actualSeconds}) buildStartSequence(
+    int targetSeconds,
+  ) {
+    if (targetSeconds <= 0) {
+      return (buttons: const ['BT-05'], actualSeconds: 0);
+    }
+    final rounded = ((targetSeconds + 5) ~/ 10) * 10;
+    var remaining = rounded;
+    final buttons = <String>[];
+    const presets = [
+      (300, 'BT-04'),
+      (60, 'BT-03'),
+      (30, 'BT-02'),
+      (10, 'BT-01'),
+    ];
+    for (final (seconds, id) in presets) {
+      while (remaining >= seconds) {
+        buttons.add(id);
+        remaining -= seconds;
+      }
+    }
+    buttons.add('BT-05');
+    return (buttons: buttons, actualSeconds: rounded);
+  }
+
   static String buildCommandsLabel(List<dynamic> commands) {
     final labels = commands.map((b) => buttonLabel[b as String] ?? b).toList();
     return labels.join(' → ');

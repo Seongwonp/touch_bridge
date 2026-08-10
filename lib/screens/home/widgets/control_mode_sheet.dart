@@ -313,8 +313,10 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
                   Navigator.of(context).pop();
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) =>
-                          RemoteControlScreen(deviceName: widget.deviceName),
+                      builder: (_) => RemoteControlScreen(
+                        deviceId: widget.deviceId,
+                        deviceName: widget.deviceName,
+                      ),
                     ),
                   );
                 },

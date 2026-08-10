@@ -106,7 +106,8 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     _recordingTimeoutTimer?.cancel();
     _silenceTimer?.cancel();
     _actionResetTimer?.cancel();
-    _tts.stop();
+    // TtsService는 앱 전역 싱글톤 큐라 여기서 stop()을 부르면 다음 화면이
+    // 막 넣은 안내까지 지워버린다(화면 전환 시 안내가 잘리는 문제).
     _speech.stop();
     super.dispose();
   }
@@ -618,28 +619,39 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         );
 
         // ★ GRBL 좌표계 강제 초기화 및 설정
-        await BleService.instance.sendRaw('G92.1'); // 모든 오프셋 취소
-        await BleService.instance.sendRaw('G92 X0 Y0'); // 현재 위치를 (0,0)으로 설정
-        await BleService.instance.sendRaw('G90'); // 절대 좌표 모드 명시
-        await BleService.instance.sendRaw('G1 X$targetX Y$targetY F1000');
+        // 각 전송 결과를 확인한다. 이전에는 모든 sendRaw() 반환값을 무시하고
+        // 끝에서 무조건 true를 반환해, BLE가 중간에 끊겨도 "성공"으로
+        // 처리되어 성공음/안내와 함께 작동 화면으로 넘어가는 문제가 있었다.
+        var ok = true;
+        ok &= await BleService.instance.sendRaw('G92.1'); // 모든 오프셋 취소
+        ok &= await BleService.instance.sendRaw(
+          'G92 X0 Y0',
+        ); // 현재 위치를 (0,0)으로 설정
+        ok &= await BleService.instance.sendRaw('G90'); // 절대 좌표 모드 명시
+        ok &= await BleService.instance.sendRaw('G1 X$targetX Y$targetY F1000');
         await Future<void>.delayed(
           const Duration(milliseconds: 1500),
         ); // 이동 시간 확보
 
         // Z 터치 로직: 상대 좌표(G91)
-        await BleService.instance.sendRaw('G91');
-        await BleService.instance.sendRaw('G1 Z-1.0 F150'); // 1.0mm 내려가기
+        ok &= await BleService.instance.sendRaw('G91');
+        ok &= await BleService.instance.sendRaw('G1 Z-1.0 F150'); // 1.0mm 내려가기
         await Future<void>.delayed(const Duration(milliseconds: 800));
 
-        await BleService.instance.sendRaw('G4 P0.4'); // 터치 유지
+        ok &= await BleService.instance.sendRaw('G4 P0.4'); // 터치 유지
         await Future<void>.delayed(const Duration(milliseconds: 600));
 
-        await BleService.instance.sendRaw('G1 Z1.0 F150'); // 1.0mm 올라오기
+        ok &= await BleService.instance.sendRaw('G1 Z1.0 F150'); // 1.0mm 올라오기
         await Future<void>.delayed(const Duration(milliseconds: 300));
-        await BleService.instance.sendRaw('G90'); // 다시 절대 좌표 모드로 설정
+        ok &= await BleService.instance.sendRaw('G90'); // 다시 절대 좌표 모드로 설정
         await Future<void>.delayed(const Duration(milliseconds: 300));
-        await BleService.instance.sendRaw('G1 X0 Y0 F1000'); // ★ 원점 복귀
+        ok &= await BleService.instance.sendRaw('G1 X0 Y0 F1000'); // ★ 원점 복귀
         await Future<void>.delayed(const Duration(milliseconds: 800));
+
+        if (!ok) {
+          _speak('명령을 보내지 못했습니다. 연결을 확인하고 다시 시도해 주세요.');
+          return false;
+        }
       } else {
         _speak('등록되지 않은 동작입니다. 자주 쓰는 동작에서 골라 주세요.');
         return false;

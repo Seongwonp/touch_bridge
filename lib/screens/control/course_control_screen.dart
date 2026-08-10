@@ -7,6 +7,7 @@ import '../../services/device_mapping_service.dart';
 import '../../services/tts_service.dart';
 import '../../services/feedback_service.dart';
 import '../../services/mapping_execution_service.dart';
+import '../../services/microwave_command_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../../theme/app_colors.dart';
@@ -91,15 +92,30 @@ class _CourseControlScreenState extends State<CourseControlScreen> {
       }
 
       FeedbackService.instance.playSuccess();
-      if (mounted) {
+      if (!mounted) return;
+
+      // 코스의 실제 소요 시간을 프리셋 버튼 구성으로 계산한다. 시간 프리셋이
+      // 없는 코스(예: 우유 데우기)는 0으로 나와 "타이머 완료" 화면으로
+      // 넘기면 실제로는 계속 작동 중인데 "끝났다"고 거짓 안내하게 된다.
+      final seconds = MicrowaveCommandService.calculateSeconds(
+        course.buttonIds,
+      );
+      if (seconds > 0) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (_) => EmergencyStopScreen(
               deviceName: widget.deviceName,
-              initialSeconds: 0, // 코스별 시간 계산 로직 추가 가능
+              initialSeconds: seconds,
             ),
           ),
         );
+      } else {
+        await _tts.speak(
+          '${course.name} 코스를 시작했습니다. 소요 시간을 알 수 없어 타이머는 표시하지 않습니다. '
+          '멈추려면 비상 정지를 사용하세요.',
+          interrupt: true,
+        );
+        if (mounted) Navigator.of(context).pop();
       }
     } catch (e) {
       _tts.speak('코스를 실행하지 못했습니다. 잠시 후 다시 시도해 주세요.');

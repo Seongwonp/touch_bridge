@@ -1,6 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../services/active_device_service.dart';
+import '../../services/ble_service.dart';
+import '../../services/device_mapping_service.dart';
+import '../../services/mapping_execution_service.dart';
+import '../../services/microwave_command_service.dart';
 import '../../services/tts_service.dart';
 import '../../services/accessibility_experiment_service.dart';
 import '../../services/feedback_service.dart';
@@ -11,8 +16,13 @@ import '../safety/emergency_stop_screen.dart';
 import '../../theme/app_colors.dart';
 
 class RemoteControlScreen extends StatefulWidget {
-  const RemoteControlScreen({super.key, this.deviceName = '스마트 기기'});
+  const RemoteControlScreen({
+    super.key,
+    this.deviceId,
+    this.deviceName = '스마트 기기',
+  });
 
+  final String? deviceId;
   final String deviceName;
 
   @override
@@ -38,8 +48,9 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   Future<void> _speak(
     String message, {
     String source = 'RemoteControlScreen',
+    bool interrupt = false,
   }) async {
-    await _tts.speak(message, source: source);
+    await _tts.speak(message, source: source, interrupt: interrupt);
   }
 
   Future<void> _armAndRun({
@@ -61,7 +72,9 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
         });
       });
 
-      await _speak(guide);
+      // interrupt: true는 스크린리더 활성 시에도 억제되지 않는 result 우선순위로
+      // 승격된다. arm 안내는 스크린리더가 자동으로 다시 읽어주지 않는다.
+      await _speak(guide, interrupt: true);
       return;
     }
 
@@ -115,23 +128,72 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     _speak('초기화되었습니다.');
   }
 
-  void _toggleStart() {
+  bool _isSending = false;
+
+  Future<void> _toggleStart() async {
+    if (_isSending) return;
     if (_secondsLeft <= 0) {
       setState(() {
         _draft = '0030';
         _secondsLeft = 30;
       });
       _speak('30초로 시작합니다.');
-    } else {
-      _speak('${_formatMMSS(_secondsLeft)} 시작합니다.');
+      return; // 시간만 채웠을 뿐 아직 시작하지 않았으므로 다시 눌러야 한다.
     }
 
-    AccessibilityExperimentService.instance.recordTaskStarted(TaskMode.manual);
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => EmergencyStopScreen(initialSeconds: _secondsLeft),
-      ),
-    );
+    if (!BleService.instance.isConnected) {
+      _speak('블루투스가 연결되어 있지 않습니다.');
+      return;
+    }
+
+    final deviceId =
+        widget.deviceId ?? ActiveDeviceService.instance.getActiveDeviceId();
+    if (deviceId == null || deviceId.isEmpty) {
+      _speak('기기를 찾지 못했습니다. 홈에서 기기를 먼저 선택해 주세요.');
+      return;
+    }
+
+    setState(() => _isSending = true);
+    // 이 기기는 숫자 키패드가 아니라 프리셋 버튼(10초/30초/1분/5분/시작)만
+    // 물리적으로 존재하므로, 입력한 시간을 실제 프리셋 조합으로 눌러야 한다.
+    final sequence = MicrowaveCommandService.buildStartSequence(_secondsLeft);
+    if (sequence.actualSeconds != _secondsLeft) {
+      _speak(
+        '${_formatMMSS(sequence.actualSeconds)}로 맞춰 시작합니다.',
+        interrupt: true,
+      );
+    } else {
+      _speak('${_formatMMSS(_secondsLeft)} 시작합니다.', interrupt: true);
+    }
+
+    try {
+      final profile = await DeviceMappingService.instance.load(deviceId);
+      final result = await MappingExecutionService.instance.pressSequence(
+        deviceId: deviceId,
+        profile: profile,
+        buttonIds: sequence.buttons,
+      );
+
+      if (!mounted) return;
+      if (!result.ok) {
+        FeedbackService.instance.playFailure();
+        _speak(result.userMessage, interrupt: true);
+        return; // 실패 시 작동 화면으로 이동하지 않는다(거짓 완료 방지).
+      }
+
+      FeedbackService.instance.playSuccess();
+      AccessibilityExperimentService.instance.recordTaskStarted(
+        TaskMode.manual,
+      );
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) =>
+              EmergencyStopScreen(initialSeconds: sequence.actualSeconds),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+    }
   }
 
   Widget _numberKey(int number, double rs) {
@@ -240,7 +302,8 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   @override
   void dispose() {
     _actionResetTimer?.cancel();
-    _tts.stop();
+    // TtsService는 앱 전역 싱글톤 큐라 여기서 stop()을 부르면 다음 화면이
+    // 막 넣은 안내까지 지워버린다(화면 전환 시 안내가 잘리는 문제).
     super.dispose();
   }
 
