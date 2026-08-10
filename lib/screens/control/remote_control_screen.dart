@@ -143,7 +143,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     }
 
     if (!BleService.instance.isConnected) {
-      _speak('블루투스가 연결되어 있지 않습니다.');
+      _speak('기기가 연결되어 있지 않습니다. 보호자에게 기기 연결을 요청해 주세요.');
       return;
     }
 
