@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../services/active_device_service.dart';
 import '../../services/ble_service.dart';
 import '../../services/command_feedback_service.dart';
@@ -202,21 +203,20 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   }
 
   Widget _numberKey(int number, double rs) {
-    final id = 'num_$number';
-    final isArmed = _armedActionId == id;
-
+    // 숫자 입력은 하드웨어를 건드리지 않고 화면의 임시 시간 값만 바꾸며
+    // 지우기로 언제든 되돌릴 수 있다. 매번 2단계 확인+15초 대기를 강제하면
+    // "0230" 같은 네 자리 입력에도 안내를 계속 들어야 해 반복 사용 피로가
+    // 크다. 실제 하드웨어를 움직이는 "시작"만 2단계로 유지한다.
     return Semantics(
       label: '$number 숫자 버튼',
+      hint: '누르면 바로 입력됩니다',
       button: true,
       child: _ActionKey(
         borderColor: AppColors.borderDefault,
-        armed: isArmed,
+        armed: false,
         onTap: () {
-          _armAndRun(
-            id: id,
-            guide: '$number 버튼',
-            onConfirmed: () => _appendDigit(number),
-          );
+          HapticFeedback.selectionClick();
+          _appendDigit(number);
         },
         child: Text(
           '$number',
@@ -266,20 +266,19 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   }
 
   Widget _backspaceKey(double rs) {
-    final isArmed = _armedActionId == 'backspace';
+    // 숫자 입력과 같은 이유로 1단계(즉시 실행): 하드웨어에 영향 없고
+    // 되돌릴 수 있는 로컬 편집 동작이다.
     return Semantics(
       label: '지우기 버튼',
+      hint: '누르면 마지막 숫자가 지워집니다',
       button: true,
       child: _ActionKey(
         color: AppColors.surfaceElevated,
         borderColor: AppColors.borderDefault,
-        armed: isArmed,
+        armed: false,
         onTap: () {
-          _armAndRun(
-            id: 'backspace',
-            guide: '지우기',
-            onConfirmed: _backspaceDigit,
-          );
+          HapticFeedback.selectionClick();
+          _backspaceDigit();
         },
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
