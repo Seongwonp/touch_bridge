@@ -51,7 +51,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
-    _tts.stop();
+    // TtsService는 앱 전역 싱글톤 큐라 여기서 stop()을 부르면 다음 화면이
+    // 막 넣은 안내까지 지워버린다(화면 전환 시 안내가 잘리는 문제).
     super.dispose();
   }
 
@@ -66,7 +67,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text(
           '비상 연락처 편집',
-          style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w800),
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w800,
+          ),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -91,7 +95,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('취소', style: TextStyle(color: AppColors.textTertiary)),
+            child: const Text(
+              '취소',
+              style: TextStyle(color: AppColors.textTertiary),
+            ),
           ),
           ElevatedButton(
             onPressed: () {
@@ -138,10 +145,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             SizedBox(height: ResponsiveScale.v(context, 24)),
-            SectionLabel(
-              icon: Icons.record_voice_over_rounded,
-              label: '음성 안내',
-            ),
+            SectionLabel(icon: Icons.record_voice_over_rounded, label: '음성 안내'),
             SizedBox(height: ResponsiveScale.v(context, 10)),
             SettingsCard(
               children: [

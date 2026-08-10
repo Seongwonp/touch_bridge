@@ -21,13 +21,24 @@ void main() {
   });
 
   group('EmergencyStopOutcome.fromAck', () {
-    test('ERROR가 아니면 정지 확인(acknowledged=true)으로 본다', () {
+    test('명시적 성공 신호(ok/stop 포함)만 정지 확인(acknowledged=true)으로 본다', () {
       final ok = EmergencyStopOutcome.fromAck('OK');
       expect(ok.acknowledged, isTrue);
       expect(ok.sent, isTrue);
 
       final ack = EmergencyStopOutcome.fromAck('STOPPED');
       expect(ack.acknowledged, isTrue);
+    });
+
+    test('정지와 무관한 알림은 "확인됨"으로 오판하지 않는다 (ACK 스푸핑 방지)', () {
+      // BLE notify는 정지 명령과 무관한 센서값 등도 같은 completer로 흘려보낼 수 있다.
+      // "ERROR로 시작하지 않으면 성공"처럼 느슨하게 판정하면 이런 알림을
+      // "안전하게 멈췄음"으로 오판하는 안전 결함이 된다.
+      for (final noise in ['TEMP:40', 'ALARM:9', 'HW: idle', '']) {
+        final o = EmergencyStopOutcome.fromAck(noise);
+        expect(o.acknowledged, isFalse, reason: noise);
+        expect(o.sent, isTrue, reason: noise);
+      }
     });
 
     test('NOT_CONNECTED는 전송 실패(sent=false)로 본다', () {

@@ -3,10 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:vibration/vibration.dart';
 
 /// 소리(earcon)와 진동을 결과별로 구분해 전달한다.
-/// 전맹 사용자가 화면 없이도 "수신 / 성공 / 실패"를 귀와 손으로 구분할 수 있게 한다.
-/// - 성공: 상승 2음 + 짧은 진동
-/// - 실패: 하강 저음 2음 + 긴 진동
+/// 전맹 사용자가 화면 없이도 "수신 / 전송됨(미확인) / 확인됨 / 실패"를
+/// 귀와 손으로 구분할 수 있게 한다.
 /// - 수신: 짧은 단음
+/// - 전송됨(미확인): 같은 음 2회 반복(리듬으로 구분, confirmed와 다른 소리)
+/// - 확인됨(성공): 상승 2음 + 짧은 진동
+/// - 실패: 하강 저음 2음 + 긴 진동
 class FeedbackService {
   FeedbackService._();
   static final FeedbackService instance = FeedbackService._();
@@ -39,8 +41,12 @@ class FeedbackService {
   /// 명령 수신 earcon (짧은 단음)
   Future<void> playReceived() => _playEarcon('received.wav');
 
-  /// 성공 earcon (상승 2음) — 실패음과 귀로 확실히 구분된다.
+  /// 성공(확인됨) earcon (상승 2음) — 실패음과 귀로 확실히 구분된다.
   Future<void> playSuccess() => _playEarcon('success.wav');
+
+  /// 전송됨(미확인) earcon — 같은 음 2회 반복. "보냈지만 기기 확인은 아직"을
+  /// success(상승 2음)와 다른 리듬으로 전달한다.
+  Future<void> playSent() => _playEarcon('sent.wav');
 
   /// 실패 earcon (하강 저음 2음)
   Future<void> playFailure() => _playEarcon('failure.wav');
@@ -68,9 +74,15 @@ class FeedbackService {
     }
   }
 
-  /// 성공을 소리+진동으로 함께 전달한다.
+  /// 성공(확인됨)을 소리+진동으로 함께 전달한다.
   Future<void> signalSuccess() async {
     await playSuccess();
+    await vibrateSuccess();
+  }
+
+  /// 전송됨(미확인)을 소리+진동으로 함께 전달한다.
+  Future<void> signalSent() async {
+    await playSent();
     await vibrateSuccess();
   }
 

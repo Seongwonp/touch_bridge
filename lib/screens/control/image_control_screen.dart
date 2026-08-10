@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import '../../models/command_result.dart';
 import '../../services/ble_service.dart';
+import '../../services/command_feedback_service.dart';
 import '../../services/device_mapping_service.dart';
 import '../../services/tts_service.dart';
 import '../../services/feedback_service.dart';
@@ -97,7 +99,7 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
     String label,
   ) async {
     if (!BleService.instance.isConnected) {
-      _tts.speak('블루투스가 연결되어 있지 않습니다.');
+      _tts.speak('기기가 연결되어 있지 않습니다. 보호자에게 기기 연결을 요청해 주세요.');
       return;
     }
 
@@ -123,8 +125,13 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
 
     final profile = _profile;
     if (profile == null) {
-      FeedbackService.instance.playFailure();
-      _tts.speak('매핑 데이터를 불러오지 못했습니다.');
+      await CommandFeedbackService.instance.announce(
+        const CommandResult(
+          phase: CommandPhase.failed,
+          userMessage: '매핑 데이터를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.',
+        ),
+        source: 'ImageControlScreen',
+      );
       return;
     }
 
@@ -133,14 +140,11 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
       profile: profile,
       buttonId: btId,
     );
-
-    if (!result.ok) {
-      FeedbackService.instance.playFailure();
-      _tts.speak(result.userMessage);
-      return;
-    }
-
-    FeedbackService.instance.playSuccess();
+    await CommandFeedbackService.instance.announce(
+      result.toCommandResult(),
+      source: 'ImageControlScreen',
+    );
+    if (!result.ok) return;
 
     // 만약 시작 버튼(BT-05)이라면 비상 정지 화면으로 이동 (예시 로직)
     if (btId == 'BT-05' && mounted) {

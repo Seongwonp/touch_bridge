@@ -103,6 +103,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       AccessibilitySettings.instance.guardianModeEnabled,
     );
     if (_currentIndex == index) {
+      // 다른 탭이 armed 상태로 남아 있으면 여기서 해제한다. 그렇지 않으면
+      // "현재 탭 → 다른 탭"으로 되돌아왔을 때 armed가 유지되어, 그 다른 탭을
+      // 한 번만 눌러도 확인 없이 바로 이동해버리는 문제가 있었다.
+      if (_armedNavIndex != null) {
+        _navResetTimer?.cancel();
+        setState(() => _armedNavIndex = null);
+      }
       await _tts.speak(
         destinations[index].guide,
         source: 'MainNavigationScreen',
@@ -117,9 +124,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       _navResetTimer = Timer(const Duration(seconds: 15), () {
         if (mounted) setState(() => _armedNavIndex = null);
       });
+      // interrupt: true는 스크린리더 활성 시에도 억제되지 않는 result 우선순위로
+      // 승격된다. 탭 이동은 스크린리더가 자동으로 다시 읽어주지 않는 "확인 필요"
+      // 상태이므로 반드시 들려야 한다.
       await _tts.speak(
         '${destinations[index].label}. ${destinations[index].guide} 이동하려면 한 번 더 누르세요.',
         source: 'MainNavigationScreen',
+        interrupt: true,
       );
       return;
     }
@@ -222,7 +233,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   @override
   void dispose() {
     _navResetTimer?.cancel();
-    _tts.stop();
+    // TtsService는 앱 전역 싱글톤 큐다. 여기서 stop()을 부르면 이 화면이
+    // dispose되는 순간(보통 다음 화면 initState 직후) 다음 화면이 막 넣은
+    // 안내까지 통째로 지워버려 안내가 잘리는 문제가 있었다.
     super.dispose();
   }
 

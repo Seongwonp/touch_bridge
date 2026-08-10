@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:touch_bridge/models/command_result.dart';
 import 'package:touch_bridge/services/device_mapping_service.dart';
 import 'package:touch_bridge/services/mapping_execution_service.dart';
 
@@ -123,6 +124,53 @@ void main() {
         dryRun: true,
       );
       expect(result.userMessage, contains('준비'));
+    });
+  });
+
+  group('MappingExecutionResult.phase (신뢰 단계 매핑)', () {
+    // 이 서비스는 BLE write 성공만 확인할 뿐 GRBL 확인 채널이 없다.
+    // 따라서 ok=true는 절대 confirmed가 아니라 sent여야 한다 — 이게 깨지면
+    // "전송 성공"을 "기기 확인 완료"로 오안내하는 회귀가 재발한다.
+    test('전송 성공(dry-run 아님)은 confirmed가 아니라 sent다', () {
+      const result = MappingExecutionResult(ok: true, message: 'ok');
+      expect(result.phase, CommandPhase.sent);
+      expect(result.phase, isNot(CommandPhase.confirmed));
+    });
+
+    test('dry-run 성공은 received다(아무것도 전송하지 않았으므로)', () {
+      const result = MappingExecutionResult(
+        ok: true,
+        message: 'dry-run',
+        dryRun: true,
+      );
+      expect(result.phase, CommandPhase.received);
+    });
+
+    test('실패는 failed다', () {
+      const result = MappingExecutionResult(ok: false, message: 'fail');
+      expect(result.phase, CommandPhase.failed);
+    });
+
+    test('explicitUserMessage가 있으면 row/col 기반 자동 판정을 덮어쓴다', () {
+      const result = MappingExecutionResult(
+        ok: false,
+        message: 'fail',
+        explicitUserMessage: '연결을 확인하세요.',
+      );
+      expect(result.userMessage, '연결을 확인하세요.');
+    });
+
+    test('toCommandResult는 phase/userMessage/message를 그대로 옮긴다', () {
+      const result = MappingExecutionResult(
+        ok: false,
+        message: 'dev detail',
+        explicitUserMessage: '사용자 문구',
+      );
+      final cr = result.toCommandResult();
+      expect(cr.phase, CommandPhase.failed);
+      expect(cr.userMessage, '사용자 문구');
+      expect(cr.developerMessage, 'dev detail');
+      expect(cr.isFailure, isTrue);
     });
   });
 }

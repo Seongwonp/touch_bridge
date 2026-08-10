@@ -46,7 +46,9 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
     if (!_armedHomeButton) {
       setState(() => _armedHomeButton = true);
       HapticFeedback.mediumImpact();
-      await _tts.speak('홈으로 돌아가기 버튼입니다. 한 번 더 누르면 홈으로 이동합니다.');
+      // interrupt: true는 스크린리더 활성 시에도 억제되지 않는 result 우선순위로
+      // 승격된다. arm 안내는 스크린리더가 자동으로 다시 읽어주지 않는다.
+      await _tts.speak('홈으로 돌아가기 버튼입니다. 한 번 더 누르면 홈으로 이동합니다.', interrupt: true);
       Future.delayed(const Duration(seconds: 15), () {
         if (mounted) setState(() => _armedHomeButton = false);
       });
@@ -59,7 +61,8 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
 
   @override
   void dispose() {
-    _tts.stop();
+    // TtsService는 앱 전역 싱글톤 큐라 여기서 stop()을 부르면 다음 화면(홈)이
+    // 막 넣은 안내까지 지워버린다(화면 전환 시 안내가 잘리는 문제).
     super.dispose();
   }
 

@@ -166,53 +166,64 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
                 ),
               ],
             ),
+            // liveRegion: true — 연결 중/실패 전환을 스크린리더가 자동으로
+            // 안내한다(스크린리더 활성 시 navigation 우선순위 TTS는 억제되므로
+            // 이 상태 변화를 알 다른 경로가 필요하다).
             if (_isConnecting) ...[
               SizedBox(height: ResponsiveScale.v(context, 12)),
-              const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.primary,
+              Semantics(
+                liveRegion: true,
+                label: '블루투스 연결 중',
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.primary,
+                      ),
                     ),
-                  ),
-                  SizedBox(width: 8),
-                  Text(
-                    '블루투스 연결 중...',
-                    style: TextStyle(color: AppColors.primary, fontSize: 13),
-                  ),
-                ],
+                    SizedBox(width: 8),
+                    Text(
+                      '블루투스 연결 중...',
+                      style: TextStyle(color: AppColors.primary, fontSize: 13),
+                    ),
+                  ],
+                ),
               ),
             ] else if (_connectionFailed) ...[
               SizedBox(height: ResponsiveScale.v(context, 12)),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.error_outline_rounded,
-                    color: Colors.redAccent,
-                    size: 16,
-                  ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    '연결 실패',
-                    style: TextStyle(color: Colors.redAccent, fontSize: 13),
-                  ),
-                  TextButton(
-                    onPressed: _autoConnectBle,
-                    child: const Text(
-                      '재시도',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 13,
-                        decoration: TextDecoration.underline,
+              Semantics(
+                liveRegion: true,
+                label: '연결 실패. 재시도하려면 재시도 버튼을 누르세요.',
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline_rounded,
+                      color: Colors.redAccent,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 8),
+                    const Text(
+                      '연결 실패',
+                      style: TextStyle(color: Colors.redAccent, fontSize: 13),
+                    ),
+                    TextButton(
+                      onPressed: _autoConnectBle,
+                      child: const Text(
+                        '재시도',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                          decoration: TextDecoration.underline,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
             SizedBox(height: ResponsiveScale.v(context, 8)),
@@ -313,8 +324,10 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
                   Navigator.of(context).pop();
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) =>
-                          RemoteControlScreen(deviceName: widget.deviceName),
+                      builder: (_) => RemoteControlScreen(
+                        deviceId: widget.deviceId,
+                        deviceName: widget.deviceName,
+                      ),
                     ),
                   );
                 },

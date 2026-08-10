@@ -45,4 +45,29 @@ void main() {
       expect(MicrowaveCommandService.btnToGrid('BT-99'), isNull);
     });
   });
+
+  group('MicrowaveCommandService.buildStartSequence', () {
+    test('숫자 패드로 입력한 시간을 프리셋 버튼 조합으로 변환한다', () {
+      // 이 기기는 숫자 키패드가 물리적으로 없고 프리셋(10/30/60/300초) 버튼만
+      // 있으므로, 앱에서 입력한 임의의 시간도 반드시 프리셋 조합으로 눌러야 한다.
+      final r = MicrowaveCommandService.buildStartSequence(90);
+      expect(r.actualSeconds, 90);
+      expect(r.buttons.last, 'BT-05'); // 항상 시작으로 끝난다
+      expect(
+        MicrowaveCommandService.calculateSeconds(r.buttons),
+        90,
+      ); // 실제로 눌리는 버튼 합이 목표 시간과 일치
+    });
+
+    test('10초 단위가 아니면 가장 가까운 10초로 반올림한다', () {
+      final r = MicrowaveCommandService.buildStartSequence(95);
+      expect(r.actualSeconds, 100);
+    });
+
+    test('0초 이하는 시작 버튼만 반환한다', () {
+      final r = MicrowaveCommandService.buildStartSequence(0);
+      expect(r.buttons, ['BT-05']);
+      expect(r.actualSeconds, 0);
+    });
+  });
 }

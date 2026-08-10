@@ -164,7 +164,7 @@ class PhotoMappingViewModel extends ChangeNotifier {
       return '테스트할 버튼을 찾지 못했습니다.';
     }
     if (!BleService.instance.isConnected) {
-      await _tts.speak('블루투스가 연결되어 있지 않습니다.');
+      await _tts.speak('기기가 연결되어 있지 않습니다. 기기 전원과 연결 상태를 확인한 뒤 다시 시도해 주세요.');
       return 'BLE 미연결';
     }
 
@@ -210,7 +210,7 @@ class PhotoMappingViewModel extends ChangeNotifier {
   Future<String> testAllPoints() async {
     if (_points.isEmpty) return '테스트할 버튼이 없습니다.';
     if (!BleService.instance.isConnected) {
-      await _tts.speak('블루투스가 연결되어 있지 않습니다.');
+      await _tts.speak('기기가 연결되어 있지 않습니다. 기기 전원과 연결 상태를 확인한 뒤 다시 시도해 주세요.');
       return 'BLE 미연결';
     }
 
@@ -497,7 +497,8 @@ class PhotoMappingViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
-    _tts.stop();
+    // TtsService는 앱 전역 싱글톤 큐라 여기서 stop()을 부르면 다음 화면이
+    // 막 넣은 안내까지 지워버린다(화면 전환 시 안내가 잘리는 문제).
     _deviceService.disconnect();
     super.dispose();
   }

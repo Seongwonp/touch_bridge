@@ -47,7 +47,9 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
   }
 
   Future<void> _checkPermissions() async {
-    if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS)) {
+    if (!kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS)) {
       await [
         Permission.bluetoothScan,
         Permission.bluetoothConnect,
@@ -63,8 +65,10 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
       _statusMessage = '주변 기기를 검색 중입니다...';
     });
 
-    final devices = await BleService.instance.scan(timeout: const Duration(seconds: 5));
-    
+    final devices = await BleService.instance.scan(
+      timeout: const Duration(seconds: 5),
+    );
+
     if (!mounted) return;
     setState(() {
       _scanning = false;
@@ -79,20 +83,37 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
     final selected = await showModalBottomSheet<BleDeviceInfo>(
       context: context,
       backgroundColor: AppColors.surfaceElevated,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) => Container(
         padding: const EdgeInsets.all(20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('주변 기기 목록', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text(
+              '주변 기기 목록',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 20),
-            ...devices.map((d) => ListTile(
-              leading: const Icon(Icons.bluetooth, color: AppColors.primary),
-              title: Text(d.name, style: const TextStyle(color: Colors.white)),
-              subtitle: Text('RSSI: ${d.rssi} dBm', style: const TextStyle(color: Colors.white54)),
-              onTap: () => Navigator.pop(ctx, d),
-            )),
+            ...devices.map(
+              (d) => ListTile(
+                leading: const Icon(Icons.bluetooth, color: AppColors.primary),
+                title: Text(
+                  d.name,
+                  style: const TextStyle(color: Colors.white),
+                ),
+                subtitle: Text(
+                  'RSSI: ${d.rssi} dBm',
+                  style: const TextStyle(color: Colors.white54),
+                ),
+                onTap: () => Navigator.pop(ctx, d),
+              ),
+            ),
           ],
         ),
       ),
@@ -101,16 +122,19 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
     if (selected != null) {
       _tts.speak('기기 연결을 시도합니다.', source: 'DeviceConnectScreen');
       final ok = await BleService.instance.connect(selected.id);
-      
+
       if (mounted) {
         if (ok) {
           setState(() {
             _connected = true;
             _statusMessage = 'BLE 연결 완료';
           });
-          
-          _tts.speak('연결에 성공했습니다. 이제 이 하드웨어에 등록할 가전 기기를 선택해 주세요.', source: 'DeviceConnectScreen');
-          
+
+          _tts.speak(
+            '연결에 성공했습니다. 이제 이 하드웨어에 등록할 가전 기기를 선택해 주세요.',
+            source: 'DeviceConnectScreen',
+          );
+
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
               builder: (_) => ApplianceSelectionScreen(
@@ -127,9 +151,9 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
   }
 
   Future<void> _onQrScanTap() async {
-    final result = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => const QrScanScreen()),
-    );
+    final result = await Navigator.of(
+      context,
+    ).push<String>(MaterialPageRoute(builder: (_) => const QrScanScreen()));
 
     if (result != null && result.isNotEmpty) {
       if (result.startsWith('http')) {
@@ -157,8 +181,14 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
           autofocus: true,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('취소')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()), child: const Text('확인')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('취소'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('확인'),
+          ),
         ],
       ),
     );
@@ -230,7 +260,9 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
     _tts.speak('기기 정보를 불러오는 중입니다.', source: 'DeviceConnectScreen');
 
     try {
-      final profileData = await AiBackendService.instance.fetchDeviceProfile(deviceId);
+      final profileData = await AiBackendService.instance.fetchDeviceProfile(
+        deviceId,
+      );
       final name = (profileData['device_type'] as String?) ?? '새 기기';
       if (!mounted) return;
 
@@ -252,7 +284,8 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
 
   @override
   void dispose() {
-    _tts.stop();
+    // TtsService는 앱 전역 싱글톤 큐라 여기서 stop()을 부르면 다음 화면이
+    // 막 넣은 안내까지 지워버린다(화면 전환 시 안내가 잘리는 문제).
     super.dispose();
   }
 
@@ -271,33 +304,72 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('기기 연결', style: TextStyle(fontSize: 28 * rs, fontWeight: FontWeight.w800, color: Colors.white)),
+                Text(
+                  '기기 연결',
+                  style: TextStyle(
+                    fontSize: 28 * rs,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
                 SizedBox(height: ResponsiveScale.v(context, 4)),
-                Text('기기를 연결하여 제어를 시작하세요', style: TextStyle(fontSize: 14 * rs, color: AppColors.textTertiary)),
+                Text(
+                  '기기를 연결하여 제어를 시작하세요',
+                  style: TextStyle(
+                    fontSize: 14 * rs,
+                    color: AppColors.textTertiary,
+                  ),
+                ),
                 SizedBox(height: ResponsiveScale.v(context, 20)),
-                
+
                 // Status Card
                 Container(
                   padding: EdgeInsets.all(ResponsiveScale.v(context, 16)),
                   decoration: BoxDecoration(
                     color: AppColors.surfaceElevated,
                     borderRadius: BorderRadius.circular(20 * rs),
-                    border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: statusColor.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: Row(
                     children: [
                       Container(
                         padding: EdgeInsets.all(12 * rs),
-                        decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.1), shape: BoxShape.circle),
-                        child: Icon(_scanning ? Icons.sync : (_connected ? Icons.bluetooth_connected : Icons.bluetooth_searching), color: statusColor, size: 24 * rs),
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          _scanning
+                              ? Icons.sync
+                              : (_connected
+                                    ? Icons.bluetooth_connected
+                                    : Icons.bluetooth_searching),
+                          color: statusColor,
+                          size: 24 * rs,
+                        ),
                       ),
                       SizedBox(width: 16 * rs),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(_connected ? 'Touch Bridge 허브 연결됨' : '허브를 찾는 중', style: TextStyle(color: Colors.white, fontSize: 16 * rs, fontWeight: FontWeight.bold)),
-                            Text(_statusMessage, style: TextStyle(color: Colors.white54, fontSize: 13 * rs)),
+                            Text(
+                              _connected ? 'Touch Bridge 허브 연결됨' : '허브를 찾는 중',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16 * rs,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              _statusMessage,
+                              style: TextStyle(
+                                color: Colors.white54,
+                                fontSize: 13 * rs,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -305,7 +377,7 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
                   ),
                 ),
                 SizedBox(height: ResponsiveScale.v(context, 24)),
-                
+
                 _buildConnectOption(
                   icon: Icons.bluetooth,
                   title: 'Touch Bridge 허브 연결',
@@ -362,25 +434,52 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
         child: Container(
           padding: EdgeInsets.all(20 * rs),
           decoration: BoxDecoration(
-            color: isPrimary ? AppColors.surfaceElevated : AppColors.surfaceElevated,
+            color: isPrimary
+                ? AppColors.surfaceElevated
+                : AppColors.surfaceElevated,
             borderRadius: BorderRadius.circular(16 * rs),
-            border: Border.all(color: isPrimary ? AppColors.primary.withValues(alpha: 0.5) : const Color(0xFF222222)),
+            border: Border.all(
+              color: isPrimary
+                  ? AppColors.primary.withValues(alpha: 0.5)
+                  : const Color(0xFF222222),
+            ),
           ),
           child: Row(
             children: [
-              Icon(icon, color: isPrimary ? AppColors.primary : Colors.white, size: 28 * rs),
+              Icon(
+                icon,
+                color: isPrimary ? AppColors.primary : Colors.white,
+                size: 28 * rs,
+              ),
               SizedBox(width: 20 * rs),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: TextStyle(color: Colors.white, fontSize: 17 * rs, fontWeight: FontWeight.bold)),
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 17 * rs,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     SizedBox(height: 4 * rs),
-                    Text(desc, style: TextStyle(color: AppColors.textTertiary, fontSize: 13 * rs)),
+                    Text(
+                      desc,
+                      style: TextStyle(
+                        color: AppColors.textTertiary,
+                        fontSize: 13 * rs,
+                      ),
+                    ),
                   ],
                 ),
               ),
-              Icon(Icons.arrow_forward_ios_rounded, color: const Color(0xFF333333), size: 16 * rs),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                color: const Color(0xFF333333),
+                size: 16 * rs,
+              ),
             ],
           ),
         ),

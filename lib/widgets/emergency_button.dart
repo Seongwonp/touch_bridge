@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_tts/flutter_tts.dart';
+import '../services/tts_service.dart';
 
 class EmergencyButton extends StatefulWidget {
   const EmergencyButton({
@@ -21,7 +21,10 @@ class EmergencyButton extends StatefulWidget {
 }
 
 class _EmergencyButtonState extends State<EmergencyButton> {
-  final FlutterTts _tts = FlutterTts();
+  // 비상 버튼은 사용자 속도/음량 설정, 스크린리더 억제 정책, 안내 큐를
+  // 공유해야 하므로 별도 FlutterTts가 아니라 공용 TtsService를 사용한다.
+  // (이전에는 자체 FlutterTts 인스턴스를 써서 중재자를 우회했다.)
+  final TtsService _tts = TtsService();
   Timer? _confirmResetTimer;
   bool _armed = false;
 
@@ -42,12 +45,11 @@ class _EmergencyButtonState extends State<EmergencyButton> {
         });
       });
 
-      await _tts.setLanguage('ko-KR');
-      await _tts.setSpeechRate(0.45);
-      await _tts.setPitch(1.0);
-      await _tts.stop();
       await _tts.speak(
         widget.firstTapGuide ?? '${widget.label}. 안전 확인을 위해 다시 한 번 누르면 실행됩니다.',
+        source: 'EmergencyButton',
+        priority: TtsPriority.emergency,
+        interrupt: true,
       );
       return;
     }
@@ -56,14 +58,12 @@ class _EmergencyButtonState extends State<EmergencyButton> {
     setState(() {
       _armed = false;
     });
-    await _tts.stop();
     widget.onPressed();
   }
 
   @override
   void dispose() {
     _confirmResetTimer?.cancel();
-    _tts.stop();
     super.dispose();
   }
 

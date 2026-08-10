@@ -16,6 +16,7 @@ import '../../services/ai_backend_service.dart';
 import '../../services/active_device_service.dart';
 import '../../services/ble_service.dart';
 import '../../services/emergency_intent.dart';
+import '../../services/help_intent.dart';
 import '../../services/microwave_command_service.dart';
 import '../../services/device_mapping_service.dart';
 import '../../services/feedback_service.dart';
@@ -106,7 +107,8 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     _recordingTimeoutTimer?.cancel();
     _silenceTimer?.cancel();
     _actionResetTimer?.cancel();
-    _tts.stop();
+    // TtsService는 앱 전역 싱글톤 큐라 여기서 stop()을 부르면 다음 화면이
+    // 막 넣은 안내까지 지워버린다(화면 전환 시 안내가 잘리는 문제).
     _speech.stop();
     super.dispose();
   }
@@ -415,6 +417,19 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       return;
     }
 
+    // "무엇을 할 수 있어?" 류 발화도 AI를 거치지 않고 즉시 답한다. 화면의
+    // 예시 명령어 칩을 볼 수 없는 사용자를 위한 발견성 보완.
+    if (HelpIntent.matches(text)) {
+      AppLogger.info('voice.help_intercept', {'requestId': requestId});
+      _pendingCommandData = null;
+      setState(() {
+        _statusMessage = '도움말';
+        _isProcessing = false;
+      });
+      await _speak(HelpIntent.buildResponse(), interrupt: true);
+      return;
+    }
+
     if (_pendingCommandData != null) {
       if (VoiceTextMatcher.isAffirmative(text)) {
         AppLogger.info('voice.response.affirmative', {'requestId': requestId});
@@ -603,45 +618,14 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       return true;
     }
 
+    // 저장 매핑이 없을 때만 검증된 데모 목데이터 물리 좌표를 fallback으로 쓴다.
+    // 실제 G-code 조립/전송은 MappingExecutionService.pressPhysical에 있다
+    // (이전엔 여기 인라인으로 중복돼 있었다).
     for (final dynamic raw in commands) {
       final btn = raw as String;
-
-      // 저장 매핑이 없을 때만 검증된 데모 목데이터 좌표를 fallback으로 사용한다.
-      final phys = MicrowaveCommandService.btnToPhysical(btn);
-      if (phys != null) {
-        // [시연 핵심] 충분한 딜레이를 주어 하드웨어 버퍼 오버플로우 방지
-        // 모든 인버전/오프셋 제거: MOCK_MAPPING_DATA 원본 좌표 그대로 사용
-        final targetX = phys.$1;
-        final targetY = phys.$2;
-        debugPrint(
-          '[DEMO_DEBUG] Executing physical press: $btn at ($targetX, $targetY)',
-        );
-
-        // ★ GRBL 좌표계 강제 초기화 및 설정
-        await BleService.instance.sendRaw('G92.1'); // 모든 오프셋 취소
-        await BleService.instance.sendRaw('G92 X0 Y0'); // 현재 위치를 (0,0)으로 설정
-        await BleService.instance.sendRaw('G90'); // 절대 좌표 모드 명시
-        await BleService.instance.sendRaw('G1 X$targetX Y$targetY F1000');
-        await Future<void>.delayed(
-          const Duration(milliseconds: 1500),
-        ); // 이동 시간 확보
-
-        // Z 터치 로직: 상대 좌표(G91)
-        await BleService.instance.sendRaw('G91');
-        await BleService.instance.sendRaw('G1 Z-1.0 F150'); // 1.0mm 내려가기
-        await Future<void>.delayed(const Duration(milliseconds: 800));
-
-        await BleService.instance.sendRaw('G4 P0.4'); // 터치 유지
-        await Future<void>.delayed(const Duration(milliseconds: 600));
-
-        await BleService.instance.sendRaw('G1 Z1.0 F150'); // 1.0mm 올라오기
-        await Future<void>.delayed(const Duration(milliseconds: 300));
-        await BleService.instance.sendRaw('G90'); // 다시 절대 좌표 모드로 설정
-        await Future<void>.delayed(const Duration(milliseconds: 300));
-        await BleService.instance.sendRaw('G1 X0 Y0 F1000'); // ★ 원점 복귀
-        await Future<void>.delayed(const Duration(milliseconds: 800));
-      } else {
-        _speak('등록되지 않은 동작입니다. 자주 쓰는 동작에서 골라 주세요.');
+      final result = await MappingExecutionService.instance.pressPhysical(btn);
+      if (!result.ok) {
+        _speak(result.userMessage);
         return false;
       }
       await Future<void>.delayed(const Duration(milliseconds: 800));
@@ -679,7 +663,8 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
           FeedbackService.instance.playFailure(); // 실패 안내는 _sendBleSequence가 함
           return;
         }
-        FeedbackService.instance.signalSuccess();
+        // "성공"이 아니라 "전송됨"이다: BLE write 성공일 뿐 GRBL 확인이 아니다.
+        FeedbackService.instance.signalSent();
         await _speak(message);
         return;
 
@@ -721,7 +706,8 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
           FeedbackService.instance.playFailure(); // 실패: 성공 피드백/이동 금지
           return;
         }
-        FeedbackService.instance.signalSuccess(); // 성공: 상승음 + 진동
+        // "성공"이 아니라 "전송됨"이다: BLE write 성공일 뿐 GRBL 확인이 아니다.
+        FeedbackService.instance.signalSent();
         final spokenMessage = forceExecution && confirmationMessage.isNotEmpty
             ? confirmationMessage
             : message;
@@ -772,33 +758,43 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
                     child: Column(
                       children: [
                         SizedBox(height: 40 * rs),
-                        Text(
-                          _isProcessing
-                              ? '분석 중...'
-                              : (_isRecording ? 'Listening...' : '말씀해 주세요.'),
-                          style: TextStyle(
-                            color: (_isRecording || _isProcessing)
-                                ? AppColors.primary
-                                : Colors.white,
-                            fontSize: 34 * rs,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.5,
+                        // liveRegion: true — 스크린리더 활성 시 이 상태 변화는
+                        // 억제되는 navigation 우선순위 TTS를 대신해 스크린리더
+                        // 자체 채널로 안내된다(억제만 하고 대체 채널이 없으면
+                        // 사용자에게 아무 정보도 안 남는 문제를 막는다).
+                        Semantics(
+                          liveRegion: true,
+                          child: Text(
+                            _isProcessing
+                                ? '분석 중...'
+                                : (_isRecording ? 'Listening...' : '말씀해 주세요.'),
+                            style: TextStyle(
+                              color: (_isRecording || _isProcessing)
+                                  ? AppColors.primary
+                                  : Colors.white,
+                              fontSize: 34 * rs,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: -0.5,
+                            ),
+                            textAlign: TextAlign.center,
                           ),
-                          textAlign: TextAlign.center,
                         ),
                         SizedBox(height: ResponsiveScale.v(context, 10)),
-                        Text(
-                          _isProcessing
-                              ? _statusMessage
-                              : (_isRecording
-                                    ? '듣고 있습니다.'
-                                    : '버튼을 눌러 명령을 말씀해 주세요.'),
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 16 * rs,
-                            fontWeight: FontWeight.w500,
+                        Semantics(
+                          liveRegion: true,
+                          child: Text(
+                            _isProcessing
+                                ? _statusMessage
+                                : (_isRecording
+                                      ? '듣고 있습니다.'
+                                      : '버튼을 눌러 명령을 말씀해 주세요.'),
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 16 * rs,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            textAlign: TextAlign.center,
                           ),
-                          textAlign: TextAlign.center,
                         ),
                         SizedBox(height: 40 * rs),
                         VoiceWaveVisualizer(
