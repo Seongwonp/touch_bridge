@@ -47,13 +47,12 @@ class EmergencyStopOutcome {
   /// 안전장치: BLE notify 리스너는 정지 명령과 무관한 알림(센서값 등)도 같은
   /// completer로 흘려보낼 수 있으므로, "ERROR로 시작하지 않으면 성공"처럼
   /// 느슨하게 판정하면 무관한 알림을 "안전하게 멈췄음"으로 오판할 수 있다.
-  /// 앱 전역에서 성공 판정에 쓰는 기존 컨벤션(`ble_service.dart`의
-  /// `res.toLowerCase().contains('ok')`)과 동일하게, 명시적 성공 신호를
-  /// 포함할 때만 확인(acknowledged) 처리한다.
   /// - `ERROR:NOT_CONNECTED`: 전송 자체가 불가.
   /// - `ERROR:TIMEOUT`: 전송은 됐으나 응답 미확인.
   /// - 그 외 `ERROR:*`: 전송 실패.
-  /// - `ok`/`stop`/`touch_ok` 포함: controller가 정지를 확인한 것으로 처리.
+  /// - 단독 `ok`(정확 일치) 또는 `stop`으로 시작: controller가 정지를 확인한 것으로 처리.
+  ///   "TEMP_OK", "SMOKE_OK" 등 센서 알림이 'ok'를 포함해도 오판하지 않도록
+  ///   contains 대신 정확 일치(==)를 쓴다.
   /// - 그 외(무관한 알림 등): 전송은 됐지만 확인되지 않음(성공으로 오판하지 않음).
   factory EmergencyStopOutcome.fromAck(String ack) {
     if (ack.startsWith('ERROR')) {
@@ -80,7 +79,9 @@ class EmergencyStopOutcome {
     }
 
     final lower = ack.toLowerCase();
-    final isExplicitSuccess = lower.contains('ok') || lower.contains('stop');
+    // 단독 'ok' 정확 일치, 또는 'stop'으로 시작(stopped/stop_ok 등)만 정지 확인으로 인정.
+    // contains('ok')는 "TEMP_OK", "SMOKE_OK" 등 무관한 센서 알림도 매칭하므로 사용하지 않는다.
+    final isExplicitSuccess = lower == 'ok' || lower.startsWith('stop');
     if (isExplicitSuccess) {
       return const EmergencyStopOutcome(
         acknowledged: true,

@@ -41,6 +41,17 @@ void main() {
       }
     });
 
+    test('"ok"를 포함한 센서 알림을 정지 확인으로 오판하지 않는다', () {
+      // contains('ok') 대신 == 'ok'를 쓰는 이유: "TEMP_OK", "SMOKE_OK" 등
+      // 무관한 BLE 알림이 'ok'를 포함해도 비상정지 확인이 아니다.
+      for (final noise in ['TEMP_OK', 'SMOKE_OK', 'SENSOR_OK', 'TOUCH_OK']) {
+        final o = EmergencyStopOutcome.fromAck(noise);
+        expect(o.acknowledged, isFalse,
+            reason: '"$noise"는 정지 확인이 아니므로 acknowledged=false여야 한다');
+        expect(o.sent, isTrue, reason: noise);
+      }
+    });
+
     test('NOT_CONNECTED는 전송 실패(sent=false)로 본다', () {
       final o = EmergencyStopOutcome.fromAck('ERROR:NOT_CONNECTED');
       expect(o.acknowledged, isFalse);
