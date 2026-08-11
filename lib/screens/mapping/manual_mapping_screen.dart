@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../services/ble_service.dart';
 import '../../services/device_mapping_service.dart';
@@ -50,6 +52,11 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
 
   bool _isUploading = false;
 
+  // dead-man 확인 상태 — 물리적 동작(홈, 테스트 터치, 원점 지정)을
+  // 잘못 눌러 하드웨어가 움직이는 사고를 방지한다.
+  String? _armedAction;
+  Timer? _armTimer;
+
   String? get _deviceId =>
       widget.deviceId ?? ActiveDeviceService.instance.getActiveDeviceId();
 
@@ -65,6 +72,42 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
       source: 'ManualMappingScreen',
       interrupt: true,
     );
+  }
+
+  @override
+  void dispose() {
+    _armTimer?.cancel();
+    _rowsCtrl.dispose();
+    _colsCtrl.dispose();
+    _oxCtrl.dispose();
+    _oyCtrl.dispose();
+    _pxCtrl.dispose();
+    _pyCtrl.dispose();
+    _hrCtrl.dispose();
+    _hcCtrl.dispose();
+    super.dispose();
+  }
+
+  // 물리 동작 전 4초 dead-man 확인 패턴.
+  // 첫 탭: TTS 안내 + arm. 두 번째 탭: 실행. 4초 초과: 자동 취소.
+  Future<void> _armAndRun({
+    required String id,
+    required String guide,
+    required VoidCallback onConfirmed,
+  }) async {
+    if (_armedAction != id) {
+      _armTimer?.cancel();
+      setState(() => _armedAction = id);
+      _armTimer = Timer(const Duration(seconds: 4), () {
+        if (!mounted) return;
+        setState(() => _armedAction = null);
+      });
+      await _tts.speak(guide, source: 'ManualMappingScreen', interrupt: true);
+      return;
+    }
+    _armTimer?.cancel();
+    setState(() => _armedAction = null);
+    onConfirmed();
   }
 
   Future<void> _loadCurrentProfile() async {
@@ -339,17 +382,32 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
               children: [
                 MappingActionChip(
                   label: '홈으로 이동',
-                  onTap: _homeDevice,
+                  armed: _armedAction == 'home',
+                  onTap: () => _armAndRun(
+                    id: 'home',
+                    guide: '홈 이동입니다. 한 번 더 누르면 하드웨어가 움직입니다.',
+                    onConfirmed: _homeDevice,
+                  ),
                   scale: rs,
                 ),
                 MappingActionChip(
                   label: '현재 위치를 원점으로 지정',
-                  onTap: _setCurrentAsOrigin,
+                  armed: _armedAction == 'origin',
+                  onTap: () => _armAndRun(
+                    id: 'origin',
+                    guide: '원점 지정입니다. 한 번 더 누르면 현재 위치가 원점이 됩니다.',
+                    onConfirmed: _setCurrentAsOrigin,
+                  ),
                   scale: rs,
                 ),
                 MappingActionChip(
                   label: '원점 테스트 터치',
-                  onTap: () => _testPress(0, 0),
+                  armed: _armedAction == 'test_0_0',
+                  onTap: () => _armAndRun(
+                    id: 'test_0_0',
+                    guide: '원점 터치 테스트입니다. 한 번 더 누르면 실제로 터치합니다.',
+                    onConfirmed: () => _testPress(0, 0),
+                  ),
                   scale: rs,
                 ),
               ],
@@ -505,26 +563,46 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
               children: [
                 MappingActionChip(
                   label: '원점 (0,0)',
-                  onTap: () => _testPress(0, 0),
+                  armed: _armedAction == 'tst_0_0',
+                  onTap: () => _armAndRun(
+                    id: 'tst_0_0',
+                    guide: '원점 터치 테스트입니다. 한 번 더 누르면 실제로 터치합니다.',
+                    onConfirmed: () => _testPress(0, 0),
+                  ),
                   scale: rs,
                 ),
                 MappingActionChip(
                   label: '우측 끝',
-                  onTap: () =>
-                      _testPress((int.tryParse(_colsCtrl.text) ?? 1) - 1, 0),
+                  armed: _armedAction == 'tst_right',
+                  onTap: () => _armAndRun(
+                    id: 'tst_right',
+                    guide: '우측 끝 터치 테스트입니다. 한 번 더 누르면 실제로 터치합니다.',
+                    onConfirmed: () =>
+                        _testPress((int.tryParse(_colsCtrl.text) ?? 1) - 1, 0),
+                  ),
                   scale: rs,
                 ),
                 MappingActionChip(
                   label: '좌측 하단',
-                  onTap: () =>
-                      _testPress(0, (int.tryParse(_rowsCtrl.text) ?? 1) - 1),
+                  armed: _armedAction == 'tst_bottom_left',
+                  onTap: () => _armAndRun(
+                    id: 'tst_bottom_left',
+                    guide: '좌측 하단 터치 테스트입니다. 한 번 더 누르면 실제로 터치합니다.',
+                    onConfirmed: () =>
+                        _testPress(0, (int.tryParse(_rowsCtrl.text) ?? 1) - 1),
+                  ),
                   scale: rs,
                 ),
                 MappingActionChip(
                   label: '우측 하단',
-                  onTap: () => _testPress(
-                    (int.tryParse(_colsCtrl.text) ?? 1) - 1,
-                    (int.tryParse(_rowsCtrl.text) ?? 1) - 1,
+                  armed: _armedAction == 'tst_bottom_right',
+                  onTap: () => _armAndRun(
+                    id: 'tst_bottom_right',
+                    guide: '우측 하단 터치 테스트입니다. 한 번 더 누르면 실제로 터치합니다.',
+                    onConfirmed: () => _testPress(
+                      (int.tryParse(_colsCtrl.text) ?? 1) - 1,
+                      (int.tryParse(_rowsCtrl.text) ?? 1) - 1,
+                    ),
                   ),
                   scale: rs,
                 ),
