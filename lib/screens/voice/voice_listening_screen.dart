@@ -290,6 +290,8 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     } else {
       _isStartingRecording = true;
       _lastWords = '';
+      // 이전 녹음의 신뢰도가 다음 녹음 게이트에 재사용되는 것을 막는다.
+      _lastConfidence = SpeechRecognitionWords.missingConfidence;
       try {
         if (_speech.isListening) {
           await _speech.stop();
@@ -740,7 +742,11 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         }
         // "성공"이 아니라 "전송됨"이다: BLE write 성공일 뿐 GRBL 확인이 아니다.
         FeedbackService.instance.signalSent();
-        await _speak(message);
+        // interrupt: true → TtsPriority.result로 승격. 스크린리더 활성 시에도 억제되지
+        // 않으므로 전맹 사용자도 "무엇이 전송됐는지" 안내를 받는다.
+        // _statusMessage 갱신 → liveRegion이 스크린리더 채널로 동일 내용을 다시 전달(이중 보장).
+        setState(() => _statusMessage = message);
+        await _speak(message, interrupt: true);
         return;
 
       case 'EMERGENCY_STOP':
@@ -786,7 +792,9 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         final spokenMessage = forceExecution && confirmationMessage.isNotEmpty
             ? confirmationMessage
             : message;
-        await _speak(spokenMessage.isNotEmpty ? spokenMessage : '시작할게요.');
+        final finalMsg = spokenMessage.isNotEmpty ? spokenMessage : '시작할게요.';
+        setState(() => _statusMessage = finalMsg);
+        await _speak(finalMsg, interrupt: true);
 
         if (seconds > 0 && mounted) {
           Navigator.push(
@@ -855,14 +863,14 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
                           ),
                         ),
                         SizedBox(height: ResponsiveScale.v(context, 10)),
+                        // liveRegion: true — _statusMessage 변경 시 스크린리더가
+                        // 자동으로 읽는다. 성공/실패 결과 메시지를 _statusMessage에
+                        // 저장하면 TTS 억제(navigation 우선순위)와 관계없이
+                        // 스크린리더 채널로 전달된다.
                         Semantics(
                           liveRegion: true,
                           child: Text(
-                            _isProcessing
-                                ? _statusMessage
-                                : (_isRecording
-                                      ? '듣고 있습니다.'
-                                      : '버튼을 눌러 명령을 말씀해 주세요.'),
+                            _isRecording ? '듣고 있습니다.' : _statusMessage,
                             style: TextStyle(
                               color: AppColors.textSecondary,
                               fontSize: 16 * rs,
