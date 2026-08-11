@@ -10,6 +10,7 @@ import 'widgets/calibration_prompt.dart';
 import 'widgets/mapping_image_view.dart';
 import 'widgets/mapping_markers_layer.dart';
 import 'widgets/point_actions_sheet.dart';
+import 'guardian_handoff_screen.dart';
 import 'photo_mapping_view_model.dart';
 
 class PhotoMappingScreen extends StatefulWidget {
@@ -167,7 +168,9 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
                             Container(color: Colors.black),
                             Positioned.fromRect(
                               rect: imageRect,
-                              child: MappingImageView(imagePath: widget.imagePath),
+                              child: MappingImageView(
+                                imagePath: widget.imagePath,
+                              ),
                             ),
                             Positioned.fromRect(
                               rect: imageRect,
@@ -248,10 +251,7 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
                     : _onTestAllPressed,
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.primary,
-                  side: BorderSide(
-                    color: AppColors.primary,
-                    width: 1.5 * rs,
-                  ),
+                  side: BorderSide(color: AppColors.primary, width: 1.5 * rs),
                   minimumSize: Size(double.infinity, 52 * rs),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14 * rs),
@@ -305,9 +305,16 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
 
-    // [FIX] 등록 프로세스에서 pushReplacement를 여러 번 사용했으므로,
-    // 단순 pop이 아닌 Home 화면까지 안전하게 돌아가도록 popUntil 사용
-    Navigator.of(context).popUntil((route) => route.isFirst);
+    // 저장만 하고 홈으로 돌아가는 대신, "사용자가 정말 혼자 쓸 수 있는지"
+    // 확인하는 인수 점검 화면을 거친다(Codex Part B 보호자→사용자 핸드오프 갭).
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => GuardianHandoffScreen(
+          deviceId: widget.deviceId,
+          deviceName: widget.applianceName ?? '기기',
+        ),
+      ),
+    );
   }
 
   Future<void> _onTestAllPressed() async {
@@ -346,9 +353,7 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
             child: const Text('확인', style: TextStyle(color: Colors.black)),
           ),
         ],
@@ -370,7 +375,9 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
       onTestTouch: () async {
         final message = await _viewModel.testPoint(index);
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
       },
       onRename: () => _showEditLabelDialog(index),
       onDelete: () => _viewModel.removePoint(index),
