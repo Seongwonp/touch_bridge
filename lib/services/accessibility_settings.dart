@@ -18,7 +18,7 @@ class AccessibilitySettings extends ChangeNotifier {
   bool _voiceGuidanceEnabled = true;
   bool _largeTextEnabled = false;
   bool _highContrastEnabled = false;
-  bool _guardianModeEnabled = true;
+  bool _guardianModeEnabled = false;
   bool _developerModeEnabled = false;
   double _ttsSpeed = 1.0;
   double _ttsVolume = 1.0;
@@ -42,7 +42,7 @@ class AccessibilitySettings extends ChangeNotifier {
       _voiceGuidanceEnabled = prefs.getBool(_kVoiceGuidance) ?? true;
       _largeTextEnabled = prefs.getBool(_kLargeText) ?? false;
       _highContrastEnabled = prefs.getBool(_kHighContrast) ?? false;
-      _guardianModeEnabled = prefs.getBool(_kGuardianMode) ?? true;
+      _guardianModeEnabled = prefs.getBool(_kGuardianMode) ?? false;
       _developerModeEnabled = prefs.getBool(_kDeveloperMode) ?? false;
       _ttsSpeed = prefs.getDouble(_kTtsSpeed) ?? 1.0;
       _ttsVolume = prefs.getDouble(_kTtsVolume) ?? 1.0;

@@ -199,39 +199,46 @@ class MappingExecutionService {
     final targetX = phys.$1;
     final targetY = phys.$2;
 
-    // 각 전송 결과를 확인한다. 하나라도 실패하면 즉시 중단해, BLE가 중간에
-    // 끊겨도 "성공"으로 오판하지 않는다.
-    var ok = true;
-    ok &= await BleService.instance.sendRaw('G92.1'); // 모든 오프셋 취소
-    ok &= await BleService.instance.sendRaw('G92 X0 Y0'); // 현재 위치를 (0,0)으로 설정
-    ok &= await BleService.instance.sendRaw('G90'); // 절대 좌표 모드 명시
-    ok &= await BleService.instance.sendRaw('G1 X$targetX Y$targetY F1000');
-    await Future<void>.delayed(const Duration(milliseconds: 1500)); // 이동 시간 확보
-
-    // Z 터치 로직: 상대 좌표(G91)
-    ok &= await BleService.instance.sendRaw('G91');
-    ok &= await BleService.instance.sendRaw('G1 Z-1.0 F150'); // 1.0mm 내려가기
-    await Future<void>.delayed(const Duration(milliseconds: 800));
-
-    ok &= await BleService.instance.sendRaw('G4 P0.4'); // 터치 유지
-    await Future<void>.delayed(const Duration(milliseconds: 600));
-
-    ok &= await BleService.instance.sendRaw('G1 Z1.0 F150'); // 1.0mm 올라오기
-    await Future<void>.delayed(const Duration(milliseconds: 300));
-    ok &= await BleService.instance.sendRaw('G90'); // 다시 절대 좌표 모드로 설정
-    await Future<void>.delayed(const Duration(milliseconds: 300));
-    ok &= await BleService.instance.sendRaw('G1 X0 Y0 F1000'); // 원점 복귀
-    await Future<void>.delayed(const Duration(milliseconds: 800));
-
-    return MappingExecutionResult(
-      ok: ok,
-      message: ok ? '$buttonId 물리 좌표 실행 명령 전송' : '$buttonId 물리 좌표 전송 실패',
+    // 각 전송 결과를 즉시 확인하고 실패 시 즉시 반환한다. Dart의 &=는 단락평가를
+    // 하지 않으므로 ok &= await ... 패턴은 첫 실패 후에도 이후 명령을 계속 전송한다.
+    // Z축이 내려간 채로 원점 복귀 명령이 전송되지 않으면 물리적으로 위험한 상태가 된다.
+    MappingExecutionResult fail() => MappingExecutionResult(
+      ok: false,
+      message: '$buttonId 물리 좌표 전송 실패',
       buttonId: buttonId,
       x: targetX,
       y: targetY,
-      explicitUserMessage: ok
-          ? null // 기본 userMessage 로직("기기에 동작을 전달했습니다") 사용
-          : '명령을 보내지 못했습니다. 연결을 확인하고 다시 시도해 주세요.',
+      explicitUserMessage: '명령을 보내지 못했습니다. 연결을 확인하고 다시 시도해 주세요.',
+    );
+
+    final ble = BleService.instance;
+    if (!await ble.sendRaw('G92.1')) return fail(); // 모든 오프셋 취소
+    if (!await ble.sendRaw('G92 X0 Y0')) return fail(); // 현재 위치를 (0,0)으로 설정
+    if (!await ble.sendRaw('G90')) return fail(); // 절대 좌표 모드 명시
+    if (!await ble.sendRaw('G1 X$targetX Y$targetY F1000')) return fail();
+    await Future<void>.delayed(const Duration(milliseconds: 1500)); // 이동 시간 확보
+
+    // Z 터치 로직: 상대 좌표(G91)
+    if (!await ble.sendRaw('G91')) return fail();
+    if (!await ble.sendRaw('G1 Z-1.0 F150')) return fail(); // 1.0mm 내려가기
+    await Future<void>.delayed(const Duration(milliseconds: 800));
+
+    if (!await ble.sendRaw('G4 P0.4')) return fail(); // 터치 유지
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+
+    if (!await ble.sendRaw('G1 Z1.0 F150')) return fail(); // 1.0mm 올라오기
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (!await ble.sendRaw('G90')) return fail(); // 다시 절대 좌표 모드로 설정
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (!await ble.sendRaw('G1 X0 Y0 F1000')) return fail(); // 원점 복귀
+    await Future<void>.delayed(const Duration(milliseconds: 800));
+
+    return MappingExecutionResult(
+      ok: true,
+      message: '$buttonId 물리 좌표 실행 명령 전송',
+      buttonId: buttonId,
+      x: targetX,
+      y: targetY,
     );
   }
 

@@ -23,7 +23,7 @@ class HomeVoiceActionButton extends StatelessWidget {
       label: '$deviceName 음성 제어 시작',
       button: true,
       child: Container(
-        height: 64 * rs,
+        height: 80 * rs,
         decoration: BoxDecoration(
           gradient: enabled
               ? const LinearGradient(
