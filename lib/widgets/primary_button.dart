@@ -27,7 +27,7 @@ class PrimaryButton extends StatefulWidget {
 }
 
 class _PrimaryButtonState extends State<PrimaryButton>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   final TtsService _tts = TtsService();
   Timer? _confirmResetTimer;
   bool _armed = false;
@@ -38,6 +38,7 @@ class _PrimaryButtonState extends State<PrimaryButton>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _scaleController = AnimationController(
       duration: const Duration(milliseconds: 100),
       vsync: this,
@@ -101,7 +102,22 @@ class _PrimaryButtonState extends State<PrimaryButton>
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.inactive) {
+      _confirmResetTimer?.cancel();
+      if (mounted && _armed) {
+        setState(() {
+          _armed = false;
+        });
+      }
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _confirmResetTimer?.cancel();
     // stop()은 전역 큐를 지워 다음 화면 안내까지 날린다.
     // 이 버튼 자신의 대기 항목만 취소한다.

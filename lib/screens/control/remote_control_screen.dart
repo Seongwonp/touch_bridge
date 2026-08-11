@@ -31,7 +31,8 @@ class RemoteControlScreen extends StatefulWidget {
   State<RemoteControlScreen> createState() => _RemoteControlScreenState();
 }
 
-class _RemoteControlScreenState extends State<RemoteControlScreen> {
+class _RemoteControlScreenState extends State<RemoteControlScreen>
+    with WidgetsBindingObserver {
   final TtsService _tts = TtsService();
 
   Timer? _actionResetTimer;
@@ -44,7 +45,24 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _speak('${widget.deviceName} 제어 화면입니다. 숫자 버튼을 입력하여 시간을 설정하세요.');
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // 백그라운드 전환 시 armed 상태 초기화 — 포어그라운드 복귀 후 의도치 않은
+    // 버튼 실행을 방지한다.
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.inactive) {
+      _actionResetTimer?.cancel();
+      if (mounted && _armedActionId != null) {
+        setState(() {
+          _armedActionId = null;
+        });
+      }
+    }
   }
 
   Future<void> _speak(
@@ -311,6 +329,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _actionResetTimer?.cancel();
     // TtsService는 앱 전역 싱글톤 큐라 여기서 stop()을 부르면 다음 화면이
     // 막 넣은 안내까지 지워버린다(화면 전환 시 안내가 잘리는 문제).
