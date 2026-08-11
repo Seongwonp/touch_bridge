@@ -69,5 +69,25 @@ void main() {
       expect(r.buttons, ['BT-05']);
       expect(r.actualSeconds, 0);
     });
+
+    test('1~4초 입력은 0초로 반올림되지 않고 10초로 올림 처리한다', () {
+      // ((1~4)+5)~/10 == 0 이므로 반올림하면 0초가 돼 BT-05(시작)만 눌린다.
+      // 카운트다운 화면이 즉시 완료로 보이는 버그를 막기 위해 최소 10초로 올린다.
+      for (final t in [1, 2, 3, 4]) {
+        final r = MicrowaveCommandService.buildStartSequence(t);
+        expect(r.actualSeconds, 10,
+            reason: '${t}초 입력이 0초로 반올림되는 버그 — 최소 10초여야 한다');
+        expect(r.buttons.length, greaterThan(1),
+            reason: '시작 버튼(BT-05)만 눌리면 안 된다');
+        expect(r.buttons.last, 'BT-05');
+      }
+    });
+
+    test('5~9초 입력은 이미 10초로 올림됨을 확인한다', () {
+      for (final t in [5, 6, 7, 8, 9]) {
+        final r = MicrowaveCommandService.buildStartSequence(t);
+        expect(r.actualSeconds, 10, reason: '${t}초');
+      }
+    });
   });
 }

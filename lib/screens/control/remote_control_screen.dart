@@ -159,6 +159,12 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     // 이 기기는 숫자 키패드가 아니라 프리셋 버튼(10초/30초/1분/5분/시작)만
     // 물리적으로 존재하므로, 입력한 시간을 실제 프리셋 조합으로 눌러야 한다.
     final sequence = MicrowaveCommandService.buildStartSequence(_secondsLeft);
+    // buildStartSequence는 1~4초를 10초로 올리지만, 만약 actualSeconds == 0이
+    // 되는 edge case가 생기면 카운트다운 화면이 즉시 완료로 보이므로 막는다.
+    if (sequence.actualSeconds <= 0) {
+      _speak('시간을 10초 이상 입력해 주세요.', interrupt: true);
+      return;
+    }
     if (sequence.actualSeconds != _secondsLeft) {
       _speak(
         '${_formatMMSS(sequence.actualSeconds)}로 맞춰 시작합니다.',
