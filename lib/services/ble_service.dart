@@ -55,11 +55,25 @@ class BleService {
     HardwareProtocol.actionPress,
   };
 
+  // [디버그/데모 전용] 실제 BLE 없이 전송을 성공으로 흉내낸다(시뮬레이터 테스트용).
+  // 릴리스에서는 enableDemoMode를 호출하지 않으므로 항상 false다.
+  bool _demoMode = false;
+  String _demoDeviceId = '';
+
+  /// [디버그/데모 전용] BLE 없이 전송/응답을 성공으로 처리한다.
+  void enableDemoMode(String deviceId) {
+    if (!kDebugMode) return;
+    _demoMode = true;
+    _demoDeviceId = deviceId;
+    _addLog('DEMO MODE ON: $deviceId (실제 BLE 전송 안 함)');
+  }
+
   bool get isConnected =>
-      _connectedDevice != null && _commandCharacteristic != null;
+      _demoMode || (_connectedDevice != null && _commandCharacteristic != null);
   String? get lastScanError => _lastScanError;
   BluetoothAdapterState get adapterState => _adapterState;
-  String get connectedDeviceId => _connectedDevice?.remoteId.str ?? '';
+  String get connectedDeviceId =>
+      _demoMode ? _demoDeviceId : (_connectedDevice?.remoteId.str ?? '');
   String get connectedDeviceName {
     final name = _connectedDevice?.platformName.trim() ?? '';
     return name.isEmpty ? connectedDeviceId : name;
@@ -274,6 +288,7 @@ class BleService {
   }
 
   Future<bool> ensureConnected(String deviceId) async {
+    if (_demoMode) return true;
     if (isConnected && _connectedDevice?.remoteId.str == deviceId) {
       return true;
     }
@@ -300,6 +315,10 @@ class BleService {
     Duration timeout = const Duration(seconds: 5),
     bool waitAck = true, // ACK 대기 여부 추가
   }) async {
+    if (_demoMode) {
+      _addLog('DEMO ACK: ${payload['action']}');
+      return 'OK';
+    }
     final c = _commandCharacteristic;
     if (c == null) return 'ERROR:NOT_CONNECTED';
 
@@ -339,6 +358,10 @@ class BleService {
 
   Future<bool> sendRaw(String command) async {
     if (_sendRawOverride != null) return _sendRawOverride!(command);
+    if (_demoMode) {
+      _addLog('DEMO SEND_RAW: $command');
+      return true;
+    }
     _addLog('SEND_RAW: $command');
     final c = _commandCharacteristic;
     if (c == null) return false;
