@@ -15,6 +15,11 @@ class DeviceMappingProfile {
     this.customLabels = const {},
     this.homeRow = 0,
     this.homeCol = 0,
+    this.travelHeightZ = 5.0,
+    this.pressDepthZ = -2.0,
+    this.travelFeed = 1200,
+    this.pressFeed = 200,
+    this.dwellSeconds = 0.2,
     this.imagePath,
   });
 
@@ -29,6 +34,11 @@ class DeviceMappingProfile {
   final Map<String, String> customLabels;
   final int homeRow;
   final int homeCol;
+  final double travelHeightZ;
+  final double pressDepthZ;
+  final int travelFeed;
+  final int pressFeed;
+  final double dwellSeconds;
   final String? imagePath;
 
   Map<String, dynamic> toJson() => {
@@ -50,6 +60,13 @@ class DeviceMappingProfile {
     },
     'customLabels': customLabels,
     'homePosition': {'row': homeRow, 'col': homeCol},
+    'motion': {
+      'travelHeightZ': travelHeightZ,
+      'pressDepthZ': pressDepthZ,
+      'travelFeed': travelFeed,
+      'pressFeed': pressFeed,
+      'dwellSeconds': dwellSeconds,
+    },
     'imagePath': imagePath,
   };
 
@@ -60,6 +77,7 @@ class DeviceMappingProfile {
         (j['buttonPositions'] as Map<String, dynamic>? ?? const {});
     final labelsRaw = (j['customLabels'] as Map<String, dynamic>? ?? const {});
     final homePos = (j['homePosition'] as Map<String, dynamic>? ?? const {});
+    final motion = (j['motion'] as Map<String, dynamic>? ?? const {});
 
     final map = <String, ({int row, int col})>{};
     for (final e in buttonRaw.entries) {
@@ -103,6 +121,11 @@ class DeviceMappingProfile {
       customLabels: labelsRaw.cast<String, String>(),
       homeRow: (homePos['row'] as num?)?.toInt() ?? 0,
       homeCol: (homePos['col'] as num?)?.toInt() ?? 0,
+      travelHeightZ: (motion['travelHeightZ'] as num?)?.toDouble() ?? 5.0,
+      pressDepthZ: (motion['pressDepthZ'] as num?)?.toDouble() ?? -2.0,
+      travelFeed: (motion['travelFeed'] as num?)?.toInt() ?? 1200,
+      pressFeed: (motion['pressFeed'] as num?)?.toInt() ?? 200,
+      dwellSeconds: (motion['dwellSeconds'] as num?)?.toDouble() ?? 0.2,
       imagePath: j['imagePath'] as String?,
     );
   }
@@ -165,6 +188,15 @@ class DeviceMappingService {
   Future<void> save(String deviceId, DeviceMappingProfile profile) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_profileKey(deviceId), jsonEncode(profile.toJson()));
+  }
+
+  /// [load]는 저장된 게 없어도 [DeviceMappingProfile.defaultGrid]를 돌려주므로
+  /// "정말 한 번이라도 저장됐는지"를 구분할 때는 이 메서드를 써야 한다.
+  /// 사진 매핑(buttonMap 있음)과 좌표 매핑(그리드만 있음) 모두 저장 시점에
+  /// 이 키가 생기므로 두 방식 어느 쪽으로 설정했든 true를 반환한다.
+  Future<bool> hasSavedProfile(String deviceId) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.containsKey(_profileKey(deviceId));
   }
 
   String? _labelToButtonId(String label) {

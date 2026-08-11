@@ -43,6 +43,13 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
   @override
   void initState() {
     super.initState();
+    _tts.speak(
+      '기기 연결 화면입니다. 네 가지 연결 방법이 있습니다. 화면 위쪽의 블루투스 허브 연결이 '
+      '음성 안내로 가장 쉽게 진행할 수 있는 방법입니다. QR 스캔과 기기 코드 입력은 화면이나 '
+      '기기에 적힌 글자를 확인해야 할 수 있습니다.',
+      source: 'DeviceConnectScreen',
+      interrupt: true,
+    );
     _checkPermissions();
   }
 

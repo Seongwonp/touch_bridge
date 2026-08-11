@@ -3,12 +3,30 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../models/appliance_config.dart';
+import '../../services/active_device_service.dart';
+import '../../services/home_device_store.dart';
 import '../../services/recommendation_service.dart';
 import '../../services/tts_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../../theme/app_colors.dart';
+import '../mapping/manual_mapping_screen.dart';
 import '../mapping/photo_mapping_screen.dart';
+
+IconData _iconForApplianceType(ApplianceType type) {
+  switch (type) {
+    case ApplianceType.washer:
+      return Icons.wash_rounded;
+    case ApplianceType.microwave:
+      return Icons.microwave_rounded;
+    case ApplianceType.dryer:
+      return Icons.dry_cleaning_rounded;
+    case ApplianceType.airConditioner:
+      return Icons.ac_unit_rounded;
+    default:
+      return Icons.settings_remote_rounded;
+  }
+}
 
 class ApplianceSelectionScreen extends StatefulWidget {
   final String? bleId;
@@ -110,6 +128,51 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
     return '${safe}_$ts';
   }
 
+  /// 사진 매핑을 건너뛰고 바로 기기를 등록한 뒤 좌표 기반 설정 화면으로 이동한다.
+  /// 시각 확인 없이(화살표+테스트 눌러보기만으로) 최초 등록을 끝낼 수 있는 경로.
+  Future<void> _registerAndStartCoordinateSetup(
+    BuildContext context,
+    ApplianceConfig appliance,
+  ) async {
+    final deviceId = _newDeviceId(appliance.name.replaceAll(' ', '_'));
+
+    final devices = await HomeDeviceStore.loadDevices();
+    devices.add({
+      'id': deviceId,
+      'name': appliance.name,
+      'status': '작동 대기 중',
+      'iconCodePoint': _iconForApplianceType(appliance.type).codePoint,
+      'bleId': widget.bleId,
+      'bleName': widget.bleName,
+    });
+    await HomeDeviceStore.saveDevices(devices);
+    await ActiveDeviceService.instance.setActiveDevice(
+      deviceId: deviceId,
+      deviceName: appliance.name,
+      bleId: widget.bleId,
+      bleName: widget.bleName,
+    );
+    ActiveDeviceService.instance.notifyDeviceListChanged();
+
+    await _tts.speak(
+      '${appliance.name} 기기가 등록되었습니다. 이제 좌표로 버튼 위치를 설정합니다.',
+      source: 'ApplianceSelectionScreen',
+      interrupt: true,
+    );
+
+    if (!context.mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ManualMappingScreen(
+          deviceId: deviceId,
+          deviceName: appliance.name,
+          showCompletionCheck: true,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final recommendations = RecommendationService.getRecommendations();
@@ -158,6 +221,13 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
                 ),
               );
             },
+            onStartCoordinateSetup: (sheetCtx, ap) async {
+              if (Navigator.of(sheetCtx).canPop()) {
+                Navigator.of(sheetCtx).pop();
+              }
+              if (!context.mounted) return;
+              await _registerAndStartCoordinateSetup(context, ap);
+            },
           );
         },
       ),
@@ -169,27 +239,17 @@ class _ApplianceCard extends StatelessWidget {
   final ApplianceConfig appliance;
   final VoidCallback onTap;
   final Future<void> Function(BuildContext, ApplianceConfig) onStartMapping;
+  final Future<void> Function(BuildContext, ApplianceConfig)
+  onStartCoordinateSetup;
 
   const _ApplianceCard({
     required this.appliance,
     required this.onTap,
     required this.onStartMapping,
+    required this.onStartCoordinateSetup,
   });
 
-  IconData _getIcon() {
-    switch (appliance.type) {
-      case ApplianceType.washer:
-        return Icons.wash_rounded;
-      case ApplianceType.microwave:
-        return Icons.microwave_rounded;
-      case ApplianceType.dryer:
-        return Icons.dry_cleaning_rounded;
-      case ApplianceType.airConditioner:
-        return Icons.ac_unit_rounded;
-      default:
-        return Icons.settings_remote_rounded;
-    }
-  }
+  IconData _getIcon() => _iconForApplianceType(appliance.type);
 
   @override
   Widget build(BuildContext context) {
@@ -373,10 +433,38 @@ class _ApplianceCard extends StatelessWidget {
                   ),
                 ),
                 child: Text(
-                  '매핑 시작',
+                  '사진으로 매핑 시작',
                   style: TextStyle(
                     fontWeight: FontWeight.w900,
                     fontSize: 17 * rs,
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(height: ResponsiveScale.v(context, 12)),
+            SizedBox(
+              width: double.infinity,
+              height: 60 * rs,
+              child: Semantics(
+                label: '사진 없이 좌표로 설정. 화면을 보지 않고 화살표와 테스트 눌러보기만으로 버튼 위치를 맞춥니다.',
+                button: true,
+                child: OutlinedButton(
+                  onPressed: () async {
+                    await onStartCoordinateSetup(context, appliance);
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: BorderSide(color: AppColors.primary, width: 1.5 * rs),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14 * rs),
+                    ),
+                  ),
+                  child: Text(
+                    '사진 없이 좌표로 설정',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 17 * rs,
+                    ),
                   ),
                 ),
               ),

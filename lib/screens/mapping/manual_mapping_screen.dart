@@ -6,10 +6,32 @@ import '../../services/tts_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../../theme/app_colors.dart';
+import 'guardian_handoff_screen.dart';
 import 'widgets/mapping_form_controls.dart';
 
+/// 사진 없이 좌표(행/열/원점/간격)와 조이스틱, 테스트 눌러보기만으로 버튼
+/// 위치를 설정하는 화면.
+///
+/// 기존에는 이미 등록된 기기를 재조정하는 용도로만(control_mode_sheet 경유)
+/// 쓰였는데, [deviceId]/[deviceName]을 넘기고 [showCompletionCheck]를 켜면
+/// 최초 기기 등록 흐름(사진 매핑의 대안)으로도 쓸 수 있다 — 시각 확인 없이
+/// 소리·진동만으로 버튼 위치를 맞출 수 있는 유일한 경로이기 때문이다.
 class ManualMappingScreen extends StatefulWidget {
-  const ManualMappingScreen({super.key});
+  const ManualMappingScreen({
+    super.key,
+    this.deviceId,
+    this.deviceName,
+    this.showCompletionCheck = false,
+  });
+
+  /// 지정하지 않으면 [ActiveDeviceService]의 현재 활성 기기를 사용한다
+  /// (기존 재조정 진입 경로와의 호환을 위함).
+  final String? deviceId;
+  final String? deviceName;
+
+  /// true면 저장 성공 시 스낵바 대신 [GuardianHandoffScreen]으로 이동해
+  /// 등록이 실제로 끝났는지 점검한다(최초 설정 흐름 전용).
+  final bool showCompletionCheck;
 
   @override
   State<ManualMappingScreen> createState() => _ManualMappingScreenState();
@@ -28,14 +50,25 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
 
   bool _isUploading = false;
 
+  String? get _deviceId =>
+      widget.deviceId ?? ActiveDeviceService.instance.getActiveDeviceId();
+
   @override
   void initState() {
     super.initState();
     _loadCurrentProfile();
+    _tts.speak(
+      widget.showCompletionCheck
+          ? '좌표로 버튼 위치를 설정합니다. 화살표 버튼으로 터치봉을 움직이고, 테스트 눌러보기로 '
+                '소리나 진동을 확인한 뒤 설정 저장 및 하드웨어 전송을 누르세요.'
+          : '수동 매핑 화면입니다. 화살표 버튼으로 위치를 조정하고 테스트한 뒤 저장하세요.',
+      source: 'ManualMappingScreen',
+      interrupt: true,
+    );
   }
 
   Future<void> _loadCurrentProfile() async {
-    final deviceId = ActiveDeviceService.instance.getActiveDeviceId();
+    final deviceId = _deviceId;
     if (deviceId == null) return;
     final profile = await DeviceMappingService.instance.load(deviceId);
     setState(() {
@@ -51,7 +84,7 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
   }
 
   Future<void> _saveAndUpload() async {
-    final deviceId = ActiveDeviceService.instance.getActiveDeviceId();
+    final deviceId = _deviceId;
     if (deviceId == null) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -101,6 +134,17 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
 
       if (ok) {
         _tts.speak('그리드 설정이 하드웨어로 전송되었습니다.');
+        if (widget.showCompletionCheck) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute<void>(
+              builder: (_) => GuardianHandoffScreen(
+                deviceId: deviceId,
+                deviceName: widget.deviceName ?? '기기',
+              ),
+            ),
+          );
+          return;
+        }
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('BLE 전송 성공')));
@@ -122,7 +166,7 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
   }
 
   Future<void> _testPress(int x, int y) async {
-    final deviceId = ActiveDeviceService.instance.getActiveDeviceId();
+    final deviceId = _deviceId;
     if (deviceId == null) return;
     final cols = int.tryParse(_colsCtrl.text) ?? 3;
     await BleService.instance.sendPress(
@@ -134,7 +178,7 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
   }
 
   Future<void> _homeDevice() async {
-    final deviceId = ActiveDeviceService.instance.getActiveDeviceId();
+    final deviceId = _deviceId;
     if (deviceId == null) {
       _tts.speak('활성 기기가 없습니다.');
       return;
@@ -179,7 +223,9 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
     final rs = ResponsiveScale.factor(context);
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: const TopAppBar(title: '수동 매핑 및 좌표 설정'),
+      appBar: TopAppBar(
+        title: widget.showCompletionCheck ? '좌표로 설정하기' : '수동 매핑 및 좌표 설정',
+      ),
       body: SingleChildScrollView(
         padding: EdgeInsets.all(20 * rs),
         child: Column(
@@ -196,9 +242,21 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
             SizedBox(height: 12 * rs),
             Row(
               children: [
-                Expanded(child: LabeledNumberField(label: '행 (Rows)', controller: _rowsCtrl, scale: rs)),
+                Expanded(
+                  child: LabeledNumberField(
+                    label: '행 (Rows)',
+                    controller: _rowsCtrl,
+                    scale: rs,
+                  ),
+                ),
                 SizedBox(width: 12 * rs),
-                Expanded(child: LabeledNumberField(label: '열 (Cols)', controller: _colsCtrl, scale: rs)),
+                Expanded(
+                  child: LabeledNumberField(
+                    label: '열 (Cols)',
+                    controller: _colsCtrl,
+                    scale: rs,
+                  ),
+                ),
               ],
             ),
             SizedBox(height: 20 * rs),
@@ -215,12 +273,36 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
               spacing: 8 * rs,
               runSpacing: 8 * rs,
               children: [
-                MappingActionChip(label: 'X+10', onTap: () => _jog('X', 10), scale: rs),
-                MappingActionChip(label: 'X-10', onTap: () => _jog('X', -10), scale: rs),
-                MappingActionChip(label: 'Y+10', onTap: () => _jog('Y', 10), scale: rs),
-                MappingActionChip(label: 'Y-10', onTap: () => _jog('Y', -10), scale: rs),
-                MappingActionChip(label: 'Z+10', onTap: () => _jog('Z', 10), scale: rs),
-                MappingActionChip(label: 'Z-10', onTap: () => _jog('Z', -10), scale: rs),
+                MappingActionChip(
+                  label: 'X+10',
+                  onTap: () => _jog('X', 10),
+                  scale: rs,
+                ),
+                MappingActionChip(
+                  label: 'X-10',
+                  onTap: () => _jog('X', -10),
+                  scale: rs,
+                ),
+                MappingActionChip(
+                  label: 'Y+10',
+                  onTap: () => _jog('Y', 10),
+                  scale: rs,
+                ),
+                MappingActionChip(
+                  label: 'Y-10',
+                  onTap: () => _jog('Y', -10),
+                  scale: rs,
+                ),
+                MappingActionChip(
+                  label: 'Z+10',
+                  onTap: () => _jog('Z', 10),
+                  scale: rs,
+                ),
+                MappingActionChip(
+                  label: 'Z-10',
+                  onTap: () => _jog('Z', -10),
+                  scale: rs,
+                ),
               ],
             ),
             SizedBox(height: 20 * rs),
@@ -255,25 +337,61 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
               spacing: 8 * rs,
               runSpacing: 8 * rs,
               children: [
-                MappingActionChip(label: '홈으로 이동', onTap: _homeDevice, scale: rs),
-                MappingActionChip(label: '현재 위치를 원점으로 지정', onTap: _setCurrentAsOrigin, scale: rs),
-                MappingActionChip(label: '원점 테스트 터치', onTap: () => _testPress(0, 0), scale: rs),
+                MappingActionChip(
+                  label: '홈으로 이동',
+                  onTap: _homeDevice,
+                  scale: rs,
+                ),
+                MappingActionChip(
+                  label: '현재 위치를 원점으로 지정',
+                  onTap: _setCurrentAsOrigin,
+                  scale: rs,
+                ),
+                MappingActionChip(
+                  label: '원점 테스트 터치',
+                  onTap: () => _testPress(0, 0),
+                  scale: rs,
+                ),
               ],
             ),
             SizedBox(height: 12 * rs),
             Row(
               children: [
-                Expanded(child: LabeledNumberField(label: '시작 X (OriginX)', controller: _oxCtrl, scale: rs)),
+                Expanded(
+                  child: LabeledNumberField(
+                    label: '시작 X (OriginX)',
+                    controller: _oxCtrl,
+                    scale: rs,
+                  ),
+                ),
                 SizedBox(width: 12 * rs),
-                Expanded(child: LabeledNumberField(label: '시작 Y (OriginY)', controller: _oyCtrl, scale: rs)),
+                Expanded(
+                  child: LabeledNumberField(
+                    label: '시작 Y (OriginY)',
+                    controller: _oyCtrl,
+                    scale: rs,
+                  ),
+                ),
               ],
             ),
             SizedBox(height: 12 * rs),
             Row(
               children: [
-                Expanded(child: LabeledNumberField(label: '가로 간격 (PitchX)', controller: _pxCtrl, scale: rs)),
+                Expanded(
+                  child: LabeledNumberField(
+                    label: '가로 간격 (PitchX)',
+                    controller: _pxCtrl,
+                    scale: rs,
+                  ),
+                ),
                 SizedBox(width: 12 * rs),
-                Expanded(child: LabeledNumberField(label: '세로 간격 (PitchY)', controller: _pyCtrl, scale: rs)),
+                Expanded(
+                  child: LabeledNumberField(
+                    label: '세로 간격 (PitchY)',
+                    controller: _pyCtrl,
+                    scale: rs,
+                  ),
+                ),
               ],
             ),
             SizedBox(height: 20 * rs),
@@ -288,9 +406,21 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
             SizedBox(height: 12 * rs),
             Row(
               children: [
-                Expanded(child: LabeledNumberField(label: '홈 행 (Home Row)', controller: _hrCtrl, scale: rs)),
+                Expanded(
+                  child: LabeledNumberField(
+                    label: '홈 행 (Home Row)',
+                    controller: _hrCtrl,
+                    scale: rs,
+                  ),
+                ),
                 SizedBox(width: 12 * rs),
-                Expanded(child: LabeledNumberField(label: '홈 열 (Home Col)', controller: _hcCtrl, scale: rs)),
+                Expanded(
+                  child: LabeledNumberField(
+                    label: '홈 열 (Home Col)',
+                    controller: _hcCtrl,
+                    scale: rs,
+                  ),
+                ),
               ],
             ),
             SizedBox(height: 32 * rs),
@@ -306,16 +436,32 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
             Center(
               child: Column(
                 children: [
-                  JogArrowButton(icon: Icons.arrow_upward, onTap: () => _jog('Y', 1.0), scale: rs),
+                  JogArrowButton(
+                    icon: Icons.arrow_upward,
+                    onTap: () => _jog('Y', 1.0),
+                    scale: rs,
+                  ),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      JogArrowButton(icon: Icons.arrow_back, onTap: () => _jog('X', -1.0), scale: rs),
+                      JogArrowButton(
+                        icon: Icons.arrow_back,
+                        onTap: () => _jog('X', -1.0),
+                        scale: rs,
+                      ),
                       SizedBox(width: 40 * rs),
-                      JogArrowButton(icon: Icons.arrow_forward, onTap: () => _jog('X', 1.0), scale: rs),
+                      JogArrowButton(
+                        icon: Icons.arrow_forward,
+                        onTap: () => _jog('X', 1.0),
+                        scale: rs,
+                      ),
                     ],
                   ),
-                  JogArrowButton(icon: Icons.arrow_downward, onTap: () => _jog('Y', -1.0), scale: rs),
+                  JogArrowButton(
+                    icon: Icons.arrow_downward,
+                    onTap: () => _jog('Y', -1.0),
+                    scale: rs,
+                  ),
                 ],
               ),
             ),
@@ -357,15 +503,21 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
               spacing: 8 * rs,
               runSpacing: 8 * rs,
               children: [
-                MappingActionChip(label: '원점 (0,0)', onTap: () => _testPress(0, 0), scale: rs),
+                MappingActionChip(
+                  label: '원점 (0,0)',
+                  onTap: () => _testPress(0, 0),
+                  scale: rs,
+                ),
                 MappingActionChip(
                   label: '우측 끝',
-                  onTap: () => _testPress((int.tryParse(_colsCtrl.text) ?? 1) - 1, 0),
+                  onTap: () =>
+                      _testPress((int.tryParse(_colsCtrl.text) ?? 1) - 1, 0),
                   scale: rs,
                 ),
                 MappingActionChip(
                   label: '좌측 하단',
-                  onTap: () => _testPress(0, (int.tryParse(_rowsCtrl.text) ?? 1) - 1),
+                  onTap: () =>
+                      _testPress(0, (int.tryParse(_rowsCtrl.text) ?? 1) - 1),
                   scale: rs,
                 ),
                 MappingActionChip(
@@ -384,5 +536,4 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
       ),
     );
   }
-
 }
