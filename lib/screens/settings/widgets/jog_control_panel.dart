@@ -23,39 +23,86 @@ class JogControlPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final rs = scale;
+    final width = MediaQuery.sizeOf(context).width;
+    final compact = width < 390;
+    // 시각 요소가 축소되더라도 실제 터치 영역은 WCAG 최소 44dp를 유지한다.
+    final buttonSize = ((compact ? 44.0 : 52.0) * rs)
+        .clamp(44.0, double.infinity)
+        .toDouble();
+    final iconSize = (compact ? 26.0 : 32.0) * rs;
+    final pad = (compact ? 10.0 : 14.0) * rs;
+    final xyGap = (compact ? 26.0 : 40.0) * rs;
+    final axisGap = (compact ? 28.0 : 54.0) * rs;
     return Container(
-      padding: EdgeInsets.all(16 * rs),
+      padding: EdgeInsets.all((compact ? 12 : 16) * rs),
       decoration: const BoxDecoration(
         color: AppColors.surfaceElevated,
         border: Border(bottom: BorderSide(color: AppColors.borderDefault)),
       ),
       child: Column(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildStepSizeSelector(rs),
-              _buildFeedRateDisplay(rs),
-            ],
-          ),
-          SizedBox(height: 20 * rs),
+          compact
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildStepSizeSelector(rs),
+                    SizedBox(height: 8 * rs),
+                    _buildFeedRateDisplay(rs, compact: true),
+                  ],
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _buildStepSizeSelector(rs),
+                    _buildFeedRateDisplay(rs),
+                  ],
+                ),
+          SizedBox(height: (compact ? 12 : 18) * rs),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Column(
                 children: [
-                  _jogButton(Icons.arrow_upward, () => onJog('Y', stepSize), rs),
+                  _jogButton(
+                    Icons.arrow_upward,
+                    () => onJog('Y', stepSize),
+                    rs,
+                    size: buttonSize,
+                    iconSize: iconSize,
+                    padding: pad,
+                  ),
                   Row(
                     children: [
-                      _jogButton(Icons.arrow_back, () => onJog('X', -stepSize), rs),
-                      SizedBox(width: 40 * rs),
-                      _jogButton(Icons.arrow_forward, () => onJog('X', stepSize), rs),
+                      _jogButton(
+                        Icons.arrow_back,
+                        () => onJog('X', -stepSize),
+                        rs,
+                        size: buttonSize,
+                        iconSize: iconSize,
+                        padding: pad,
+                      ),
+                      SizedBox(width: xyGap),
+                      _jogButton(
+                        Icons.arrow_forward,
+                        () => onJog('X', stepSize),
+                        rs,
+                        size: buttonSize,
+                        iconSize: iconSize,
+                        padding: pad,
+                      ),
                     ],
                   ),
-                  _jogButton(Icons.arrow_downward, () => onJog('Y', -stepSize), rs),
+                  _jogButton(
+                    Icons.arrow_downward,
+                    () => onJog('Y', -stepSize),
+                    rs,
+                    size: buttonSize,
+                    iconSize: iconSize,
+                    padding: pad,
+                  ),
                 ],
               ),
-              SizedBox(width: 60 * rs),
+              SizedBox(width: axisGap),
               Column(
                 children: [
                   _jogButton(
@@ -64,14 +111,20 @@ class JogControlPanel extends StatelessWidget {
                     rs,
                     label: 'Z UP',
                     color: Colors.blueAccent,
+                    size: buttonSize,
+                    iconSize: iconSize,
+                    padding: pad,
                   ),
-                  SizedBox(height: 20 * rs),
+                  SizedBox(height: (compact ? 12 : 20) * rs),
                   _jogButton(
                     Icons.keyboard_double_arrow_down,
                     () => onJog('Z', -stepSize),
                     rs,
                     label: 'Z DOWN',
                     color: Colors.blueAccent,
+                    size: buttonSize,
+                    iconSize: iconSize,
+                    padding: pad,
                   ),
                 ],
               ),
@@ -84,13 +137,24 @@ class JogControlPanel extends StatelessWidget {
 
   Widget _buildStepSizeSelector(double rs) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Text('이동 단위:', style: TextStyle(color: AppColors.textSecondary, fontSize: 13 * rs)),
+        Flexible(
+          child: Text(
+            '이동 단위:',
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 13 * rs),
+          ),
+        ),
         SizedBox(width: 8 * rs),
         DropdownButton<double>(
           value: stepSize,
           dropdownColor: AppColors.surfaceElevated,
-          style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: AppColors.primary,
+            fontWeight: FontWeight.bold,
+            fontSize: 13 * rs,
+          ),
           underline: Container(),
           items: [0.1, 0.5, 1.0, 5.0, 10.0].map((val) {
             return DropdownMenuItem(value: val, child: Text('${val}mm'));
@@ -101,11 +165,13 @@ class JogControlPanel extends StatelessWidget {
     );
   }
 
-  Widget _buildFeedRateDisplay(double rs) {
+  Widget _buildFeedRateDisplay(double rs, {bool compact = false}) {
     return SizedBox(
-      width: 170 * rs,
+      width: compact ? double.infinity : 170 * rs,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
+        crossAxisAlignment: compact
+            ? CrossAxisAlignment.start
+            : CrossAxisAlignment.end,
         children: [
           Text(
             '속도: F${feedRate.round()}',
@@ -131,16 +197,25 @@ class JogControlPanel extends StatelessWidget {
     double rs, {
     String? label,
     Color color = AppColors.primary,
+    required double size,
+    required double iconSize,
+    required double padding,
   }) {
     return Column(
       children: [
-        IconButton(
-          onPressed: onTap,
-          icon: Icon(icon, color: color, size: 36 * rs),
-          style: IconButton.styleFrom(
-            backgroundColor: AppColors.surface,
-            padding: EdgeInsets.all(12 * rs),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12 * rs)),
+        SizedBox(
+          width: size,
+          height: size,
+          child: IconButton(
+            onPressed: onTap,
+            icon: Icon(icon, color: color, size: iconSize),
+            style: IconButton.styleFrom(
+              backgroundColor: AppColors.surface,
+              padding: EdgeInsets.all(padding),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10 * rs),
+              ),
+            ),
           ),
         ),
         if (label != null) ...[
