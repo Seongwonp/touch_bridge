@@ -103,7 +103,9 @@ class _PrimaryButtonState extends State<PrimaryButton>
   @override
   void dispose() {
     _confirmResetTimer?.cancel();
-    _tts.stop();
+    // stop()은 전역 큐를 지워 다음 화면 안내까지 날린다.
+    // 이 버튼 자신의 대기 항목만 취소한다.
+    _tts.cancelSource('PrimaryButton');
     _scaleController.dispose();
     super.dispose();
   }
