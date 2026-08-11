@@ -43,13 +43,13 @@ class ActiveDeviceService {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kActiveDeviceId, deviceId);
-    
+
     if (deviceName != null && deviceName.isNotEmpty) {
       await prefs.setString(_kActiveDeviceName, deviceName);
     } else {
       await prefs.remove(_kActiveDeviceName);
     }
-    
+
     if (bleId != null) {
       await prefs.setString(_kActiveBleId, bleId);
       await BleService.instance.ensureConnected(bleId);
@@ -68,7 +68,7 @@ class ActiveDeviceService {
   String? getActiveDeviceId() => _activeDeviceId;
   String? getActiveDeviceName() => _activeDeviceName;
   String? getActiveBleId() => _activeBleId;
-  
+
   Future<String?> getActiveBleName() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_kActiveBleName);

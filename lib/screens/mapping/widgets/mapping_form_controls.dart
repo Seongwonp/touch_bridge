@@ -20,7 +20,10 @@ class LabeledNumberField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(color: AppColors.textTertiary, fontSize: 12 * rs)),
+        Text(
+          label,
+          style: TextStyle(color: AppColors.textTertiary, fontSize: 12 * rs),
+        ),
         SizedBox(height: 6 * rs),
         TextField(
           controller: controller,
@@ -33,7 +36,10 @@ class LabeledNumberField extends StatelessWidget {
               borderRadius: BorderRadius.circular(8 * rs),
               borderSide: BorderSide.none,
             ),
-            contentPadding: EdgeInsets.symmetric(horizontal: 12 * rs, vertical: 8 * rs),
+            contentPadding: EdgeInsets.symmetric(
+              horizontal: 12 * rs,
+              vertical: 8 * rs,
+            ),
           ),
         ),
       ],

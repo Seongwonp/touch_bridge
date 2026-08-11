@@ -52,7 +52,11 @@ class BleSecuritySession {
   /// [sendAndWaitAck]는 BleService의 명령 전송 함수를 그대로 넘겨받아 사용한다
   /// (challenge/auth는 BleService 쪽 비인증 허용 액션 목록에 포함되어 있어야 함).
   Future<bool> ensureAuthenticated({
-    required Future<String> Function(Map<String, dynamic> payload, {Duration timeout}) sendAndWaitAck,
+    required Future<String> Function(
+      Map<String, dynamic> payload, {
+      Duration timeout,
+    })
+    sendAndWaitAck,
     Duration timeout = const Duration(seconds: 5),
   }) async {
     if (_isAuthenticated) return true;
@@ -60,16 +64,23 @@ class BleSecuritySession {
     await _loadPairKey();
     if (_pairKey == null) return false; // not provisioned
 
-    final nonceResp = await sendAndWaitAck({'action': 'challenge'}, timeout: timeout);
+    final nonceResp = await sendAndWaitAck({
+      'action': 'challenge',
+    }, timeout: timeout);
     if (!nonceResp.startsWith('NONCE:')) return false;
     final nonce = nonceResp.substring(6);
 
     final mac = _hmacHex(_pairKey!, nonce);
-    final authResp = await sendAndWaitAck({'action': 'auth', 'mac': mac}, timeout: timeout);
+    final authResp = await sendAndWaitAck({
+      'action': 'auth',
+      'mac': mac,
+    }, timeout: timeout);
 
     if (authResp.toUpperCase().contains('AUTH_OK')) {
       _authenticated = true;
-      _authExpiryMs = DateTime.now().millisecondsSinceEpoch + sessionDuration.inMilliseconds;
+      _authExpiryMs =
+          DateTime.now().millisecondsSinceEpoch +
+          sessionDuration.inMilliseconds;
       onLog('SEC: session authenticated');
       return true;
     }
@@ -80,7 +91,8 @@ class BleSecuritySession {
   /// 페어링 키를 기기에 등록하고 secure storage에 저장한다.
   Future<bool> provisionPairKey(
     String secret, {
-    required Future<String> Function(Map<String, dynamic> payload) sendAndWaitAck,
+    required Future<String> Function(Map<String, dynamic> payload)
+    sendAndWaitAck,
   }) async {
     final res = await sendAndWaitAck({'action': 'provision', 'secret': secret});
     if (res.toUpperCase().contains('PROVISION_OK')) {

@@ -2,7 +2,8 @@ class Course {
   final String id;
   final String name;
   final String description;
-  final List<String> buttonIds; // e.g., ['BT-01', 'BT-01', 'BT-05'] for 20s start
+  final List<String>
+  buttonIds; // e.g., ['BT-01', 'BT-01', 'BT-05'] for 20s start
   final String icon;
 
   Course({

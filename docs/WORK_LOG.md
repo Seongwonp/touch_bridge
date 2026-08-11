@@ -2,7 +2,7 @@
 
 > 담당: 박성원 | AI 협업: Gemini CLI (Auto-Edit)
 > 프로젝트: 2026 한이음 드림업 — 시각장애인용 가전 터치패드 자동 입력 시스템  
-> 팀: 3팀 멜론머스크 (차아미 · 박성원 · 서예솔)  
+> 팀: 3팀 멜론머스크 (박성원 · 서예솔)
 > 기간: 2026.03 ~ 2026.10
 
 ---
@@ -354,3 +354,119 @@
 
 ### 검증
 - 매 단계 `flutter analyze`(0건), `flutter test`(29/29 통과), Chrome 부팅 스모크 테스트로 회귀 확인.
+
+---
+
+## 2026-07-19 — 하드웨어 개선 방향 문서화
+
+### 결정 배경
+- 기존 28BYJ-48 기반 구조는 실제 터치 압력과 반복 위치 정밀도에서 한계가 있어 모터/드라이버 상향을 검토했다.
+- DC 기어모터는 토크는 강하지만 엔코더/PID 없이 X/Y/Z 좌표 제어가 어려워, 앱의 사진 매핑 좌표와 연결하기에는 복잡도가 높다고 판단했다.
+
+### 신규 하드웨어 기준
+- X축: NK1704S 42각 스텝모터 1개 + TB6600 1개
+- Y축: NK1704S 42각 스텝모터 1개 + TB6600 1개
+- Z축: NK1704S 42각 스텝모터 1개 + TB6600 1개
+- 전원: 12V 배럴잭 별도 모터 전원, MCU 전원과 분리, 공통 GND 유지
+- 모션 제어: Arduino Uno + GRBL 유지
+- 통신: ESP32가 BLE 또는 향후 Wi-Fi 명령을 받아 Arduino Uno GRBL로 UART 전달
+
+### 앱 영향 범위
+- 기존 앱 구조는 유지하되, `BT-xx -> row/col -> BTN_n` 중심 실행을 `BT-xx -> X/Y mm 좌표 -> Z 누름 G-code 시퀀스`로 확장해야 한다.
+- 매핑 프로필에 `travelHeightZ`, `pressDepthZ`, `travelFeed`, `pressFeed` 같은 Z축/속도 설정을 추가 검토한다.
+- 개발자 콘솔은 `$H`, X/Y/Z jog, raw G-code, STOP, GRBL 응답 로그를 중심으로 정리한다.
+- Wi-Fi 제어 API를 추가하더라도 BLE는 초기 설정/복구/근거리 시연 경로로 유지한다.
+
+### 문서 변경
+- `docs/HARDWARE_MIGRATION_PLAN.md`: NEMA11/TMC2208 계획을 NK1704S/TB6600/Arduino Uno GRBL 기준으로 전면 갱신.
+- `docs/HARDWARE_TASKS.md`: XYZ 모터/드라이버, 전원, 리미트 스위치, GRBL 튜닝 체크리스트 반영.
+- `docs/HW_APP_INTEGRATION_CONTRACT_KO.md`: BLE/Wi-Fi 채널, XYZ G-code 실행 계약, 레거시 명령 호환 정책 정리.
+- `docs/AI_SYSTEM_OVERVIEW_KO.md`: AI 협업용 아키텍처를 ESP32 BLE/Wi-Fi 브릿지 + Arduino Uno GRBL + TB6600 x3 구조로 갱신.
+- `docs/MAPPING_VOICE_STABILIZATION_TODO.md`: 앱 수정 TODO와 실기기 검증 항목 추가.
+
+### 검증
+- 문서 변경만 수행. 앱 코드/테스트는 실행하지 않음.
+
+---
+
+## 2026-07-19 — 접근성/발표 문서 병합 보강
+
+### 배경
+- Claude가 기존 문서와 초안 비교 후 `DOCS_MERGE_PROPOSAL_2026-07-19.md`를 작성했다.
+- 기존 문서와 충돌하지 않는 보강안만 선별해 실제 docs 문서에 병합했다.
+
+### 변경 내용
+- `ACCESSIBILITY_REDESIGN_PLAN.md`
+  - 하드웨어 전제와 접근성 책임 분리 추가.
+  - 개발자 모드 기능에 `$H`, Z축 테스트 누름, GRBL 로그, dry-run G-code 로그 추가.
+  - GRBL `ok/error/ALARM`을 사용자 언어로 번역하는 P6 항목 추가.
+- `ACCESSIBILITY_COPY_GUIDE.md`
+  - GRBL `ALARM` 수신 시 사용자 문구 추가.
+  - 테스트 터치 전 안전 경고 문구 추가.
+  - 사용자 모드 기술 용어 금칙표와 Semantics/스크린리더 병행 규칙 추가.
+- `REPRO_RUNBOOK.md`
+  - 12V/TB6600/NK1704S 실기기 전원 인가 전·후 안전 체크리스트 추가.
+  - 화면을 가린 상태의 사용자 모드 합격 기준, GRBL 오류/통신 신뢰성 검증, VoiceOver/TalkBack 병행 검증, 릴리스 전 회귀 세트 추가.
+  - 기존 중복/번호 꼬임이 있던 매핑 검증 절차를 순서대로 재정리.
+- `JUDGING_BRIEF.md`
+  - 실행 파이프라인, 하드웨어 선택 이유 표, 예상 Q&A 6개 추가.
+- `DEMO_SCRIPT_3MIN.md`
+  - 시연 전 체크리스트, 화면 안 보기 연출, 시연 실패 대응표 추가.
+
+### 검증
+- 문서 변경만 수행. 앱 코드/테스트는 실행하지 않음.
+
+---
+
+## 2026-07-19 — 사용자 모드 기본화 및 XYZ dry-run 실행 경로
+
+### 변경 배경
+- 시각장애인 사용자가 처음 앱을 열었을 때 기기 관리/매핑 같은 보호자 기능이 보이면 앱이 과도하게 복잡해질 수 있어, 기본값을 사용자 모드에 맞췄다.
+- 하드웨어가 NK1704S/TB6600/GRBL 기반 XYZ 구조로 전환될 예정이므로, 실기기 도착 전에도 앱에서 `BT-xx -> X/Y/Z G-code` 변환을 로그로 검증할 수 있게 했다.
+
+### 코드 변경
+- `AccessibilitySettings`
+  - `guardianModeEnabled` 기본값을 `false`로 변경.
+  - 저장값이 없으면 사용자 모드(홈/비상/설정 중심)로 시작한다.
+- `DeviceMappingProfile`
+  - Z축/모션 설정 필드 추가:
+    - `travelHeightZ`
+    - `pressDepthZ`
+    - `travelFeed`
+    - `pressFeed`
+    - `dwellSeconds`
+  - JSON 저장/로드에 `motion` 섹션 추가. 기존 프로필은 기본값으로 자동 보정된다.
+- `MappingExecutionService`
+  - `calculateX`, `calculateY`, `buildPressGcode`, `sendGcodeSequence` 추가.
+  - 버튼 실행을 `BT-xx -> row/col -> X/Y mm -> Z 누름 G-code` 흐름으로 확장.
+  - `dryRun` 옵션 추가. 실제 BLE 전송 없이 생성된 G-code, row/col, X/Y 좌표를 결과와 로그로 확인 가능.
+- `DeveloperConsoleScreen`
+  - `$H` 홈 복귀, `STOP`, Z축 테스트 누름, `BT-xx` dry-run G-code 로그 버튼 추가.
+  - 활성 기기의 저장 매핑을 읽어 dry-run 변환 결과를 개발자 로그에 표시한다.
+
+### 테스트
+- `dart format`: 통과
+- `flutter analyze`: 통과
+- `flutter test`: 통과 (31개)
+
+### 실기기 확인 필요
+- TB6600/NK1704S 도착 후 `$H`, X/Y/Z jog, Z 테스트 누름, dry-run과 실제 raw G-code 전송 일치 여부 확인.
+- GRBL `ok/error/ALARM` 응답을 앱에서 사용자 문구로 번역하는 후속 작업 필요.
+
+---
+
+## 2026-07-19 — 개발자 콘솔 반응형 보강
+
+### 변경 내용
+- `JogControlPanel`
+  - 작은 폭(`<390px`)에서는 이동 단위/속도 설정이 세로로 접히도록 변경.
+  - X/Y/Z 조그 버튼 크기, 아이콘 크기, 축 간격을 화면 폭에 맞춰 축소.
+  - 버튼 크기를 명시해 hover/label 변화로 레이아웃이 흔들리지 않게 조정.
+- `DeveloperConsoleScreen`
+  - 작은 높이(`<700px`)에서는 raw 명령 입력창의 하단 여백을 줄여 320x640 화면에서도 세로 오버플로우가 나지 않도록 수정.
+
+### 테스트
+- `test/screens/developer_console_screen_test.dart` 추가.
+  - 320x640 작은 화면에서 `$H`, `STOP`, `Z 테스트`, `dry-run`, 이동 단위 컨트롤이 렌더링되는지 확인.
+- `flutter analyze`: 통과
+- `flutter test`: 통과 (32개)

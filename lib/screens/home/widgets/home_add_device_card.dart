@@ -5,17 +5,14 @@ import '../../../theme/app_colors.dart';
 import '../../connection/device_connect_screen.dart';
 
 class HomeAddDeviceCard extends StatelessWidget {
-  const HomeAddDeviceCard({
-    super.key,
-    required this.onDeviceAdded,
-  });
+  const HomeAddDeviceCard({super.key, required this.onDeviceAdded});
 
   final VoidCallback onDeviceAdded;
 
   @override
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
-    
+
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 6 * rs),
       child: Semantics(
@@ -25,9 +22,7 @@ class HomeAddDeviceCard extends StatelessWidget {
           onTap: () async {
             HapticFeedback.mediumImpact();
             await Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const DeviceConnectScreen(),
-              ),
+              MaterialPageRoute(builder: (_) => const DeviceConnectScreen()),
             );
             onDeviceAdded();
           },
@@ -36,10 +31,7 @@ class HomeAddDeviceCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppColors.surfaceElevated,
               borderRadius: BorderRadius.circular(24 * rs),
-              border: Border.all(
-                color: AppColors.primary,
-                width: 2 * rs,
-              ),
+              border: Border.all(color: AppColors.primary, width: 2 * rs),
               boxShadow: const [
                 BoxShadow(color: AppColors.shadowPrimary, blurRadius: 16),
               ],

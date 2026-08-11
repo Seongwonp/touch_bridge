@@ -22,7 +22,7 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
-    
+
     return Container(
       decoration: const BoxDecoration(color: AppColors.background),
       child: SafeArea(
@@ -33,11 +33,15 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
               elevation: 0,
               automaticallyImplyLeading: false,
               leading: showBack
-                ? IconButton(
-                    icon: Icon(Icons.arrow_back_ios_new_rounded, size: 22 * rs, color: AppColors.primary),
-                    onPressed: () => Navigator.pop(context),
-                  )
-                : null,
+                  ? IconButton(
+                      icon: Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 22 * rs,
+                        color: AppColors.primary,
+                      ),
+                      onPressed: () => Navigator.pop(context),
+                    )
+                  : null,
               title: Text(
                 title,
                 style: TextStyle(
@@ -47,10 +51,14 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
                   color: AppColors.primary,
                 ),
               ),
-              actions: actions?.map((a) => Padding(
-                    padding: EdgeInsets.only(right: 8 * rs),
-                    child: a,
-                  )).toList(),
+              actions: actions
+                  ?.map(
+                    (a) => Padding(
+                      padding: EdgeInsets.only(right: 8 * rs),
+                      child: a,
+                    ),
+                  )
+                  .toList(),
               centerTitle: false,
             ),
             // Status Header
@@ -59,8 +67,12 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
               child: Row(
                 children: [
                   Icon(
-                    BleService.instance.isConnected ? Icons.hub : Icons.hub_outlined,
-                    color: BleService.instance.isConnected ? Colors.greenAccent : Colors.redAccent,
+                    BleService.instance.isConnected
+                        ? Icons.hub
+                        : Icons.hub_outlined,
+                    color: BleService.instance.isConnected
+                        ? Colors.greenAccent
+                        : Colors.redAccent,
                     size: 13 * rs,
                   ),
                   SizedBox(width: 4 * rs),
@@ -68,8 +80,13 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
                       child: Text(
-                        BleService.instance.isConnected ? BleService.instance.connectedDeviceName : '허브 연결 필요',
-                        style: TextStyle(fontSize: 11 * rs, color: Colors.white70),
+                        BleService.instance.isConnected
+                            ? BleService.instance.connectedDeviceName
+                            : '허브 연결 필요',
+                        style: TextStyle(
+                          fontSize: 11 * rs,
+                          color: Colors.white70,
+                        ),
                       ),
                     ),
                   ),
@@ -80,8 +97,12 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
                       child: Text(
-                        ActiveDeviceService.instance.getActiveDeviceName() ?? '기기 선택 필요',
-                        style: TextStyle(fontSize: 11 * rs, color: Colors.white70),
+                        ActiveDeviceService.instance.getActiveDeviceName() ??
+                            '기기 선택 필요',
+                        style: TextStyle(
+                          fontSize: 11 * rs,
+                          color: Colors.white70,
+                        ),
                       ),
                     ),
                   ),
