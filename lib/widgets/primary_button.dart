@@ -157,7 +157,7 @@ class _PrimaryButtonState extends State<PrimaryButton>
                   // - ConstrainedBox로 최소 64px 보장, 텍스트가 크면 확장 허용
                   // - Flexible로 긴 라벨이 Row를 넘치지 않고 줄바꿈하도록
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 64),
+                    constraints: const BoxConstraints(minHeight: 80),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       child: Row(
@@ -165,7 +165,7 @@ class _PrimaryButtonState extends State<PrimaryButton>
                         children: [
                           Icon(
                             widget.icon ?? Icons.arrow_forward,
-                            size: 28,
+                            size: 32,
                             color: Colors.black,
                           ),
                           const SizedBox(width: 12),
@@ -175,7 +175,7 @@ class _PrimaryButtonState extends State<PrimaryButton>
                                   ? '${widget.label} (다시 누르기)'
                                   : widget.label,
                               style: const TextStyle(
-                                fontSize: 18,
+                                fontSize: 20,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.black,
                               ),
