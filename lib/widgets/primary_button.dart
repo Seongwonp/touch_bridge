@@ -115,7 +115,13 @@ class _PrimaryButtonState extends State<PrimaryButton>
     return Semantics(
       button: true,
       label: widget.label,
-      hint: widget.requireDoubleTap ? '한 번 누르면 음성 안내, 두 번 누르면 실행' : null,
+      // armed 상태를 value/hint로 동적 노출 — TalkBack/VoiceOver가 포커스를
+      // 재낭독할 때 "실행 대기 중" 상태를 명확히 전달한다.
+      value: _armed ? '실행 대기 중' : null,
+      hint: _armed
+          ? '한 번 더 활성화하면 실행됩니다'
+          : (widget.requireDoubleTap ? '한 번 누르면 음성 안내, 두 번 누르면 실행' : null),
+      liveRegion: _armed,
       child: GestureDetector(
         onTapDown: _onTapDown,
         onTapUp: _onTapUp,

@@ -503,7 +503,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         _statusMessage = '다시 확인 중';
         _isProcessing = false;
       });
-      await _speak('"$text"라고 들었어요. 맞으면 다시 한 번 말씀해 주세요.', interrupt: true);
+      await _speak('"$text"라고 들었어요. 맞으면 "예", 아니면 "아니오"라고 말씀해 주세요.', interrupt: true);
       return;
     }
 

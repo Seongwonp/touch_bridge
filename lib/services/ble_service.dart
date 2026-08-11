@@ -26,6 +26,7 @@ class BleService {
   BluetoothCharacteristic? _commandCharacteristic;
   StreamSubscription<List<int>>? _notifySub;
   StreamSubscription<BluetoothAdapterState>? _adapterStateSub;
+  StreamSubscription<BluetoothConnectionState>? _connectionSub;
   BluetoothAdapterState _adapterState = BluetoothAdapterState.unknown;
 
   final _logController = StreamController<String>.broadcast();
@@ -46,13 +47,13 @@ class BleService {
   // Security/session — challenge-response 인증은 BleSecuritySession에 위임
   late final BleSecuritySession _security;
 
+  // 인증 없이 허용되는 명령은 페어링·인증·비상정지만으로 제한한다.
+  // PRESS·SET_GRID·raw G-code는 물리 동작을 유발하므로 반드시 인증 후에만 허용.
   static const _nonAuthActions = {
     'challenge',
     'auth',
     'provision',
     HardwareProtocol.actionStop,
-    HardwareProtocol.actionSetGrid,
-    HardwareProtocol.actionPress,
   };
 
   // [디버그/데모 전용] 실제 BLE 없이 전송을 성공으로 흉내낸다(시뮬레이터 테스트용).
@@ -217,8 +218,12 @@ class BleService {
 
       await disconnect();
 
-      // 연결 상태 모니터링 시작
-      target.connectionState.listen((state) {
+      // 연결 상태 모니터링 — 구독을 저장해 재연결 시 이전 구독을 취소한다.
+      // 저장하지 않으면 연결을 바꿀 때마다 리스너가 누적되어 이전 기기의
+      // disconnected 이벤트가 현재 연결을 잘못 초기화할 수 있다.
+      _connectionSub?.cancel();
+      _connectionSub = target.connectionState.listen((state) {
+        if (_connectedDevice?.remoteId != target.remoteId) return;
         _connectionStateController.add(state);
         _addLog('연결 상태 변경: ${state.name}');
         if (state == BluetoothConnectionState.disconnected) {
@@ -297,6 +302,7 @@ class BleService {
 
   Future<void> disconnect() async {
     try {
+      await _connectionSub?.cancel();
       await _notifySub?.cancel();
       await _connectedDevice?.disconnect();
     } catch (e) {
@@ -305,6 +311,7 @@ class BleService {
       _addLog('연결 해제 완료');
       _connectedDevice = null;
       _commandCharacteristic = null;
+      _connectionSub = null;
       _notifySub = null;
       _security.reset();
     }

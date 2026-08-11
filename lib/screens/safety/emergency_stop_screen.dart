@@ -128,7 +128,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
 
   Future<void> _speak(
     String message, {
-    String source = 'emergencystopScreen',
+    String source = 'EmergencyStopScreen',
     bool interrupt = false,
   }) async {
     await _tts.speak(message, source: source, interrupt: interrupt);
@@ -178,6 +178,8 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     } else {
       // 전송만 됐거나 실패한 경우: 완료 화면으로 넘기지 않고 재시도할 수 있게 둔다.
       _stopInProgress = false;
+      // 정지 실패 시 음성 감지를 즉시 재시작해 "멈춰" 재시도를 받을 수 있게 한다.
+      if (mounted && _speechEnabled) _startListening();
     }
   }
 
