@@ -1,3 +1,5 @@
+import 'dart:math' show max;
+
 class MicrowaveCommandService {
   const MicrowaveCommandService._();
 
@@ -38,7 +40,9 @@ class MicrowaveCommandService {
     if (targetSeconds <= 0) {
       return (buttons: const ['BT-05'], actualSeconds: 0);
     }
-    final rounded = ((targetSeconds + 5) ~/ 10) * 10;
+    // 1~4초는 반올림 결과가 0이 되므로 최소 10초로 올린다.
+    // rounded == 0이면 시작 버튼(BT-05)만 눌려 카운트다운 화면이 즉시 완료로 보인다.
+    final rounded = max(10, ((targetSeconds + 5) ~/ 10) * 10);
     var remaining = rounded;
     final buttons = <String>[];
     const presets = [
