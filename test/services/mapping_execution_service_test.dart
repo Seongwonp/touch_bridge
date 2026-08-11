@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:touch_bridge/models/command_result.dart';
+import 'package:touch_bridge/services/ble_service.dart';
 import 'package:touch_bridge/services/device_mapping_service.dart';
 import 'package:touch_bridge/services/mapping_execution_service.dart';
 
@@ -171,6 +172,46 @@ void main() {
       expect(cr.userMessage, '사용자 문구');
       expect(cr.developerMessage, 'dev detail');
       expect(cr.isFailure, isTrue);
+    });
+  });
+
+  group('MappingExecutionService.pressPhysical (단락평가 수정 검증)', () {
+    tearDown(() => BleService.instance.setSendRawOverride(null));
+
+    test('첫 번째 sendRaw 실패 시 이후 명령을 전송하지 않는다', () async {
+      // &= 패턴은 Dart에서 단락평가를 하지 않아, 첫 실패 후에도 Z 하강/유지/
+      // 상승/원점 복귀 명령이 전송되는 위험한 중간 상태를 만들 수 있었다.
+      var callCount = 0;
+      BleService.instance.setSendRawOverride((cmd) async {
+        callCount++;
+        return false; // 모든 호출 실패
+      });
+
+      final result = await MappingExecutionService.instance.pressPhysical('BT-01');
+
+      expect(result.ok, isFalse);
+      expect(callCount, 1, reason: '첫 sendRaw 실패 후 이후 명령이 전송되어선 안 된다');
+    });
+
+    test('두 번째 sendRaw 실패 시 세 번째 이후를 전송하지 않는다', () async {
+      var callCount = 0;
+      BleService.instance.setSendRawOverride((cmd) async {
+        callCount++;
+        return callCount < 2; // 두 번째 호출부터 실패
+      });
+
+      final result = await MappingExecutionService.instance.pressPhysical('BT-01');
+
+      expect(result.ok, isFalse);
+      expect(callCount, 2, reason: '두 번째 실패 후 세 번째 이후 명령이 전송되어선 안 된다');
+    });
+
+    test('모든 sendRaw 성공 시 ok=true를 반환한다', () async {
+      BleService.instance.setSendRawOverride((_) async => true);
+
+      final result = await MappingExecutionService.instance.pressPhysical('BT-01');
+
+      expect(result.ok, isTrue);
     });
   });
 }
