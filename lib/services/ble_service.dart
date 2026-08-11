@@ -41,6 +41,7 @@ class BleService {
 
   Future<List<BleDeviceInfo>> Function(Duration timeout)? _scanOverride;
   Future<bool> Function(String deviceId)? _connectOverride;
+  Future<bool> Function(String command)? _sendRawOverride;
 
   // Security/session — challenge-response 인증은 BleSecuritySession에 위임
   late final BleSecuritySession _security;
@@ -251,7 +252,11 @@ class BleService {
         }
 
         _addLog('RECV: ${_normalizeHardwareLog(res)}');
-        _ackCompleter?.complete(res);
+        // isCompleted 체크: 빠른 연속 알림이 오면 이미 완료된 Completer에
+        // 다시 complete를 시도해 StateError가 발생하므로 반드시 가드한다.
+        if (_ackCompleter != null && !_ackCompleter!.isCompleted) {
+          _ackCompleter!.complete(res);
+        }
       });
 
       _addLog('연결 성공: ${target.platformName}');
@@ -333,6 +338,7 @@ class BleService {
   }
 
   Future<bool> sendRaw(String command) async {
+    if (_sendRawOverride != null) return _sendRawOverride!(command);
     _addLog('SEND_RAW: $command');
     final c = _commandCharacteristic;
     if (c == null) return false;
@@ -506,6 +512,11 @@ class BleService {
   void clearTestOverrides() {
     _scanOverride = null;
     _connectOverride = null;
+  }
+
+  @visibleForTesting
+  void setSendRawOverride(Future<bool> Function(String command)? fn) {
+    _sendRawOverride = fn;
   }
 }
 
