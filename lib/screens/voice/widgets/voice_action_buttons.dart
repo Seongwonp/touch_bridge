@@ -35,7 +35,7 @@ class VoiceActionButtons extends StatelessWidget {
               child: GestureDetector(
                 onTap: onMicTap,
                 child: Container(
-                  height: 64 * scale,
+                  height: 80 * scale,
                   decoration: BoxDecoration(
                     color: AppColors.primary,
                     borderRadius: BorderRadius.circular(16 * scale),
@@ -46,13 +46,13 @@ class VoiceActionButtons extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.stop_circle_outlined, color: Colors.black, size: 24 * scale),
+                      Icon(Icons.stop_circle_outlined, color: Colors.black, size: 28 * scale),
                       SizedBox(width: 8 * scale),
                       Text(
                         '듣기 멈추기',
                         style: TextStyle(
                           color: Colors.black,
-                          fontSize: 17 * scale,
+                          fontSize: 19 * scale,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
@@ -71,7 +71,7 @@ class VoiceActionButtons extends StatelessWidget {
               child: GestureDetector(
                 onTap: onCancelRecording,
                 child: Container(
-                  height: 64 * scale,
+                  height: 80 * scale,
                   decoration: BoxDecoration(
                     color: AppColors.surfaceElevated,
                     borderRadius: BorderRadius.circular(16 * scale),
@@ -82,7 +82,7 @@ class VoiceActionButtons extends StatelessWidget {
                       '취소',
                       style: TextStyle(
                         color: AppColors.textPrimary,
-                        fontSize: 17 * scale,
+                        fontSize: 19 * scale,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -103,7 +103,7 @@ class VoiceActionButtons extends StatelessWidget {
           onTap: onMicTap,
           child: Container(
             width: double.infinity,
-            height: 64 * scale,
+            height: 80 * scale,
             decoration: BoxDecoration(
               color: AppColors.primary,
               borderRadius: BorderRadius.circular(16 * scale),
@@ -114,13 +114,13 @@ class VoiceActionButtons extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.mic, color: Colors.black, size: 26 * scale),
+                Icon(Icons.mic, color: Colors.black, size: 30 * scale),
                 SizedBox(width: 10 * scale),
                 Text(
                   micArmed ? '지금 누르면 녹음 시작' : '녹음 준비',
                   style: TextStyle(
                     color: Colors.black,
-                    fontSize: 17 * scale,
+                    fontSize: 19 * scale,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -133,7 +133,7 @@ class VoiceActionButtons extends StatelessWidget {
 
     return SizedBox(
       width: double.infinity,
-      height: 64 * scale,
+      height: 80 * scale,
       child: OutlinedButton.icon(
         onPressed: onCancelAnalysis,
         style: OutlinedButton.styleFrom(
@@ -141,10 +141,10 @@ class VoiceActionButtons extends StatelessWidget {
           foregroundColor: AppColors.textSecondary,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16 * scale)),
         ),
-        icon: const Icon(Icons.close_rounded),
+        icon: const Icon(Icons.close_rounded, size: 28),
         label: Text(
           '분석 취소',
-          style: TextStyle(fontSize: 16 * scale, fontWeight: FontWeight.w700),
+          style: TextStyle(fontSize: 19 * scale, fontWeight: FontWeight.w700),
         ),
       ),
     );
