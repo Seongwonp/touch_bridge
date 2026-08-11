@@ -43,9 +43,6 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   bool _speechEnabled = false;
   bool _isStartingListening = false;
   bool _stopInProgress = false;
-  // 완료/중단 화면으로 넘어갈 때는 dispose에서 TTS를 끊지 않는다
-  // (다음 화면의 안내가 "작동이..."처럼 잘리는 문제 방지).
-  bool _keepTtsOnDispose = false;
 
   @override
   void initState() {
@@ -112,7 +109,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
       onFinished: () {
         if (mounted) {
           AccessibilityExperimentService.instance.recordTaskCompleted();
-          _keepTtsOnDispose = true;
+
           Navigator.of(context).pushReplacement(
             MaterialPageRoute<void>(
               builder: (_) => const StopDoneScreen(completed: true),
@@ -175,7 +172,6 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     if (!mounted) return;
     if (outcome.acknowledged) {
       // 기기 정지가 확인된 경우에만 "안전하게 중단" 완료 화면으로 이동한다.
-      _keepTtsOnDispose = true;
       Navigator.of(
         context,
       ).push(MaterialPageRoute<void>(builder: (_) => const StopDoneScreen()));
@@ -208,7 +204,9 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   void dispose() {
     _timerService.stop();
     _holdController.dispose();
-    if (!_keepTtsOnDispose) _tts.stop();
+    // 이 화면 자신의 대기 항목만 취소한다. 화면 전환 후 다음 화면의 안내를
+    // 날리지 않기 위해 stop() 대신 cancelSource를 쓴다.
+    _tts.cancelSource('EmergencyStopScreen');
     _speech.stop();
     super.dispose();
   }
