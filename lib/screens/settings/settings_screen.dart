@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import '../../services/accessibility_settings.dart';
 import '../../services/tts_service.dart';
@@ -260,6 +261,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ],
             ),
+            // 개발자 설정: 디버그 빌드에서만 노출 — 릴리스 APK에는 raw 명령
+            // 인터페이스가 보이지 않도록 컴파일 타임에 제거한다.
+            if (kDebugMode) ...[
             SizedBox(height: ResponsiveScale.v(context, 24)),
             SectionLabel(icon: Icons.developer_mode_rounded, label: '개발자 설정'),
             SizedBox(height: ResponsiveScale.v(context, 10)),
@@ -324,6 +328,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ],
+            ], // kDebugMode 블록 끝
             SizedBox(height: ResponsiveScale.v(context, 24)),
             SectionLabel(icon: Icons.emergency_rounded, label: '비상 연락처'),
             SizedBox(height: ResponsiveScale.v(context, 10)),
