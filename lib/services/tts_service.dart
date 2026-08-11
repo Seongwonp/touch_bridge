@@ -205,7 +205,12 @@ class TtsService {
       while (_queue.isNotEmpty) {
         final u = _queue.removeAt(0);
         _lastSpokenAt = DateTime.now();
-        _lastSpokenText = u.text;
+        // result·emergency만 replay 대상으로 기억한다.
+        // navigation·info는 "명령을 확인하고 있습니다" 같은 중간 진행 안내라
+        // "다시 말해줘" 대상이 아니다.
+        if (u.priority.index >= TtsPriority.result.index) {
+          _lastSpokenText = u.text;
+        }
         _speakCompleter = Completer<void>();
         // fire-and-forget이므로 실패가 unhandled Future error로 새지 않게
         // catchError로 반드시 받아준다(테스트/일부 플랫폼에서 TTS 플랫폼
@@ -219,7 +224,13 @@ class TtsService {
         // 완료/취소/오류 이벤트 또는 안전 타임아웃까지 대기.
         try {
           await _speakCompleter!.future.timeout(const Duration(seconds: 20));
-        } catch (_) {}
+        } catch (_) {
+          // 타임아웃: unawaited로 실행 중인 발화가 계속 재생되어 다음 큐와 겹치는
+          // 것을 막기 위해 직접 중단한다.
+          try {
+            await _tts.stop();
+          } catch (_) {}
+        }
         _speakCompleter = null;
       }
     } finally {
@@ -236,6 +247,14 @@ class TtsService {
     _completeCurrent();
     _lastSpokenText = '';
     _lastSpokenAt = DateTime.fromMillisecondsSinceEpoch(0);
+  }
+
+  /// 특정 [source]의 대기 중인 발화만 취소한다.
+  /// 현재 재생 중인 발화는 멈추지 않고, 다른 source의 대기 항목도 유지된다.
+  /// 화면 dispose 시 전역 stop() 대신 이 메서드를 써야 한다 —
+  /// stop()은 전체 큐를 지워 다음 화면의 안내까지 날린다.
+  void cancelSource(String source) {
+    _queue.removeWhere((u) => u.source == source);
   }
 
   /// 마지막으로 재생을 시작한 안내 문구. "다시 말해줘" 재생(replayLast)에 쓴다.
