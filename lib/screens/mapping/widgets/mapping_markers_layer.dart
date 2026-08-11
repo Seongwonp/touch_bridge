@@ -28,8 +28,7 @@ class MappingMarkersLayer extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        if (redMarkerPosition != null)
-          _buildRedMarker(redMarkerPosition!),
+        if (redMarkerPosition != null) _buildRedMarker(redMarkerPosition!),
         ...points.asMap().entries.map((entry) {
           final idx = entry.key;
           final point = entry.value;
@@ -66,8 +65,14 @@ class MappingMarkersLayer extends StatelessWidget {
           if (imageRect.width <= 0 || imageRect.height <= 0) return;
           onRedMarkerDrag(
             Offset(
-              (normalized.dx + details.delta.dx / imageRect.width).clamp(0.0, 1.0),
-              (normalized.dy + details.delta.dy / imageRect.height).clamp(0.0, 1.0),
+              (normalized.dx + details.delta.dx / imageRect.width).clamp(
+                0.0,
+                1.0,
+              ),
+              (normalized.dy + details.delta.dy / imageRect.height).clamp(
+                0.0,
+                1.0,
+              ),
             ),
           );
         },
@@ -79,7 +84,11 @@ class MappingMarkersLayer extends StatelessWidget {
             shape: BoxShape.circle,
             border: Border.all(color: Colors.white, width: 2 * scale),
           ),
-          child: Icon(Icons.gps_fixed_rounded, color: Colors.white, size: 20 * scale),
+          child: Icon(
+            Icons.gps_fixed_rounded,
+            color: Colors.white,
+            size: 20 * scale,
+          ),
         ),
       ),
     );

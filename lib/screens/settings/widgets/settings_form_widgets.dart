@@ -154,7 +154,10 @@ class SwitchRow extends StatelessWidget {
                 ),
                 Text(
                   subtitle,
-                  style: TextStyle(color: AppColors.textTertiary, fontSize: 13 * rs),
+                  style: TextStyle(
+                    color: AppColors.textTertiary,
+                    fontSize: 13 * rs,
+                  ),
                 ),
               ],
             ),
@@ -359,7 +362,10 @@ class ContactRow extends StatelessWidget {
               ),
               Text(
                 phone,
-                style: const TextStyle(color: AppColors.textTertiary, fontSize: 14),
+                style: const TextStyle(
+                  color: AppColors.textTertiary,
+                  fontSize: 14,
+                ),
               ),
             ],
           ),

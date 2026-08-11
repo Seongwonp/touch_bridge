@@ -119,9 +119,14 @@ class AiBackendService {
     required String mimeType,
   }) async {
     if (kDebugMode) {
-      debugPrint('[AI_BACKEND] vision mime=$mimeType bytes=${imageBytes.length}');
+      debugPrint(
+        '[AI_BACKEND] vision mime=$mimeType bytes=${imageBytes.length}',
+      );
     }
-    AppLogger.info('ai.vision.request', {'mime': mimeType, 'bytes': imageBytes.length});
+    AppLogger.info('ai.vision.request', {
+      'mime': mimeType,
+      'bytes': imageBytes.length,
+    });
     _validatedBaseUrl();
 
     Future<http.Response> doRequest() async {
@@ -135,7 +140,9 @@ class AiBackendService {
           ),
         );
       final streamed = await req.send().timeout(const Duration(seconds: 60));
-      return http.Response.fromStream(streamed).timeout(const Duration(seconds: 65));
+      return http.Response.fromStream(
+        streamed,
+      ).timeout(const Duration(seconds: 65));
     }
 
     http.Response res;
@@ -148,7 +155,9 @@ class AiBackendService {
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
       AppLogger.warn('ai.vision.response_error', {'status': res.statusCode});
-      throw StateError('비전 매핑 API 오류: ${res.statusCode} ${utf8.decode(res.bodyBytes)}');
+      throw StateError(
+        '비전 매핑 API 오류: ${res.statusCode} ${utf8.decode(res.bodyBytes)}',
+      );
     }
     AppLogger.info('ai.vision.response_ok', {'status': res.statusCode});
     return jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
@@ -158,16 +167,15 @@ class AiBackendService {
     _validatedBaseUrl();
     AppLogger.info('ai.cloud.fetch_profile', {'device_id': deviceId});
     final res = await http.get(_uri('/device-profile/$deviceId'));
-    
+
     if (res.statusCode == 404) {
       throw StateError('등록되지 않은 기기입니다. (ID: $deviceId)');
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw StateError('프로필 조회 API 오류: ${res.statusCode}');
     }
-    
+
     AppLogger.info('ai.cloud.fetch_ok', {'device_id': deviceId});
     return jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
   }
-
 }

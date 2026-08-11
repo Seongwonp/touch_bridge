@@ -28,7 +28,11 @@ class HomeFooterNavHint extends StatelessWidget {
         children: [
           IconButton(
             onPressed: onPrevious,
-            icon: Icon(Icons.chevron_left_rounded, color: AppColors.textTertiary, size: 28 * rs),
+            icon: Icon(
+              Icons.chevron_left_rounded,
+              color: AppColors.textTertiary,
+              size: 28 * rs,
+            ),
           ),
           Text(
             '좌우로 밀어서 기기 전환',
@@ -41,7 +45,11 @@ class HomeFooterNavHint extends StatelessWidget {
           ),
           IconButton(
             onPressed: onNext,
-            icon: Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary, size: 28 * rs),
+            icon: Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.textTertiary,
+              size: 28 * rs,
+            ),
           ),
         ],
       ),

@@ -30,8 +30,14 @@ Future<BleDeviceInfo?> showEspSelectSheet({
             const SizedBox(height: 16),
             ...devices.map(
               (d) => ListTile(
-                leading: const Icon(Icons.bluetooth_rounded, color: AppColors.primary),
-                title: Text(d.name, style: const TextStyle(color: AppColors.textPrimary)),
+                leading: const Icon(
+                  Icons.bluetooth_rounded,
+                  color: AppColors.primary,
+                ),
+                title: Text(
+                  d.name,
+                  style: const TextStyle(color: AppColors.textPrimary),
+                ),
                 subtitle: Text(
                   '${d.id}\nRSSI: ${d.rssi} dBm',
                   style: const TextStyle(color: AppColors.textTertiary),

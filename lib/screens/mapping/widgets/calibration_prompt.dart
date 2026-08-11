@@ -22,7 +22,11 @@ class CalibrationPrompt extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.gps_fixed_rounded, color: AppColors.primary, size: 40 * scale),
+            Icon(
+              Icons.gps_fixed_rounded,
+              color: AppColors.primary,
+              size: 40 * scale,
+            ),
             SizedBox(height: 16 * scale),
             Text(
               '초기 위치 설정 (Calibration)',

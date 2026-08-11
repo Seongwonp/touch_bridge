@@ -68,7 +68,10 @@ class MappingHeader extends StatelessWidget {
                       )
                     : Text(
                         'AI 분석하기',
-                        style: TextStyle(color: Colors.white, fontSize: 12 * rs),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 12 * rs,
+                        ),
                       ),
               ),
           ],

@@ -46,7 +46,11 @@ class VoiceActionButtons extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.stop_circle_outlined, color: Colors.black, size: 28 * scale),
+                      Icon(
+                        Icons.stop_circle_outlined,
+                        color: Colors.black,
+                        size: 28 * scale,
+                      ),
                       SizedBox(width: 8 * scale),
                       Text(
                         '듣기 멈추기',
@@ -139,7 +143,9 @@ class VoiceActionButtons extends StatelessWidget {
         style: OutlinedButton.styleFrom(
           side: const BorderSide(color: AppColors.textTertiary),
           foregroundColor: AppColors.textSecondary,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16 * scale)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16 * scale),
+          ),
         ),
         icon: const Icon(Icons.close_rounded, size: 28),
         label: Text(
