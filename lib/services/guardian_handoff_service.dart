@@ -47,14 +47,19 @@ class GuardianHandoffService {
     );
 
     final profile = await DeviceMappingService.instance.load(deviceId);
-    final hasButtons = profile.buttonMap.isNotEmpty;
+    // buttonMap이 비어 있어도 "좌표로 설정" 경로는 그리드 기반 fallback으로
+    // 정상 동작하므로(사진 매핑처럼 버튼별 위치가 없을 뿐), 저장된 적이
+    // 있는지로 판단한다. 둘 다 저장 시점에 프로필이 생기기 때문이다.
+    final hasSavedProfile = await DeviceMappingService.instance.hasSavedProfile(
+      deviceId,
+    );
     items.add(
       HandoffCheckItem(
         label: '버튼 위치가 매핑됨',
-        passed: hasButtons,
-        detail: hasButtons
+        passed: hasSavedProfile,
+        detail: hasSavedProfile
             ? null
-            : '아직 매핑된 버튼이 없습니다. 사진 매핑이나 수동 매핑으로 버튼 위치를 등록하세요.',
+            : '아직 매핑된 버튼이 없습니다. 사진 매핑이나 좌표 설정으로 버튼 위치를 등록하세요.',
       ),
     );
 
@@ -69,8 +74,14 @@ class GuardianHandoffService {
       ),
     );
 
-    if (hasButtons) {
-      final candidate = testButtonId ?? profile.buttonMap.keys.first;
+    if (hasSavedProfile) {
+      // buttonMap이 비어 있으면(좌표 전용 설정) MicrowaveCommandService의
+      // 그리드 fallback으로 해석 가능한 대표 버튼(BT-05, 시작)을 대신 쓴다.
+      final candidate =
+          testButtonId ??
+          (profile.buttonMap.isNotEmpty
+              ? profile.buttonMap.keys.first
+              : 'BT-05');
       final result = await MappingExecutionService.instance.pressButton(
         deviceId: deviceId,
         profile: profile,

@@ -11,6 +11,7 @@ import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../../theme/app_colors.dart';
 import '../voice/voice_listening_screen.dart';
+import '../connection/device_connect_screen.dart';
 
 import 'widgets/home_empty_state.dart';
 import 'widgets/home_device_card.dart';
@@ -71,7 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
       await _tts.speak(
         guardianMode
             ? '홈입니다. 등록된 기기가 없습니다. 기기 관리에서 새 기기를 추가하세요.'
-            : '홈입니다. 등록된 기기가 없습니다. 보호자에게 기기 추가를 요청하세요.',
+            : '홈입니다. 등록된 기기가 없습니다. 화면의 기기 추가하기 버튼으로 직접 등록하거나, 보호자에게 요청하세요.',
         source: 'HomeScreen',
         interrupt: true,
       );
@@ -138,7 +139,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _currentDeviceIndex >= 0 && _currentDeviceIndex < _devices.length;
     if (!hasDevice) {
       await _tts.speak(
-        '선택된 기기가 없습니다. 보호자에게 기기 추가를 요청하세요.',
+        '선택된 기기가 없습니다. 화면의 기기 추가하기 버튼으로 직접 등록하거나, 보호자에게 요청하세요.',
         source: 'HomeScreen',
         interrupt: true,
       );
@@ -168,6 +169,14 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _openDeviceConnect() async {
+    HapticFeedback.mediumImpact();
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const DeviceConnectScreen()));
+    _loadDevices();
   }
 
   void _handleQuickVoiceTap() {
@@ -288,7 +297,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
     final guardianMode = AccessibilitySettings.instance.guardianModeEnabled;
-    final itemCount = _devices.length + (guardianMode ? 1 : 0);
+    // "기기 추가하기" 카드는 보호자 모드 여부와 상관없이 항상 마지막 페이지로 노출한다.
+    // 혼자 쓰는 시각장애인 사용자도 보호자 모드를 켜지 않고 기기를 등록할 수 있어야 한다.
+    final itemCount = _devices.length + 1;
 
     if (_isLoading) {
       return const Scaffold(
@@ -322,7 +333,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       HomeHeader(scale: rs),
                       SizedBox(height: 16 * rs),
                       if (_devices.isEmpty) ...[
-                        HomeEmptyState(guardianModeEnabled: guardianMode),
+                        HomeEmptyState(
+                          guardianModeEnabled: guardianMode,
+                          onAddDevicePressed: _openDeviceConnect,
+                        ),
                         SizedBox(height: 24 * rs),
                       ] else ...[
                         HomeVoiceActionButton(
@@ -341,7 +355,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         SizedBox(height: 14 * rs),
                         DevicePageIndicator(
-                          count: _devices.length + (guardianMode ? 1 : 0),
+                          count: _devices.length + 1,
                           currentIndex: _currentDeviceIndex,
                           scale: rs,
                         ),
@@ -363,7 +377,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               );
                             } else {
                               _tts.speak(
-                                guardianMode ? '새 기기 추가하기.' : '마지막 기기입니다.',
+                                '새 기기 추가하기.',
                                 source: 'HomeScreen',
                                 interrupt: true,
                               );
@@ -371,7 +385,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           },
                           itemCount: itemCount,
                           itemBuilder: (context, index) {
-                            if (guardianMode && index == _devices.length) {
+                            if (index == _devices.length) {
                               return HomeAddDeviceCard(
                                 onDeviceAdded: _loadDevices,
                               );
