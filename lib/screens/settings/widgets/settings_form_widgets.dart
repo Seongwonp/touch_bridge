@@ -40,7 +40,15 @@ class SettingsCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16 * rs),
         border: Border.all(color: AppColors.borderDefault),
       ),
-      child: Column(children: children),
+      // ListTile은 가장 가까운 Material 조상에 잉크·배경을 그리는데, Container
+      // (DecoratedBox)가 그 사이에 끼면 효과가 가려진다. Material을 명시적으로
+      // 추가해 최신 Flutter assertion을 해소한다.
+      child: Material(
+        type: MaterialType.transparency,
+        borderRadius: BorderRadius.circular(16 * rs),
+        clipBehavior: Clip.antiAlias,
+        child: Column(children: children),
+      ),
     );
   }
 }
