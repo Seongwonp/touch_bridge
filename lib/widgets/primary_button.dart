@@ -148,30 +148,43 @@ class _PrimaryButtonState extends State<PrimaryButton>
             ),
             child: SizedBox(
               width: double.infinity,
-              height: 64,
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
                   onTap: _handleTap,
                   borderRadius: BorderRadius.circular(16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        widget.icon ?? Icons.arrow_forward,
-                        size: 28,
-                        color: Colors.black,
+                  // 200% 텍스트 확대 시에도 레이아웃이 깨지지 않도록:
+                  // - ConstrainedBox로 최소 64px 보장, 텍스트가 크면 확장 허용
+                  // - Flexible로 긴 라벨이 Row를 넘치지 않고 줄바꿈하도록
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 64),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            widget.icon ?? Icons.arrow_forward,
+                            size: 28,
+                            color: Colors.black,
+                          ),
+                          const SizedBox(width: 12),
+                          Flexible(
+                            child: Text(
+                              _armed
+                                  ? '${widget.label} (다시 누르기)'
+                                  : widget.label,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 12),
-                      Text(
-                        _armed ? '${widget.label} (다시 누르기)' : widget.label,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),

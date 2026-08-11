@@ -327,13 +327,19 @@ class ContactRow extends StatelessWidget {
             color: AppColors.surfaceElevated,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Center(
-            child: Text(
-              name.isNotEmpty ? name[0] : '?',
-              style: const TextStyle(
-                color: AppColors.primary,
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
+          // FittedBox.scaleDown: 텍스트가 200% 확대돼도 컨테이너를 넘치지 않게 축소.
+          // 자연 크기가 48px 안에 들어오면 스케일을 건드리지 않는다.
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Text(
+                name.isNotEmpty ? name[0] : '?',
+                style: const TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
           ),

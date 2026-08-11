@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' show max;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../../models/command_result.dart';
@@ -240,14 +241,22 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
                                                   imageRect: imageRect,
                                                 );
 
+                                            // WCAG AA 최소 터치 타겟 44dp 보장.
+                                            // rs=0.8(소형 화면)이면 48*0.8=38.4dp로
+                                            // 44dp 미만이 되므로 하한을 강제한다.
+                                            final markerSize =
+                                                max(48.0 * rs, 44.0);
+                                            final half = markerSize / 2;
+
                                             return Positioned(
-                                              left: local.dx - (24 * rs),
-                                              top: local.dy - (24 * rs),
+                                              left: local.dx - half,
+                                              top: local.dy - half,
                                               child: _buildButtonMarker(
                                                 btId,
                                                 row,
                                                 col,
                                                 rs,
+                                                markerSize,
                                               ),
                                             );
                                           }).toList(),
@@ -330,7 +339,13 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
     );
   }
 
-  Widget _buildButtonMarker(String btId, int row, int col, double rs) {
+  Widget _buildButtonMarker(
+    String btId,
+    int row,
+    int col,
+    double rs,
+    double markerSize,
+  ) {
     final label = _getButtonLabel(btId);
     final armed = _armedButtonId == btId;
 
@@ -343,8 +358,8 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
         child: Column(
           children: [
             Container(
-              width: 48 * rs,
-              height: 48 * rs,
+              width: markerSize,
+              height: markerSize,
               decoration: BoxDecoration(
                 color: AppColors.primary.withValues(alpha: 0.9),
                 shape: BoxShape.circle,
