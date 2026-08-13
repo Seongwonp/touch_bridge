@@ -1,0 +1,84 @@
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+devtools_options.yaml
+.packages
+.flutter-plugins
+
+# iOS / Xcode related
+Pods/
+Podfile.lock
+*.xcworkspace
+xcuserdata/
+*.xcuserdatad/
+*.xcuserstate
+
+# Python related
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+backend/.venv/
+venv/
+ENV/
+env/
+dist/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.python-version
+
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+*.tmp
+*.temp
+
+# Environment variables
+.env
+.env.*
+backend/.env
+backend/.env.*
+!.env_ex
+!backend/.env_ex
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+.idea_modules/
+
+# Visual Studio Code related
+.vscode/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Credentials / Specific files
+touch-bridge-495300-e3f42de71ebd.json
+
+# Hardware code folders
+Touch_bridge_HW_code/
+Touch_bridge_HW_code-ble-connect/
+Touch_bridge_HW_code-moter/
+
