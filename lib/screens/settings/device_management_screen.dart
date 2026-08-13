@@ -230,6 +230,7 @@ class _DeviceManagementScreenState extends State<DeviceManagementScreen> {
                           ),
                           if (bleId != null)
                             IconButton(
+                              tooltip: 'BLE 연결 해제',
                               onPressed: () => _updateBleId(index, null, null),
                               icon: const Icon(
                                 Icons.link_off_rounded,
@@ -259,11 +260,22 @@ class _BleScannerSheet extends StatefulWidget {
 class _BleScannerSheetState extends State<_BleScannerSheet> {
   List<BleDeviceInfo> _foundDevices = [];
   bool _isScanning = false;
+  final FocusNode _titleFocus = FocusNode();
 
   @override
   void initState() {
     super.initState();
     _startScan();
+    // BottomSheet 열릴 때 제목 영역으로 포커스 이동 → 스크린리더가 "주변 하드웨어 검색" 부터 탐색
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _titleFocus.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _titleFocus.dispose();
+    super.dispose();
   }
 
   Future<void> _startScan() async {
@@ -294,12 +306,18 @@ class _BleScannerSheetState extends State<_BleScannerSheet> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  '주변 하드웨어 검색',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18 * rs,
-                    fontWeight: FontWeight.bold,
+                Focus(
+                  focusNode: _titleFocus,
+                  child: Semantics(
+                    header: true,
+                    child: Text(
+                      '주변 하드웨어 검색',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18 * rs,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
                 if (_isScanning)
@@ -313,6 +331,7 @@ class _BleScannerSheetState extends State<_BleScannerSheet> {
                   )
                 else
                   IconButton(
+                    tooltip: '기기 재검색',
                     onPressed: _startScan,
                     icon: const Icon(
                       Icons.refresh_rounded,

@@ -5,7 +5,10 @@ import '../../../theme/app_colors.dart';
 import '../../connection/device_connect_screen.dart';
 
 class HomeAddDeviceCard extends StatelessWidget {
-  const HomeAddDeviceCard({super.key, required this.onDeviceAdded});
+  const HomeAddDeviceCard({
+    super.key,
+    required this.onDeviceAdded,
+  });
 
   final VoidCallback onDeviceAdded;
 
@@ -13,25 +16,32 @@ class HomeAddDeviceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
 
+    Future<void> handleTap() async {
+      HapticFeedback.mediumImpact();
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const DeviceConnectScreen()),
+      );
+      onDeviceAdded();
+    }
+
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 6 * rs),
       child: Semantics(
         label: '새 기기 추가하기. 터치 브리지를 새로운 가전에 연결합니다.',
         button: true,
-        child: GestureDetector(
-          onTap: () async {
-            HapticFeedback.mediumImpact();
-            await Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const DeviceConnectScreen()),
-            );
-            onDeviceAdded();
-          },
+        onTap: handleTap,
+        child: ExcludeSemantics(
+          child: GestureDetector(
+          onTap: handleTap,
           child: Container(
             padding: EdgeInsets.all(28 * rs),
             decoration: BoxDecoration(
               color: AppColors.surfaceElevated,
               borderRadius: BorderRadius.circular(24 * rs),
-              border: Border.all(color: AppColors.primary, width: 2 * rs),
+              border: Border.all(
+                color: AppColors.primary,
+                width: 2 * rs,
+              ),
               boxShadow: const [
                 BoxShadow(color: AppColors.shadowPrimary, blurRadius: 16),
               ],
@@ -86,6 +96,7 @@ class HomeAddDeviceCard extends StatelessWidget {
               ),
             ),
           ),
+          ),  // ExcludeSemantics
         ),
       ),
     );

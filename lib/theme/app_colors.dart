@@ -159,12 +159,12 @@ class AppColors {
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   }
 
-  /// 선형화 (감마 보정)
+  /// 선형화 (sRGB → 선형 광량, IEC 61966-2-1 / WCAG 2.2 W3C 공식)
   static double _linearize(double value) {
-    if (value <= 0.03928) {
+    if (value <= 0.04045) {
       return value / 12.92;
     } else {
-      return pow((value + 0.055) / 1.055, 2).toDouble();
+      return pow((value + 0.055) / 1.055, 2.4).toDouble();
     }
   }
 }

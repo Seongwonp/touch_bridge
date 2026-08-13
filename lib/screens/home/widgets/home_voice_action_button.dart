@@ -35,9 +35,7 @@ class HomeVoiceActionButton extends StatelessWidget {
           color: enabled ? null : AppColors.disabled,
           borderRadius: BorderRadius.circular(14 * rs),
           boxShadow: enabled
-              ? const [
-                  BoxShadow(color: AppColors.shadowPrimary, blurRadius: 14),
-                ]
+              ? const [BoxShadow(color: AppColors.shadowPrimary, blurRadius: 14)]
               : null,
         ),
         child: Material(

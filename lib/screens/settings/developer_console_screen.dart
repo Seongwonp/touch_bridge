@@ -268,6 +268,7 @@ class _DeveloperConsoleScreenState extends State<DeveloperConsoleScreen> {
                 ),
                 SizedBox(width: 12 * rs),
                 IconButton(
+                  tooltip: '명령 전송',
                   onPressed: _sendMessage,
                   icon: const Icon(
                     Icons.send_rounded,

@@ -142,6 +142,7 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
       'name': appliance.name,
       'status': '작동 대기 중',
       'iconCodePoint': _iconForApplianceType(appliance.type).codePoint,
+      'deviceType': appliance.type.name,
       'bleId': widget.bleId,
       'bleName': widget.bleName,
     });
@@ -151,6 +152,7 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
       deviceName: appliance.name,
       bleId: widget.bleId,
       bleName: widget.bleName,
+      deviceType: appliance.type.name,
     );
     ActiveDeviceService.instance.notifyDeviceListChanged();
 
@@ -261,7 +263,10 @@ class _ApplianceCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16 * rs),
         border: Border.all(color: AppColors.borderDefault),
       ),
-      child: InkWell(
+      child: Semantics(
+        button: true,
+        label: '${appliance.name} 선택',
+        child: InkWell(
         onTap: () {
           onTap();
           _showGuide(context, rs);
@@ -314,6 +319,7 @@ class _ApplianceCard extends StatelessWidget {
               ),
             ],
           ),
+        ),
         ),
       ),
     );

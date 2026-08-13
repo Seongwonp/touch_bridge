@@ -38,6 +38,9 @@ class AiBackendService {
     return Uri.parse('$base$path');
   }
 
+  // 유효한 기기 ID 패턴: 영문·숫자·하이픈·언더스코어, 1~64자
+  static final _deviceIdPattern = RegExp(r'^[A-Za-z0-9_\-]{1,64}$');
+
   String _validatedBaseUrl() {
     final base = _baseUrl;
     if (base.isEmpty) {
@@ -47,6 +50,23 @@ class AiBackendService {
     final uri = Uri.tryParse(base);
     if (uri == null || uri.host.isEmpty) {
       throw StateError('AI_BACKEND_URL 형식이 올바르지 않습니다: $base');
+    }
+
+    // scheme 검증: 릴리스에서는 HTTPS만 허용.
+    // 디버그에서는 로컬 개발 편의를 위해 HTTP도 허용하되 경고를 남긴다.
+    if (uri.scheme != 'https' && uri.scheme != 'http') {
+      throw StateError(
+        'AI_BACKEND_URL scheme은 https 또는 http만 허용됩니다: ${uri.scheme}',
+      );
+    }
+    if (!kDebugMode && uri.scheme != 'https') {
+      throw StateError(
+        'AI_BACKEND_URL은 릴리스 빌드에서 HTTPS만 허용됩니다. '
+        '현재 scheme: ${uri.scheme}',
+      );
+    }
+    if (kDebugMode && uri.scheme == 'http') {
+      debugPrint('[AI_BACKEND] ⚠️ HTTP 사용 중 — 릴리스 전에 HTTPS로 교체하세요.');
     }
 
     final isLoopback = uri.host == '127.0.0.1' || uri.host == 'localhost';
@@ -164,9 +184,21 @@ class AiBackendService {
   }
 
   Future<Map<String, dynamic>> fetchDeviceProfile(String deviceId) async {
-    _validatedBaseUrl();
+    if (!_deviceIdPattern.hasMatch(deviceId)) {
+      throw ArgumentError(
+        '유효하지 않은 기기 ID입니다. 영문·숫자·하이픈·언더스코어(1~64자)만 허용됩니다: $deviceId',
+      );
+    }
+    final baseUri = Uri.parse(_validatedBaseUrl());
     AppLogger.info('ai.cloud.fetch_profile', {'device_id': deviceId});
-    final res = await http.get(_uri('/device-profile/$deviceId'));
+    final uri = baseUri.replace(
+      pathSegments: [
+        ...baseUri.pathSegments.where((s) => s.isNotEmpty),
+        'device-profile',
+        deviceId,
+      ],
+    );
+    final res = await http.get(uri);
 
     if (res.statusCode == 404) {
       throw StateError('등록되지 않은 기기입니다. (ID: $deviceId)');

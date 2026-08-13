@@ -5,8 +5,7 @@ enum TaskMode { manual, voice }
 
 class AccessibilityExperimentService extends ChangeNotifier {
   AccessibilityExperimentService._();
-  static final AccessibilityExperimentService instance =
-      AccessibilityExperimentService._();
+  static final AccessibilityExperimentService instance = AccessibilityExperimentService._();
 
   static const _kTotalTasks = 'exp_total_tasks';
   static const _kCompletedTasks = 'exp_completed_tasks';
@@ -33,10 +32,8 @@ class AccessibilityExperimentService extends ChangeNotifier {
   int get voiceTasks => _voiceTasks;
   int get manualTasks => _manualTasks;
   int get totalCompletionSeconds => _totalCompletionSeconds;
-  double get completionRate =>
-      _totalTasks == 0 ? 0 : (_completedTasks / _totalTasks) * 100;
-  double get averageCompletionSeconds =>
-      _completedTasks == 0 ? 0 : _totalCompletionSeconds / _completedTasks;
+  double get completionRate => _totalTasks == 0 ? 0 : (_completedTasks / _totalTasks) * 100;
+  double get averageCompletionSeconds => _completedTasks == 0 ? 0 : _totalCompletionSeconds / _completedTasks;
 
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -64,9 +61,7 @@ class AccessibilityExperimentService extends ChangeNotifier {
   Future<void> recordTaskCompleted() async {
     _completedTasks += 1;
     if (_activeTaskStartedAt != null) {
-      final elapsed = DateTime.now()
-          .difference(_activeTaskStartedAt!)
-          .inSeconds;
+      final elapsed = DateTime.now().difference(_activeTaskStartedAt!).inSeconds;
       _totalCompletionSeconds += elapsed < 0 ? 0 : elapsed;
     }
     _activeTaskStartedAt = null;

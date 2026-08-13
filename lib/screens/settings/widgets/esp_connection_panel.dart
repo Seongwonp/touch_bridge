@@ -33,9 +33,7 @@ class EspConnectionPanel extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            connected
-                ? Icons.bluetooth_connected_rounded
-                : Icons.bluetooth_searching_rounded,
+            connected ? Icons.bluetooth_connected_rounded : Icons.bluetooth_searching_rounded,
             color: connected ? Colors.greenAccent : AppColors.primary,
             size: 24 * rs,
           ),
@@ -56,10 +54,7 @@ class EspConnectionPanel extends StatelessWidget {
                   connected ? connectedId : '다른 ESP를 테스트하려면 선택하세요',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: AppColors.textTertiary,
-                    fontSize: 11 * rs,
-                  ),
+                  style: TextStyle(color: AppColors.textTertiary, fontSize: 11 * rs),
                 ),
               ],
             ),
@@ -70,20 +65,14 @@ class EspConnectionPanel extends StatelessWidget {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.black,
-              padding: EdgeInsets.symmetric(
-                horizontal: 12 * rs,
-                vertical: 10 * rs,
-              ),
+              padding: EdgeInsets.symmetric(horizontal: 12 * rs, vertical: 10 * rs),
               minimumSize: Size(80 * rs, 40 * rs),
             ),
             icon: isScanning
                 ? SizedBox(
                     width: 16 * rs,
                     height: 16 * rs,
-                    child: const CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.black,
-                    ),
+                    child: const CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
                   )
                 : Icon(Icons.search_rounded, size: 18 * rs),
             label: Text(

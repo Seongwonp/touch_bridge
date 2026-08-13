@@ -83,9 +83,10 @@ class _EmergencyButtonState extends State<EmergencyButton> {
             width: _armed ? 3 : 0,
           ),
         ),
-        child: SizedBox(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 84),
+          child: SizedBox(
           width: double.infinity,
-          height: 84,
           child: FilledButton.icon(
             onPressed: _handleTap,
             style: FilledButton.styleFrom(
@@ -98,6 +99,7 @@ class _EmergencyButtonState extends State<EmergencyButton> {
             ),
             icon: const Icon(Icons.warning_amber_rounded, size: 28),
             label: Text(_armed ? '${widget.label} (다시 누르기)' : widget.label),
+          ),
           ),
         ),
       ),

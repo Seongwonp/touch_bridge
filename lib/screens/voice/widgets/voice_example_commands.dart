@@ -36,7 +36,10 @@ class VoiceExampleCommands extends StatelessWidget {
           runSpacing: 8 * scale,
           children: kVoiceExampleCommands
               .map(
-                (cmd) => GestureDetector(
+                (cmd) => Semantics(
+                  button: true,
+                  label: '$cmd 명령 실행',
+                  child: GestureDetector(
                   onTap: () => onCommandTap(cmd),
                   child: Container(
                     padding: EdgeInsets.symmetric(
@@ -57,6 +60,7 @@ class VoiceExampleCommands extends StatelessWidget {
                       ),
                     ),
                   ),
+                ),
                 ),
               )
               .toList(),

@@ -29,11 +29,7 @@ class HomeHeader extends StatelessWidget {
               BoxShadow(color: AppColors.shadowPrimary, blurRadius: 10),
             ],
           ),
-          child: Icon(
-            Icons.devices_rounded,
-            color: Colors.black,
-            size: 22 * rs,
-          ),
+          child: Icon(Icons.devices_rounded, color: Colors.black, size: 22 * rs),
         ),
         SizedBox(width: 12 * rs),
         Expanded(

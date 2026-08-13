@@ -433,7 +433,10 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
     required double rs,
     bool isPrimary = false,
   }) {
-    return Material(
+    return Semantics(
+      button: true,
+      label: '$title. $desc',
+      child: Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
@@ -490,6 +493,7 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

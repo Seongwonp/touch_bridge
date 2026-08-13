@@ -154,10 +154,7 @@ class SwitchRow extends StatelessWidget {
                 ),
                 Text(
                   subtitle,
-                  style: TextStyle(
-                    color: AppColors.textTertiary,
-                    fontSize: 13 * rs,
-                  ),
+                  style: TextStyle(color: AppColors.textTertiary, fontSize: 13 * rs),
                 ),
               ],
             ),
@@ -266,7 +263,10 @@ class EmptyContactRow extends StatelessWidget {
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return Semantics(
+      button: true,
+      label: '연락처 추가. 보호자를 등록합니다',
+      child: InkWell(
       onTap: onTap,
       child: Row(
         children: [
@@ -301,6 +301,7 @@ class EmptyContactRow extends StatelessWidget {
             ],
           ),
         ],
+      ),
       ),
     );
   }
@@ -362,19 +363,18 @@ class ContactRow extends StatelessWidget {
               ),
               Text(
                 phone,
-                style: const TextStyle(
-                  color: AppColors.textTertiary,
-                  fontSize: 14,
-                ),
+                style: const TextStyle(color: AppColors.textTertiary, fontSize: 14),
               ),
             ],
           ),
         ),
         IconButton(
+          tooltip: '연락처 편집',
           onPressed: onEdit,
           icon: const Icon(Icons.edit_rounded, color: AppColors.textTertiary),
         ),
         IconButton(
+          tooltip: '전화 걸기',
           onPressed: onCall,
           icon: const Icon(Icons.call_rounded, color: AppColors.emergency),
         ),

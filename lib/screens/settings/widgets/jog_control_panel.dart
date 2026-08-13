@@ -165,6 +165,16 @@ class JogControlPanel extends StatelessWidget {
     );
   }
 
+  String _iconTooltip(IconData icon) {
+    if (icon == Icons.arrow_upward) return 'Y축 앞으로';
+    if (icon == Icons.arrow_downward) return 'Y축 뒤로';
+    if (icon == Icons.arrow_back) return 'X축 왼쪽';
+    if (icon == Icons.arrow_forward) return 'X축 오른쪽';
+    if (icon == Icons.keyboard_double_arrow_up) return 'Z축 위로';
+    if (icon == Icons.keyboard_double_arrow_down) return 'Z축 아래로';
+    return '이동';
+  }
+
   Widget _buildFeedRateDisplay(double rs, {bool compact = false}) {
     return SizedBox(
       width: compact ? double.infinity : 170 * rs,
@@ -201,12 +211,14 @@ class JogControlPanel extends StatelessWidget {
     required double iconSize,
     required double padding,
   }) {
+    final String tooltipText = label ?? _iconTooltip(icon);
     return Column(
       children: [
         SizedBox(
           width: size,
           height: size,
           child: IconButton(
+            tooltip: tooltipText,
             onPressed: onTap,
             icon: Icon(icon, color: color, size: iconSize),
             style: IconButton.styleFrom(

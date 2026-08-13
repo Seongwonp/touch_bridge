@@ -44,6 +44,9 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   bool _isStartingListening = false;
   bool _stopInProgress = false;
 
+  // 구간 TTS: 동일 구간이 두 번 울리지 않도록 한 번 발화한 초를 기록한다.
+  final Set<int> _announcedMilestones = {};
+
   @override
   void initState() {
     super.initState();
@@ -98,12 +101,22 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     }
   }
 
+  void _maybeAnnounceMilestone(int seconds) {
+    const milestones = {300, 120, 60, 30, 10, 5, 3};
+    if (!milestones.contains(seconds)) return;
+    if (_announcedMilestones.contains(seconds)) return;
+    _announcedMilestones.add(seconds);
+    final msg = seconds >= 60 ? '${seconds ~/ 60}분 남았습니다.' : '$seconds초 남았습니다.';
+    _speak(msg);
+  }
+
   void _startCountdown() {
     _timerService.start(
       _secondsLeft,
       onTick: (seconds) {
         if (mounted) {
           setState(() => _secondsLeft = seconds);
+          _maybeAnnounceMilestone(seconds);
         }
       },
       onFinished: () {
@@ -128,7 +141,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
 
   Future<void> _speak(
     String message, {
-    String source = 'emergencystopScreen',
+    String source = 'EmergencyStopScreen',
     bool interrupt = false,
   }) async {
     await _tts.speak(message, source: source, interrupt: interrupt);
@@ -178,6 +191,8 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     } else {
       // 전송만 됐거나 실패한 경우: 완료 화면으로 넘기지 않고 재시도할 수 있게 둔다.
       _stopInProgress = false;
+      // 정지 실패 시 음성 감지를 즉시 재시작해 "멈춰" 재시도를 받을 수 있게 한다.
+      if (mounted && _speechEnabled) _startListening();
     }
   }
 
@@ -235,15 +250,21 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                   ),
                 ),
                 SizedBox(height: ResponsiveScale.v(context, 8)),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    _formatMMSS(_secondsLeft),
-                    style: TextStyle(
-                      color: const Color(0xFFFDE047),
-                      fontSize: 90 * rs,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: -2,
+                Semantics(
+                  label: '남은 시간',
+                  value: _formatMMSS(_secondsLeft),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: ExcludeSemantics(
+                      child: Text(
+                        _formatMMSS(_secondsLeft),
+                        style: TextStyle(
+                          color: const Color(0xFFFDE047),
+                          fontSize: 90 * rs,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -2,
+                        ),
+                      ),
                     ),
                   ),
                 ),

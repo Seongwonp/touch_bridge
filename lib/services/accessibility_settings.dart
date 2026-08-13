@@ -35,6 +35,12 @@ class AccessibilitySettings extends ChangeNotifier {
   String get contactName => _contactName;
   String get contactPhone => _contactPhone;
 
+  /// VoiceOver(iOS) / TalkBack(Android) 활성 여부.
+  /// 위젯 레이어에서 BuildContext 없이 사용하는 비반응형 버전.
+  /// 반응형(컨텍스트 재빌드 트리거)이 필요하면 MediaQuery.of(context).accessibleNavigation 사용.
+  static bool get isScreenReaderActive =>
+      PlatformDispatcher.instance.accessibilityFeatures.accessibleNavigation;
+
   /// 앱 시작 시 한 번 호출 — 저장된 모든 설정 불러오기
   Future<void> load() async {
     try {

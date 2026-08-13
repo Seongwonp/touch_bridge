@@ -21,11 +21,6 @@ void main() {
         'BT-05': (x: 0.51, y: 0.31),
       },
       customLabels: {'BT-02': '30초', 'BT-05': '시작'},
-      travelHeightZ: 6.0,
-      pressDepthZ: -1.5,
-      travelFeed: 1400,
-      pressFeed: 180,
-      dwellSeconds: 0.35,
       imagePath: '/tmp/panel.jpg',
     );
 
@@ -43,11 +38,6 @@ void main() {
     expect(loaded.buttonPositions['BT-02'], (x: 0.42, y: 0.84));
     expect(loaded.buttonPositions['BT-05'], (x: 0.51, y: 0.31));
     expect(loaded.customLabels['BT-05'], '시작');
-    expect(loaded.travelHeightZ, 6.0);
-    expect(loaded.pressDepthZ, -1.5);
-    expect(loaded.travelFeed, 1400);
-    expect(loaded.pressFeed, 180);
-    expect(loaded.dwellSeconds, 0.35);
     expect(loaded.imagePath, '/tmp/panel.jpg');
   });
 

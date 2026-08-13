@@ -19,6 +19,7 @@ import '../../services/ble_service.dart';
 import '../../services/emergency_intent.dart';
 import '../../services/help_intent.dart';
 import '../../services/microwave_command_service.dart';
+import '../../services/appliance_command_router.dart';
 import '../../services/replay_intent.dart';
 import '../../services/device_mapping_service.dart';
 import '../../services/feedback_service.dart';
@@ -30,6 +31,7 @@ import '../../theme/app_colors.dart';
 import 'widgets/voice_wave_visualizer.dart';
 import 'widgets/voice_action_buttons.dart';
 import 'widgets/voice_example_commands.dart';
+import '../../widgets/ble_status_banner.dart';
 
 class VoiceListeningScreen extends StatefulWidget {
   const VoiceListeningScreen({
@@ -503,7 +505,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         _statusMessage = '다시 확인 중';
         _isProcessing = false;
       });
-      await _speak('"$text"라고 들었어요. 맞으면 다시 한 번 말씀해 주세요.', interrupt: true);
+      await _speak('"$text"라고 들었어요. 맞으면 "예", 아니면 "아니오"라고 말씀해 주세요.', interrupt: true);
       return;
     }
 
@@ -564,7 +566,11 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     final commandText = resolution.commandText.isNotEmpty
         ? resolution.commandText
         : text;
-    final ruleResult = MicrowaveCommandService.checkSimpleRules(commandText);
+    final ruleResult = ApplianceCommandRouter.checkSimpleRules(
+      commandText,
+      deviceName: ActiveDeviceService.instance.getActiveDeviceName(),
+      deviceType: ActiveDeviceService.instance.getActiveDeviceType(),
+    );
     if (ruleResult != null) {
       if (requestId != _analysisRequestId) return;
       AppLogger.info('voice.parse.simple_rule_hit', {'requestId': requestId});
@@ -840,7 +846,12 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
                     padding: EdgeInsets.symmetric(horizontal: 24 * rs),
                     child: Column(
                       children: [
-                        SizedBox(height: 40 * rs),
+                        SizedBox(height: 12 * rs),
+                        const Align(
+                          alignment: Alignment.centerLeft,
+                          child: BleStatusBanner(),
+                        ),
+                        SizedBox(height: 28 * rs),
                         // liveRegion: true — 스크린리더 활성 시 이 상태 변화는
                         // 억제되는 navigation 우선순위 TTS를 대신해 스크린리더
                         // 자체 채널로 안내된다(억제만 하고 대체 채널이 없으면

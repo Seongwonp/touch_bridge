@@ -40,10 +40,14 @@ class HomeDeviceCard extends StatelessWidget {
             ? '${device['name']}. 현재 상태 ${device['status']}. 선택하려면 두 번 누르세요. 관리하려면 5초간 길게 누르세요.'
             : '${device['name']}. 현재 상태 ${device['status']}. 선택하려면 두 번 누르세요.',
         button: true,
+        // onTap을 Semantics에 직접 등록 — ExcludeSemantics가 하위 Tree를
+        // 가리기 때문에 GestureDetector의 탭이 Semantics로 올라오지 않는다.
+        onTap: onTap,
         customSemanticsActions: (managementEnabled && onManage != null)
             ? {_manageAction: onManage!}
             : null,
-        child: GestureDetector(
+        child: ExcludeSemantics(
+          child: GestureDetector(
           onTap: onTap,
           onLongPressStart: onLongPressStart,
           onLongPressEnd: onLongPressEnd,
@@ -160,6 +164,7 @@ class HomeDeviceCard extends StatelessWidget {
               ),
             ),
           ),
+          ),  // ExcludeSemantics
         ),
       ),
     );

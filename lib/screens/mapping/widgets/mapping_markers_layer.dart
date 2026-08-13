@@ -28,7 +28,8 @@ class MappingMarkersLayer extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        if (redMarkerPosition != null) _buildRedMarker(redMarkerPosition!),
+        if (redMarkerPosition != null)
+          _buildRedMarker(redMarkerPosition!),
         ...points.asMap().entries.map((entry) {
           final idx = entry.key;
           final point = entry.value;
@@ -57,37 +58,39 @@ class MappingMarkersLayer extends StatelessWidget {
       normalized: normalized,
       imageRect: imageRect,
     );
+    final visualSize = 40.0 * scale;
+    final hitSize = visualSize.clamp(48.0, double.infinity);
     return Positioned(
-      left: local.dx - (20 * scale),
-      top: local.dy - (20 * scale),
-      child: GestureDetector(
-        onPanUpdate: (details) {
-          if (imageRect.width <= 0 || imageRect.height <= 0) return;
-          onRedMarkerDrag(
-            Offset(
-              (normalized.dx + details.delta.dx / imageRect.width).clamp(
-                0.0,
-                1.0,
+      left: local.dx - (hitSize / 2),
+      top: local.dy - (hitSize / 2),
+      child: Semantics(
+        label: '기준점 (원점). 드래그해서 위치 조정',
+        child: GestureDetector(
+          onPanUpdate: (details) {
+            if (imageRect.width <= 0 || imageRect.height <= 0) return;
+            onRedMarkerDrag(
+              Offset(
+                (normalized.dx + details.delta.dx / imageRect.width).clamp(0.0, 1.0),
+                (normalized.dy + details.delta.dy / imageRect.height).clamp(0.0, 1.0),
               ),
-              (normalized.dy + details.delta.dy / imageRect.height).clamp(
-                0.0,
-                1.0,
+            );
+          },
+          behavior: HitTestBehavior.opaque,
+          child: SizedBox(
+            width: hitSize,
+            height: hitSize,
+            child: Center(
+              child: Container(
+                width: visualSize,
+                height: visualSize,
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.8),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2 * scale),
+                ),
+                child: Icon(Icons.gps_fixed_rounded, color: Colors.white, size: 20 * scale),
               ),
             ),
-          );
-        },
-        child: Container(
-          width: 40 * scale,
-          height: 40 * scale,
-          decoration: BoxDecoration(
-            color: Colors.red.withValues(alpha: 0.8),
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 2 * scale),
-          ),
-          child: Icon(
-            Icons.gps_fixed_rounded,
-            color: Colors.white,
-            size: 20 * scale,
           ),
         ),
       ),

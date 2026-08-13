@@ -27,7 +27,7 @@ class PrimaryButton extends StatefulWidget {
 }
 
 class _PrimaryButtonState extends State<PrimaryButton>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   final TtsService _tts = TtsService();
   Timer? _confirmResetTimer;
   bool _armed = false;
@@ -38,6 +38,7 @@ class _PrimaryButtonState extends State<PrimaryButton>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _scaleController = AnimationController(
       duration: const Duration(milliseconds: 100),
       vsync: this,
@@ -101,7 +102,22 @@ class _PrimaryButtonState extends State<PrimaryButton>
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.inactive) {
+      _confirmResetTimer?.cancel();
+      if (mounted && _armed) {
+        setState(() {
+          _armed = false;
+        });
+      }
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _confirmResetTimer?.cancel();
     // stop()은 전역 큐를 지워 다음 화면 안내까지 날린다.
     // 이 버튼 자신의 대기 항목만 취소한다.
@@ -115,7 +131,13 @@ class _PrimaryButtonState extends State<PrimaryButton>
     return Semantics(
       button: true,
       label: widget.label,
-      hint: widget.requireDoubleTap ? '한 번 누르면 음성 안내, 두 번 누르면 실행' : null,
+      // armed 상태를 value/hint로 동적 노출 — TalkBack/VoiceOver가 포커스를
+      // 재낭독할 때 "실행 대기 중" 상태를 명확히 전달한다.
+      value: _armed ? '실행 대기 중' : null,
+      hint: _armed
+          ? '한 번 더 활성화하면 실행됩니다'
+          : (widget.requireDoubleTap ? '한 번 누르면 음성 안내, 두 번 누르면 실행' : null),
+      liveRegion: _armed,
       child: GestureDetector(
         onTapDown: _onTapDown,
         onTapUp: _onTapUp,

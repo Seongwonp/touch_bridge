@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'home/home_screen.dart';
@@ -251,23 +252,30 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       _armedNavIndex = null;
     }
 
-    return GestureDetector(
-      onLongPress: () {
-        FeedbackService.instance.vibrateSuccess();
-        FeedbackService.instance.playDing();
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => const VoiceListeningScreen(autoStart: true),
-          ),
-        );
-      },
-      child: Scaffold(
-        backgroundColor: AppColors.background,
-        body: IndexedStack(
-          index: _currentIndex,
-          children: destinations.map((d) => d.screen).toList(growable: false),
+    void openVoice() {
+      FeedbackService.instance.vibrateSuccess();
+      FeedbackService.instance.playDing();
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => const VoiceListeningScreen(autoStart: true),
         ),
-        bottomNavigationBar: _buildBottomBar(rs, context, destinations),
+      );
+    }
+
+    return Semantics(
+      customSemanticsActions: {
+        const CustomSemanticsAction(label: '음성 명령 시작'): openVoice,
+      },
+      child: GestureDetector(
+        onLongPress: openVoice,
+        child: Scaffold(
+          backgroundColor: AppColors.background,
+          body: IndexedStack(
+            index: _currentIndex,
+            children: destinations.map((d) => d.screen).toList(growable: false),
+          ),
+          bottomNavigationBar: _buildBottomBar(rs, context, destinations),
+        ),
       ),
     );
   }

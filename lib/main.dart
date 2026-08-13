@@ -4,7 +4,6 @@ import 'services/accessibility_settings.dart';
 import 'services/accessibility_experiment_service.dart';
 import 'services/ble_service.dart';
 import 'services/active_device_service.dart';
-import 'services/demo_seed.dart';
 import 'screens/main_navigation_screen.dart';
 import 'theme/app_theme.dart';
 
@@ -16,7 +15,6 @@ void main() async {
   await AccessibilitySettings.instance.load();
   await AccessibilityExperimentService.instance.load();
   await ActiveDeviceService.instance.init(); // 서비스 초기화 추가
-  await DemoSeed.seed(); // [디버그/데모 전용] 임시 시드 — 릴리스에선 no-op, 테스트 후 제거
   BleService.instance.warmUp();
   runApp(const TouchBridgeApp());
 }

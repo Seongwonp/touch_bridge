@@ -37,9 +37,7 @@ class BleLoadingOverlay extends StatelessWidget {
             border: Border.all(color: AppColors.borderFocus, width: 2),
             boxShadow: [
               BoxShadow(
-                color: isCompleted
-                    ? AppColors.shadowPrimary
-                    : AppColors.shadowSecondary,
+                color: isCompleted ? AppColors.shadowPrimary : AppColors.shadowSecondary,
                 blurRadius: 20,
                 spreadRadius: 4,
               ),
@@ -81,9 +79,7 @@ class BleLoadingOverlay extends StatelessWidget {
                             '$percentage%',
                             style: AppText.displayMedium.copyWith(
                               fontSize: 28 * rs,
-                              color: isCompleted
-                                  ? AppColors.success
-                                  : AppColors.primary,
+                              color: isCompleted ? AppColors.success : AppColors.primary,
                             ),
                           ),
                         ),
@@ -104,7 +100,7 @@ class BleLoadingOverlay extends StatelessWidget {
                 ),
               ),
               SizedBox(height: ResponsiveScale.v(context, 20)),
-
+              
               // 메시지
               Semantics(
                 label: message,
@@ -119,7 +115,7 @@ class BleLoadingOverlay extends StatelessWidget {
                 ),
               ),
               SizedBox(height: ResponsiveScale.v(context, 20)),
-
+              
               // 세부 진행 정보 (모바일 사용성)
               if (!isCompleted)
                 Container(
@@ -142,7 +138,7 @@ class BleLoadingOverlay extends StatelessWidget {
                     ),
                   ),
                 ),
-
+              
               if (isCompleted) ...[
                 SizedBox(height: ResponsiveScale.v(context, 16)),
                 Semantics(

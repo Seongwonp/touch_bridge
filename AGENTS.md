@@ -4,7 +4,7 @@
 
 **터치 브릿지 (Touch Bridge)** — 시각장애인을 위한 가전 터치패드 자동 입력 시스템
 
-- **팀:** 3팀 멜론머스크 (박성원 · 서예솔)
+- **팀:** 3팀 멜론머스크 (차아미 · 박성원 · 서예솔)
 - **공모전:** 2026 한이음 드림업
 - **기간:** 2026.4.1 ~ 2026.10.30
 - **앱 담당:** 박성원 (단독 개발)
@@ -21,13 +21,14 @@
 
 가전 터치패드 위에 **부착하는 IoT 장치**가 스마트폰 앱/음성 명령을 받아 **물리적으로 버튼을 대신 눌러주는** 시스템
 
-## 하드웨어 (2026-07-19 개선 방향)
+## 하드웨어 (연동 대기 중)
 
-기존 28BYJ-48 기반 프로토타입은 힘과 반복 정밀도에 한계가 있어, XYZ 전 축을 NEMA17급 스텝모터 구조로 전환한다.
+3단계 전략:
+1. **초슬림 키캡 (5.1mm)** — 정전용량 센싱 + 음성 안내, 오프라인 동작
+2. **범용 SG90** — 랙&피니언 X/Y 레일로 버튼 위치 이동 후 물리 터치
+3. **CoreXY 레일** — 솔레노이드 + CoreXY 구조로 전 영역 정밀 제어
 
-**핵심 부품:** NK1704S 42각 스텝모터 3개(X/Y/Z), TB6600 드라이버 3개, Arduino Uno + GRBL, ESP32 통신 브릿지, 12V 배럴잭 별도 모터 전원, 리미트 스위치, 전류·온도 센서
-
-**통신 방향:** BLE는 기존 앱 연결/시연/복구 경로로 유지하고, 가정용 고정 장치 특성을 고려해 ESP32 Wi-Fi HTTP/WebSocket 제어 API를 추가 검토한다. ESP32는 앱 명령을 받아 Arduino Uno GRBL로 UART 전달한다.
+**핵심 부품:** ESP32 (BLE 5.0 GATT), SG90/NEMA14 모터, 솔레노이드, 전류·온도 센서
 
 ## Flutter 앱 — 기술 스택
 
@@ -223,18 +224,16 @@ if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) return;
 - `largeTextEnabled`: 텍스트 1.18배 확대 (기본 false)
 - `highContrastEnabled`: boldText 강화 (기본 false)
 
-## 하드웨어 통신 프로토콜
+## 하드웨어 BLE 프로토콜
 
 ```
-현재 BLE GATT Server
+ESP32 GATT Server
 Service UUID    : 0000FFE0-0000-1000-8000-00805F9B34FB
 Characteristic  : 0000FFE1-0000-1000-8000-00805F9B34FB
 
-권장 실행 포맷:
-raw G-code text -> ESP32 -> UART -> Arduino Uno GRBL
+명령 포맷 (JSON string):
+{ "action": "press", "x": 0, "y": 1, "deviceId": "microwave_1" }
 ```
-
-기존 `BTN_n`, `SET_GRID`, `PRESS x y`, JSON action은 레거시/호환 경로로 유지한다. 신규 XYZ 구조에서는 `BT-xx -> X/Y mm 좌표 -> Z 누름 시퀀스 -> G-code` 흐름을 기준으로 확장한다.
 
 BLE 연동 구현 파일: `lib/services/ble_service.dart`
 - 구현 메서드: `scan`, `connect`, `disconnect`, `sendPress`, `sendEmergencyStop`

@@ -18,17 +18,20 @@ class ActiveDeviceService {
   String? _activeDeviceId;
   String? _activeDeviceName;
   String? _activeBleId;
+  String? _activeDeviceType;
 
   static const _kActiveDeviceId = 'active_device_id';
   static const _kActiveDeviceName = 'active_device_name';
   static const _kActiveBleId = 'active_ble_id';
   static const _kActiveBleName = 'active_ble_name';
+  static const _kActiveDeviceType = 'active_device_type';
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     _activeDeviceId = prefs.getString(_kActiveDeviceId);
     _activeDeviceName = prefs.getString(_kActiveDeviceName);
     _activeBleId = prefs.getString(_kActiveBleId);
+    _activeDeviceType = prefs.getString(_kActiveDeviceType);
   }
 
   Future<void> setActiveDevice({
@@ -36,20 +39,22 @@ class ActiveDeviceService {
     String? deviceName,
     String? bleId,
     String? bleName,
+    String? deviceType,
   }) async {
     _activeDeviceId = deviceId;
     _activeDeviceName = deviceName;
     _activeBleId = bleId;
+    _activeDeviceType = deviceType;
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kActiveDeviceId, deviceId);
-
+    
     if (deviceName != null && deviceName.isNotEmpty) {
       await prefs.setString(_kActiveDeviceName, deviceName);
     } else {
       await prefs.remove(_kActiveDeviceName);
     }
-
+    
     if (bleId != null) {
       await prefs.setString(_kActiveBleId, bleId);
       await BleService.instance.ensureConnected(bleId);
@@ -63,12 +68,19 @@ class ActiveDeviceService {
     } else {
       await prefs.remove(_kActiveBleName);
     }
+
+    if (deviceType != null && deviceType.isNotEmpty) {
+      await prefs.setString(_kActiveDeviceType, deviceType);
+    } else {
+      await prefs.remove(_kActiveDeviceType);
+    }
   }
 
   String? getActiveDeviceId() => _activeDeviceId;
   String? getActiveDeviceName() => _activeDeviceName;
   String? getActiveBleId() => _activeBleId;
-
+  String? getActiveDeviceType() => _activeDeviceType;
+  
   Future<String?> getActiveBleName() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_kActiveBleName);

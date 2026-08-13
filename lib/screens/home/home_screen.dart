@@ -21,6 +21,7 @@ import 'widgets/home_header.dart';
 import 'widgets/home_voice_action_button.dart';
 import 'widgets/device_page_indicator.dart';
 import 'widgets/home_footer_nav_hint.dart';
+import '../../widgets/ble_status_banner.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -331,7 +332,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       HomeHeader(scale: rs),
-                      SizedBox(height: 16 * rs),
+                      SizedBox(height: 8 * rs),
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: BleStatusBanner(),
+                      ),
+                      SizedBox(height: 8 * rs),
                       if (_devices.isEmpty) ...[
                         HomeEmptyState(
                           guardianModeEnabled: guardianMode,

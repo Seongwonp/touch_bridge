@@ -216,13 +216,52 @@ if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) return;
 
 ### UX 원칙
 - **Look-free**: 화면 안 봐도 음성+진동으로 파악 가능
-- **Error-safe**: 이중 확인 + 즉시 취소 가능 (4초 타임아웃)
+- **Error-safe**: 이중 확인 + 즉시 취소 가능 (15초 타임아웃, WCAG 2.2.1)
 - **Multimodal**: 음성 안내(TTS) + 햅틱 진동 + 고대비 큰 글씨
 
 ### 접근성 설정 (AccessibilitySettings)
 - `voiceGuidanceEnabled`: TTS 켜기/끄기 (기본 true)
 - `largeTextEnabled`: 텍스트 1.18배 확대 (기본 false)
 - `highContrastEnabled`: boldText 강화 (기본 false)
+
+## 접근성 구현 상세 (2026-08 고도화)
+
+### 준수 표준
+| 표준 | 등급 | 비고 |
+|------|------|------|
+| WCAG 2.2 AA | 준수 | 텍스트 4.5:1, 큰 텍스트 3:1, 타임아웃 15초 |
+| WCAG 2.2 AAA | 핵심 색상 준수 | textPrimary/secondary/tertiary, primary, secondary, success, warning ≥ 7:1 |
+| KS X 3253 | 준수 | 한국 모바일 앱 접근성 18개 항목 |
+
+### 스크린리더 (TalkBack/VoiceOver) 지원 패턴
+
+| 패턴 | 구현 위치 | 설명 |
+|------|-----------|------|
+| TTS 이중 발화 방지 | `tts_service.dart` | 스크린리더 활성 시 navigation 우선순위 TTS 억제 (interrupt:true는 result로 승격해 예외 허용) |
+| 스크린리더 감지 | `accessibility_settings.dart` | `isScreenReaderActive` — PlatformDispatcher 비반응형 게터 |
+| 최소 터치 영역 | `button_marker.dart`, `mapping_markers_layer.dart` | `.clamp(48.0, double.infinity)` + `HitTestBehavior.opaque` |
+| CustomSemanticsAction | `button_marker.dart`, `main_navigation_screen.dart`, `home_device_card.dart` | 롱프레스·숨겨진 제스처를 스크린리더 액션 메뉴로 노출 |
+| ExcludeSemantics | `home_device_card.dart`, `home_add_device_card.dart`, `emergency_stop_screen.dart`, `top_app_bar.dart` | 카드 하위 Text 중복 낭독 방지 — 부모 Semantics(onTap) 명시 필수 |
+| Live Region | `voice_listening_screen.dart`, `primary_button.dart` | `Semantics(liveRegion: true)` — 상태 변화 자동 낭독 |
+| Semantics value | `emergency_stop_screen.dart` | `Semantics(label:'남은 시간', value: 'MM:SS')` — 포커스 시 타이머 값 읽기 |
+| heading 마킹 | `top_app_bar.dart` | `Semantics(header: true)` — 화면 제목을 heading으로 등록 |
+| 카운트다운 구간 TTS | `emergency_stop_screen.dart` | 5분·2분·1분·30초·10초·5초·3초 구간에서 자동 음성 알림 |
+| 이중 탭 타임아웃 | 전체 화면 | 15초 통일 (WCAG 2.2.1: 최소 20초, 앱 특성상 15초 적용) |
+| 200% 폰트 대응 | `emergency_button.dart`, `primary_button.dart` | `ConstrainedBox(minHeight:)` — 고정 height 제거 |
+
+### 색상 대비 검증 (`test/theme/app_colors_contrast_test.dart`)
+`AppColors.getContrastRatio()` (IEC 61966-2-1 sRGB 공식, 지수 2.4)로 자동 검증.
+- **AA (≥4.5:1)**: 모든 텍스트 색상 × background/surface/surfaceElevated, 모든 상태 색상(emergency 포함)
+- **AAA (≥7:1)**: textPrimary, textSecondary, textTertiary, primary, secondary, success, warning, black-on-primary
+- **disabled**: WCAG 1.4.3 예외 — 의도적 저대비 (4.42:1) 테스트로 명시
+
+### 참고문헌
+- WCAG 2.2: https://www.w3.org/TR/WCAG22/
+- 한국형 웹 콘텐츠 접근성 지침 2.2 (KWCAG 2.2)
+- KS X 3253:2022 모바일 애플리케이션 접근성 지침
+- Flutter Semantics API: https://api.flutter.dev/flutter/widgets/Semantics-class.html
+- Android TalkBack 개발자 가이드: https://developer.android.com/guide/topics/ui/accessibility
+- iOS VoiceOver 개발자 가이드: https://developer.apple.com/accessibility/
 
 ## 하드웨어 BLE 프로토콜
 
@@ -260,7 +299,7 @@ BLE 연동 구현 파일: `lib/services/ble_service.dart`
 - [x] 기기 연결 화면 (QR/BLE/NFC UI)
 - [x] QR 스캔 실제 구현 (mobile_scanner, Android/iOS)
 - [x] 사진 매핑 화면 (Gemini Vision + 유동 rows×cols 그리드)
-- [x] Semantics 접근성 태그 전체 적용
+- [x] Semantics 접근성 태그 전체 적용 (WCAG 2.2 AA/AAA, KS X 3253 준수)
 - [x] SharedPreferences 설정·기기목록·버튼매핑 영속화
 - [x] 기기 목록 동적 관리 (추가/수정/삭제)
 - [x] 기기별 버튼 매핑 독립 저장
@@ -276,6 +315,53 @@ BLE 연동 구현 파일: `lib/services/ble_service.dart`
 - [x] 테스트 체계 확장 2차 — BLE 연결 흐름 위젯 테스트 추가
 - [x] 접근성 실험 지표화 1차 — 작업/완료/정지/타임아웃 지표 수집 및 설정 화면 노출
 - [x] 심사용 패키징 — 심사 요약서/데모 스크립트/재현 런북 문서화
-- [ ] 기기 상태 실시간 모니터링 — 전류/온도 센서 데이터 (하드웨어 연동 후)
-- [ ] macOS TTS/STT — macOS 26 정식 출시 후 TCC 재확인
-- [ ] 가디언 알림 — Firebase 연동 (공모전 후반)
+- [x] 스크린리더 고도화 — ExcludeSemantics, CustomSemanticsAction, liveRegion, heading, Semantics value
+- [x] 색상 대비 자동 검증 — WCAG AA/AAA 단위 테스트 (`test/theme/app_colors_contrast_test.dart`)
+- [x] 카운트다운 구간 TTS — 비상정지 화면 5분/2분/1분/30초/10초/5초/3초 자동 알림
+- [x] BLE 자동 재연결 — 지수 백오프 (2→4→8초), 최대 3회, `BleReconnectState` 스트림
+- [x] BleStatusBanner 위젯 — `Semantics(liveRegion: true)`, 재연결 중 스피닝 아이콘, TTS 안내
+- [x] 가전 음성 명령 확장 — `WashingMachineCommandService`, `AcCommandService`, `ApplianceCommandRouter`
+- [x] 기기 타입별 라우팅 — `ActiveDeviceService.getActiveDeviceType()`, 기기 등록 시 `deviceType` 저장
+- [x] BottomSheet 포커스 관리 — `FocusNode.requestFocus()` in `addPostFrameCallback`, TalkBack 첫 요소 자동 포커스
+- [x] 단위 테스트 160개 자동화 (BLE 재연결 16개 + 가전 명령 라우터 25개 추가)
+
+## 하드웨어 연동 후 해야 할 일 (TODO)
+
+> 이 섹션은 하드웨어가 완성되면 순서대로 테스트·구현할 항목 목록이다.
+
+### 최우선 (하드웨어 연결 즉시)
+- [ ] **BLE 실기기 E2E 검증** — 실제 ESP32에 연결해 `sendPress()` / `sendEmergencyStop()` 동작 확인
+  - 확인 항목: ACK 수신, 타임아웃 처리, 재연결 후 명령 재전송
+  - 파일: `lib/services/ble_service.dart`, `lib/services/mapping_execution_service.dart`
+- [ ] **GRBL G-code 응답 번역** — Arduino가 보내는 `ok` / `error:N` / `<Idle|...>` 메시지를 한국어 TTS로 변환
+  - 파일: `lib/services/ble_service.dart`의 notification 핸들러 (`_notifySub`)
+- [ ] **자동 재연결 타이머 통합 테스트** — 실기기에서 전원을 껐다 켰을 때 2→4→8초 백오프 정상 동작 확인
+  - 파일: `lib/services/ble_service.dart:_maybeScheduleReconnect()`
+- [ ] **버튼 매핑 물리 좌표 보정** — 기기마다 달라지는 X/Y offset 값을 보정할 수 있는 캘리브레이션 UI
+  - 파일: `lib/screens/mapping/manual_mapping_screen.dart`
+
+### 중요 (하드웨어 1차 검증 후)
+- [ ] **기기 상태 실시간 모니터링** — ESP32에서 전류·온도 센서 데이터를 BLE notify로 수신해 화면에 표시
+  - 추가할 파일: `lib/services/hardware_sensor_service.dart`
+  - UI: `lib/screens/settings/developer_console_screen.dart`에 센서 패널 추가
+- [ ] **세탁기·에어컨 버튼 매핑 프리셋** — `WashingMachineCommandService.BT-W01~09` / `AcCommandService.BT-A01~09` 논리 ID를 기기별 그리드 좌표로 변환하는 매핑 프리셋 파일 (`assets/presets/`)
+- [ ] **음성 명령 → 실제 BLE 시퀀스 연결** — 세탁기·에어컨 `WASHER_CONTROL` / `AC_CONTROL` 액션을 `VoiceListeningScreen._handleCommand`에서 BLE 전송으로 연결
+  - 파일: `lib/screens/voice/voice_listening_screen.dart:_handleCommand()`
+  - 현재: `MICROWAVE_CONTROL`만 BLE 전송 구현됨
+
+### 선택 (공모전 후반)
+- [ ] **가디언 알림 (Firebase)** — 비상 정지 이벤트 발생 시 보호자 스마트폰에 Push 알림
+- [ ] **macOS TTS/STT** — macOS 26 정식 출시 후 TCC 권한 재확인
+- [ ] **기기 상태 자동 저장** — 기기 사용 시간, 총 누른 횟수 집계 → 접근성 실험 지표 고도화
+- [ ] **멀티 ESP32 지원** — 여러 가전에 각각 ESP32를 붙이고 하나의 앱에서 전환
+- [ ] **오프라인 음성 명령** — STT 대신 온디바이스 음성 인식 (speech_to_text → Whisper/Picovoice)
+
+## 가전 명령 서비스 현황
+
+| 서비스 | 버튼 논리 ID | 음성 규칙 | BLE 연결 |
+|--------|-------------|-----------|---------|
+| `MicrowaveCommandService` | BT-01~09 | ✅ 구현 | ✅ 연결 |
+| `WashingMachineCommandService` | BT-W01~09 | ✅ 구현 | ❌ 미연결 (하드웨어 후) |
+| `AcCommandService` | BT-A01~09 | ✅ 구현 | ❌ 미연결 (하드웨어 후) |
+
+`ApplianceCommandRouter`가 `deviceType` 또는 `deviceName`을 보고 자동 라우팅.

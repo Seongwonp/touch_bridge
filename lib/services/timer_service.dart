@@ -8,11 +8,7 @@ class CountdownService {
 
   int get secondsRemaining => _secondsRemaining;
 
-  void start(
-    int seconds, {
-    void Function(int)? onTick,
-    void Function()? onFinished,
-  }) {
+  void start(int seconds, {void Function(int)? onTick, void Function()? onFinished}) {
     stop();
     _secondsRemaining = seconds;
     this.onTick = onTick;

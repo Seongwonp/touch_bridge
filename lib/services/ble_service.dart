@@ -26,6 +26,7 @@ class BleService {
   BluetoothCharacteristic? _commandCharacteristic;
   StreamSubscription<List<int>>? _notifySub;
   StreamSubscription<BluetoothAdapterState>? _adapterStateSub;
+  StreamSubscription<BluetoothConnectionState>? _connectionSub;
   BluetoothAdapterState _adapterState = BluetoothAdapterState.unknown;
 
   final _logController = StreamController<String>.broadcast();
@@ -35,6 +36,28 @@ class BleService {
       StreamController<BluetoothConnectionState>.broadcast();
   Stream<BluetoothConnectionState> get connectionStateStream =>
       _connectionStateController.stream;
+
+  /// 연결 여부만 필요한 위젯에서 flutter_blue_plus 없이 구독할 수 있는 편의 스트림.
+  Stream<bool> get isConnectedStream => connectionStateStream
+      .map((s) => s == BluetoothConnectionState.connected);
+
+  // ── 자동 재연결 ──────────────────────────────────────────────────────────
+  final _reconnectStateController =
+      StreamController<BleReconnectState>.broadcast();
+
+  /// 자동 재연결 상태 스트림 (reconnecting / reconnected / failed).
+  Stream<BleReconnectState> get reconnectStateStream =>
+      _reconnectStateController.stream;
+
+  String? _autoReconnectTargetId;
+  int _reconnectAttempt = 0;
+  static const int _maxReconnectAttempts = 3;
+  bool _isReconnecting = false;
+  Timer? _reconnectTimer;
+
+  /// 현재 자동 재연결 시도 중인지 여부 (UI 상태 표시용).
+  bool get isReconnecting => _isReconnecting;
+  // ─────────────────────────────────────────────────────────────────────────
 
   Completer<String>? _ackCompleter;
   String? _lastScanError;
@@ -46,13 +69,13 @@ class BleService {
   // Security/session — challenge-response 인증은 BleSecuritySession에 위임
   late final BleSecuritySession _security;
 
+  // 인증 없이 허용되는 명령은 페어링·인증·비상정지만으로 제한한다.
+  // PRESS·SET_GRID·raw G-code는 물리 동작을 유발하므로 반드시 인증 후에만 허용.
   static const _nonAuthActions = {
     'challenge',
     'auth',
     'provision',
     HardwareProtocol.actionStop,
-    HardwareProtocol.actionSetGrid,
-    HardwareProtocol.actionPress,
   };
 
   // [디버그/데모 전용] 실제 BLE 없이 전송을 성공으로 흉내낸다(시뮬레이터 테스트용).
@@ -217,8 +240,12 @@ class BleService {
 
       await disconnect();
 
-      // 연결 상태 모니터링 시작
-      target.connectionState.listen((state) {
+      // 연결 상태 모니터링 — 구독을 저장해 재연결 시 이전 구독을 취소한다.
+      // 저장하지 않으면 연결을 바꿀 때마다 리스너가 누적되어 이전 기기의
+      // disconnected 이벤트가 현재 연결을 잘못 초기화할 수 있다.
+      _connectionSub?.cancel();
+      _connectionSub = target.connectionState.listen((state) {
+        if (_connectedDevice?.remoteId != target.remoteId) return;
         _connectionStateController.add(state);
         _addLog('연결 상태 변경: ${state.name}');
         if (state == BluetoothConnectionState.disconnected) {
@@ -226,6 +253,7 @@ class BleService {
           _commandCharacteristic = null;
           _notifySub?.cancel();
           _security.reset();
+          _maybeScheduleReconnect();
         }
       });
 
@@ -273,6 +301,9 @@ class BleService {
         }
       });
 
+      // 성공한 기기 ID를 기억해 이후 끊김 시 자동 재연결 대상으로 쓴다.
+      _autoReconnectTargetId = deviceId;
+      _reconnectAttempt = 0;
       _addLog('연결 성공: ${target.platformName}');
       AppLogger.info('ble.connect.ok', {'device_id': deviceId});
       return true;
@@ -296,7 +327,13 @@ class BleService {
   }
 
   Future<void> disconnect() async {
+    // 명시적 해제 → 자동 재연결 완전 중단. null이 돼야 _maybeScheduleReconnect가 조기 반환.
+    _reconnectTimer?.cancel();
+    _autoReconnectTargetId = null;
+    _reconnectAttempt = 0;
+    _isReconnecting = false;
     try {
+      await _connectionSub?.cancel();
       await _notifySub?.cancel();
       await _connectedDevice?.disconnect();
     } catch (e) {
@@ -305,9 +342,65 @@ class BleService {
       _addLog('연결 해제 완료');
       _connectedDevice = null;
       _commandCharacteristic = null;
+      _connectionSub = null;
       _notifySub = null;
       _security.reset();
     }
+  }
+
+  /// 연결이 끊어졌을 때 지수 백오프로 자동 재연결을 예약한다.
+  ///
+  /// - 최대 [_maxReconnectAttempts]회 시도 (2초 → 4초 → 8초 간격)
+  /// - [disconnect()]가 호출되면 [_autoReconnectTargetId]가 null이 되어 즉시 중단됨
+  /// - connect() 내부의 disconnect()가 타겟을 지우기 때문에,
+  ///   실패 후 재시도를 위해 타겟을 직접 복원하고 재귀 호출한다.
+  void _maybeScheduleReconnect() {
+    final targetId = _autoReconnectTargetId;
+    if (targetId == null || _isReconnecting || _demoMode) return;
+
+    if (_reconnectAttempt >= _maxReconnectAttempts) {
+      _addLog('자동 재연결 포기 ($_maxReconnectAttempts회 시도 완료)');
+      _reconnectAttempt = 0;
+      _autoReconnectTargetId = null;
+      _reconnectStateController.add(BleReconnectState.failed);
+      return;
+    }
+
+    _reconnectAttempt++;
+    _isReconnecting = true;
+    // 지수 백오프: 1<<1=2초, 1<<2=4초, 1<<3=8초
+    final delaySeconds = 1 << _reconnectAttempt;
+    _addLog('자동 재연결 예약 ($_reconnectAttempt/$_maxReconnectAttempts, ${delaySeconds}초 후)');
+    AppLogger.info('ble.reconnect.scheduled', {
+      'attempt': _reconnectAttempt,
+      'delay_s': delaySeconds,
+      'target': targetId,
+    });
+    _reconnectStateController.add(BleReconnectState.reconnecting);
+
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer(Duration(seconds: delaySeconds), () async {
+      // 이 시점에 disconnect()가 호출됐으면 중단.
+      if (_autoReconnectTargetId == null) {
+        _isReconnecting = false;
+        return;
+      }
+
+      _isReconnecting = false;
+      final success = await connect(targetId);
+
+      if (success) {
+        // connect() 내부에서 _autoReconnectTargetId = targetId로 이미 복원됨.
+        _addLog('자동 재연결 성공');
+        AppLogger.info('ble.reconnect.ok', {'target': targetId});
+        _reconnectStateController.add(BleReconnectState.reconnected);
+      } else {
+        // connect()가 실패하면 내부에서 disconnect()를 호출해 _autoReconnectTargetId가
+        // null로 지워진다. 다음 시도를 위해 복원 후 재귀 예약.
+        _autoReconnectTargetId = targetId;
+        _maybeScheduleReconnect();
+      }
+    });
   }
 
   Future<String> _sendAndWaitAck(
@@ -541,6 +634,32 @@ class BleService {
   void setSendRawOverride(Future<bool> Function(String command)? fn) {
     _sendRawOverride = fn;
   }
+
+  // ── 재연결 상태 머신 테스트 지원 ─────────────────────────────────────────
+  @visibleForTesting
+  bool get isReconnectingForTest => _isReconnecting;
+
+  @visibleForTesting
+  String? get autoReconnectTargetIdForTest => _autoReconnectTargetId;
+
+  @visibleForTesting
+  int get reconnectAttemptForTest => _reconnectAttempt;
+
+  /// 재연결 상태를 스트림에 직접 emit — UI/위젯 테스트에서 상태 변화를 시뮬레이션.
+  @visibleForTesting
+  void emitReconnectStateForTest(BleReconnectState state) =>
+      _reconnectStateController.add(state);
+
+  /// 재연결 내부 상태 초기화 — 각 테스트 케이스 독립성 보장.
+  @visibleForTesting
+  void resetReconnectStateForTest() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    _autoReconnectTargetId = null;
+    _reconnectAttempt = 0;
+    _isReconnecting = false;
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 }
 
 class BleDeviceInfo {
@@ -553,3 +672,10 @@ class BleDeviceInfo {
   final String name;
   final int rssi;
 }
+
+/// BLE 자동 재연결 상태.
+///
+/// [reconnecting]: 재연결 시도 예약됨 (타이머 대기 or connect() 진행 중)
+/// [reconnected]:  재연결 성공
+/// [failed]:       최대 재시도 횟수 소진 → 사용자에게 수동 재연결 안내 필요
+enum BleReconnectState { reconnecting, reconnected, failed }

@@ -135,18 +135,20 @@ class TtsService {
       final message = _toConcise(text);
       if (message.isEmpty) return;
 
+      // 스크린리더 활성 시: interrupt 승격 전 원래 priority로 판단한다.
+      // navigation/info 수준 안내는 스크린리더가 포커스로 대신 읽으므로
+      // 앱 TTS를 억제해 이중 낭독을 막는다. interrupt:true 로 result 수준으로
+      // 승격되기 전에 체크해야 화면 진입 speak(interrupt:true) 호출도 억제된다.
+      // result·emergency는 스크린리더가 자동 안내하지 않으므로 유지한다.
+      if (_screenReaderActive && priority.index < TtsPriority.result.index) {
+        _addLog('(SUPPRESSED: 스크린리더 활성 - ${priority.name})', source);
+        return;
+      }
+
       // interrupt=true는 최소 result 우선순위로 승격(선점).
       var pr = priority;
       if (interrupt && pr.index < TtsPriority.result.index) {
         pr = TtsPriority.result;
-      }
-
-      // 스크린리더 활성 시: 화면 안내·부가 설명(navigation/info)은 스크린리더가
-      // 요소 포커스로 대신 읽으므로 앱 TTS를 억제해 이중 낭독을 막는다.
-      // 결과(result)·비상(emergency)은 스크린리더가 자동 안내하지 않으므로 유지.
-      if (_screenReaderActive && pr.index < TtsPriority.result.index) {
-        _addLog('(SUPPRESSED: 스크린리더 활성)', source);
-        return;
       }
 
       // 동일 멘트 반복 억제 (8초 이내). emergency/force는 예외.

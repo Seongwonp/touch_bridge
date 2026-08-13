@@ -41,9 +41,15 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
   String? _armedActionId;
   Timer? _actionResetTimer;
 
+  // BottomSheet 열릴 때 첫 버튼으로 포커스를 이동해 스크린리더가 즉시 탐색 가능하게 함.
+  final FocusNode _firstButtonFocus = FocusNode();
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _firstButtonFocus.requestFocus();
+    });
     // 여는 즉시 "무엇을 선택했고 어떤 제어가 있는지" 안내한다.
     // 좌표 매핑은 보호자 설정 기능이라 보호자 모드일 때만 안내/노출한다.
     final guardian = AccessibilitySettings.instance.guardianModeEnabled;
@@ -62,6 +68,7 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
   @override
   void dispose() {
     _actionResetTimer?.cancel();
+    _firstButtonFocus.dispose();
     super.dispose();
   }
 
@@ -243,6 +250,7 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
               label: '음성으로 제어',
               hint: '말로 명령하면 기기를 조작합니다',
               armed: _armedActionId == 'voice',
+              focusNode: _firstButtonFocus,
               onPressed: () => _armAndRun(
                 id: 'voice',
                 guide: '음성으로 제어. 다시 누르면 음성 제어를 시작합니다.',
@@ -369,6 +377,7 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
     required String hint,
     required VoidCallback onPressed,
     required bool armed,
+    FocusNode? focusNode,
   }) {
     // 노란 강조 = "지금 선택(대기)된 버튼". 기본은 모든 버튼이 동일한 어두운 스타일.
     final bg = armed ? AppColors.primary : AppColors.surface;
@@ -383,6 +392,7 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
           height: 64 * rs,
           child: ElevatedButton.icon(
             onPressed: onPressed,
+            focusNode: focusNode,
             style: ElevatedButton.styleFrom(
               backgroundColor: bg,
               foregroundColor: fg,
