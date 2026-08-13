@@ -318,6 +318,50 @@ BLE 연동 구현 파일: `lib/services/ble_service.dart`
 - [x] 스크린리더 고도화 — ExcludeSemantics, CustomSemanticsAction, liveRegion, heading, Semantics value
 - [x] 색상 대비 자동 검증 — WCAG AA/AAA 단위 테스트 (`test/theme/app_colors_contrast_test.dart`)
 - [x] 카운트다운 구간 TTS — 비상정지 화면 5분/2분/1분/30초/10초/5초/3초 자동 알림
-- [ ] 기기 상태 실시간 모니터링 — 전류/온도 센서 데이터 (하드웨어 연동 후)
-- [ ] macOS TTS/STT — macOS 26 정식 출시 후 TCC 재확인
-- [ ] 가디언 알림 — Firebase 연동 (공모전 후반)
+- [x] BLE 자동 재연결 — 지수 백오프 (2→4→8초), 최대 3회, `BleReconnectState` 스트림
+- [x] BleStatusBanner 위젯 — `Semantics(liveRegion: true)`, 재연결 중 스피닝 아이콘, TTS 안내
+- [x] 가전 음성 명령 확장 — `WashingMachineCommandService`, `AcCommandService`, `ApplianceCommandRouter`
+- [x] 기기 타입별 라우팅 — `ActiveDeviceService.getActiveDeviceType()`, 기기 등록 시 `deviceType` 저장
+- [x] BottomSheet 포커스 관리 — `FocusNode.requestFocus()` in `addPostFrameCallback`, TalkBack 첫 요소 자동 포커스
+- [x] 단위 테스트 160개 자동화 (BLE 재연결 16개 + 가전 명령 라우터 25개 추가)
+
+## 하드웨어 연동 후 해야 할 일 (TODO)
+
+> 이 섹션은 하드웨어가 완성되면 순서대로 테스트·구현할 항목 목록이다.
+
+### 최우선 (하드웨어 연결 즉시)
+- [ ] **BLE 실기기 E2E 검증** — 실제 ESP32에 연결해 `sendPress()` / `sendEmergencyStop()` 동작 확인
+  - 확인 항목: ACK 수신, 타임아웃 처리, 재연결 후 명령 재전송
+  - 파일: `lib/services/ble_service.dart`, `lib/services/mapping_execution_service.dart`
+- [ ] **GRBL G-code 응답 번역** — Arduino가 보내는 `ok` / `error:N` / `<Idle|...>` 메시지를 한국어 TTS로 변환
+  - 파일: `lib/services/ble_service.dart`의 notification 핸들러 (`_notifySub`)
+- [ ] **자동 재연결 타이머 통합 테스트** — 실기기에서 전원을 껐다 켰을 때 2→4→8초 백오프 정상 동작 확인
+  - 파일: `lib/services/ble_service.dart:_maybeScheduleReconnect()`
+- [ ] **버튼 매핑 물리 좌표 보정** — 기기마다 달라지는 X/Y offset 값을 보정할 수 있는 캘리브레이션 UI
+  - 파일: `lib/screens/mapping/manual_mapping_screen.dart`
+
+### 중요 (하드웨어 1차 검증 후)
+- [ ] **기기 상태 실시간 모니터링** — ESP32에서 전류·온도 센서 데이터를 BLE notify로 수신해 화면에 표시
+  - 추가할 파일: `lib/services/hardware_sensor_service.dart`
+  - UI: `lib/screens/settings/developer_console_screen.dart`에 센서 패널 추가
+- [ ] **세탁기·에어컨 버튼 매핑 프리셋** — `WashingMachineCommandService.BT-W01~09` / `AcCommandService.BT-A01~09` 논리 ID를 기기별 그리드 좌표로 변환하는 매핑 프리셋 파일 (`assets/presets/`)
+- [ ] **음성 명령 → 실제 BLE 시퀀스 연결** — 세탁기·에어컨 `WASHER_CONTROL` / `AC_CONTROL` 액션을 `VoiceListeningScreen._handleCommand`에서 BLE 전송으로 연결
+  - 파일: `lib/screens/voice/voice_listening_screen.dart:_handleCommand()`
+  - 현재: `MICROWAVE_CONTROL`만 BLE 전송 구현됨
+
+### 선택 (공모전 후반)
+- [ ] **가디언 알림 (Firebase)** — 비상 정지 이벤트 발생 시 보호자 스마트폰에 Push 알림
+- [ ] **macOS TTS/STT** — macOS 26 정식 출시 후 TCC 권한 재확인
+- [ ] **기기 상태 자동 저장** — 기기 사용 시간, 총 누른 횟수 집계 → 접근성 실험 지표 고도화
+- [ ] **멀티 ESP32 지원** — 여러 가전에 각각 ESP32를 붙이고 하나의 앱에서 전환
+- [ ] **오프라인 음성 명령** — STT 대신 온디바이스 음성 인식 (speech_to_text → Whisper/Picovoice)
+
+## 가전 명령 서비스 현황
+
+| 서비스 | 버튼 논리 ID | 음성 규칙 | BLE 연결 |
+|--------|-------------|-----------|---------|
+| `MicrowaveCommandService` | BT-01~09 | ✅ 구현 | ✅ 연결 |
+| `WashingMachineCommandService` | BT-W01~09 | ✅ 구현 | ❌ 미연결 (하드웨어 후) |
+| `AcCommandService` | BT-A01~09 | ✅ 구현 | ❌ 미연결 (하드웨어 후) |
+
+`ApplianceCommandRouter`가 `deviceType` 또는 `deviceName`을 보고 자동 라우팅.
