@@ -66,7 +66,7 @@ class _PrimaryButtonState extends State<PrimaryButton>
       HapticFeedback.mediumImpact();
 
       _confirmResetTimer?.cancel();
-      _confirmResetTimer = Timer(const Duration(seconds: 15), () {
+      _confirmResetTimer = Timer(const Duration(seconds: 20), () {
         if (!mounted) {
           return;
         }

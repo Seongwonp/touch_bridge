@@ -364,7 +364,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       setState(() => _micArmed = true);
       HapticFeedback.mediumImpact();
       _actionResetTimer?.cancel();
-      _actionResetTimer = Timer(const Duration(seconds: 15), () {
+      _actionResetTimer = Timer(const Duration(seconds: 20), () {
         if (mounted) setState(() => _micArmed = false);
       });
       _speak(_isRecording ? '녹음 중지' : '녹음 시작');

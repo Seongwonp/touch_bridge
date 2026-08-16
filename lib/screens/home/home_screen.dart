@@ -172,6 +172,32 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _openVoiceForDevice(int index) async {
+    if (index < 0 || index >= _devices.length) return;
+    HapticFeedback.mediumImpact();
+    final device = _devices[index];
+    final deviceId = device['id'] as String? ?? '';
+    final deviceName = device['name'] as String? ?? '스마트 기기';
+    if (deviceId.isNotEmpty) {
+      await ActiveDeviceService.instance.setActiveDevice(
+        deviceId: deviceId,
+        deviceName: deviceName,
+        bleId: device['bleId'] as String?,
+        bleName: device['bleName'] as String?,
+      );
+    }
+    if (!mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => VoiceListeningScreen(
+          deviceId: deviceId,
+          deviceName: deviceName,
+          autoStart: true,
+        ),
+      ),
+    );
+  }
+
   Future<void> _openDeviceConnect() async {
     HapticFeedback.mediumImpact();
     await Navigator.of(
@@ -370,6 +396,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       Expanded(
                         child: PageView.builder(
                           controller: _pageController,
+                          // 스크린리더 활성 시 좌우 스와이프가 요소 이동 제스처로
+                          // 가로채이므로 PageView 스와이프를 잠근다.
+                          // 이전/다음 버튼(HomeFooterNavHint)이 유일한 전환 수단이 된다.
+                          physics: AccessibilitySettings.isScreenReaderActive
+                              ? const NeverScrollableScrollPhysics()
+                              : null,
                           onPageChanged: (index) {
                             setState(() {
                               _currentDeviceIndex = index;
@@ -409,6 +441,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                   : null,
                               onManage: guardianMode
                                   ? () => _showDeleteConfirmation(index)
+                                  : null,
+                              onVoiceControl: !guardianMode
+                                  ? () => _openVoiceForDevice(index)
                                   : null,
                             );
                           },
