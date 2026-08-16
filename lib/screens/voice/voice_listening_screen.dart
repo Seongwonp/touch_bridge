@@ -19,6 +19,8 @@ import '../../services/ble_service.dart';
 import '../../services/emergency_intent.dart';
 import '../../services/help_intent.dart';
 import '../../services/microwave_command_service.dart';
+import '../../services/washing_machine_command_service.dart';
+import '../../services/ac_command_service.dart';
 import '../../services/appliance_command_router.dart';
 import '../../services/replay_intent.dart';
 import '../../services/device_mapping_service.dart';
@@ -813,6 +815,46 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
             ),
           );
         }
+        return;
+
+      case 'WASHER_CONTROL':
+        if (commands.isEmpty) {
+          final clarification = message.isNotEmpty ? message : '명령을 다시 말씀해 주세요.';
+          setState(() => _statusMessage = clarification);
+          await _speak(clarification);
+          return;
+        }
+        final washerSent = await _sendBleSequence(commands);
+        if (!washerSent) {
+          FeedbackService.instance.playFailure();
+          return;
+        }
+        FeedbackService.instance.signalSent();
+        final washerMsg = message.isNotEmpty
+            ? message
+            : WashingMachineCommandService.buildCommandsLabel(commands);
+        setState(() => _statusMessage = washerMsg);
+        await _speak(washerMsg, interrupt: true);
+        return;
+
+      case 'AC_CONTROL':
+        if (commands.isEmpty) {
+          final clarification = message.isNotEmpty ? message : '명령을 다시 말씀해 주세요.';
+          setState(() => _statusMessage = clarification);
+          await _speak(clarification);
+          return;
+        }
+        final acSent = await _sendBleSequence(commands);
+        if (!acSent) {
+          FeedbackService.instance.playFailure();
+          return;
+        }
+        FeedbackService.instance.signalSent();
+        final acMsg = message.isNotEmpty
+            ? message
+            : AcCommandService.buildCommandsLabel(commands);
+        setState(() => _statusMessage = acMsg);
+        await _speak(acMsg, interrupt: true);
         return;
 
       default:
