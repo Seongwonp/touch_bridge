@@ -47,6 +47,9 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   // 구간 TTS: 동일 구간이 두 번 울리지 않도록 한 번 발화한 초를 기록한다.
   final Set<int> _announcedMilestones = {};
 
+  // 홀드 중 1초 간격 햅틱 — 진행 상황을 촉각으로 전달한다 (VUI 연구 권고).
+  Timer? _holdHapticTimer;
+
   @override
   void initState() {
     super.initState();
@@ -152,11 +155,15 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     HapticFeedback.heavyImpact();
     _holdController.forward(from: 0);
     _speak('멈추는 중입니다. 그대로 눌러주세요.');
+    _holdHapticTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_isHolding) HapticFeedback.mediumImpact();
+    });
   }
 
   void _onHoldEnd() {
     if (!_isHolding) return;
     setState(() => _isHolding = false);
+    _holdHapticTimer?.cancel();
     _holdController.stop();
     _holdController.reset();
   }
@@ -218,6 +225,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   @override
   void dispose() {
     _timerService.stop();
+    _holdHapticTimer?.cancel();
     _holdController.dispose();
     // 이 화면 자신의 대기 항목만 취소한다. 화면 전환 후 다음 화면의 안내를
     // 날리지 않기 위해 stop() 대신 cancelSource를 쓴다.

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/tts_service.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
@@ -100,6 +101,10 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   String? _resolvedDeviceId;
   String? _resolvedDeviceName;
 
+  // 연속 실패 횟수 — 2회 이상 시 "도움말" 힌트를 추가한다.
+  int _consecutiveFailures = 0;
+  static const _kExamplesSeenKey = 'voice_examples_announced';
+
   @override
   void initState() {
     super.initState();
@@ -162,7 +167,17 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       },
     );
     if (_speechEnabled) {
-      _speak('음성 명령입니다. 마이크 버튼을 눌러 명령하세요.');
+      await _speak('음성 명령입니다. 마이크 버튼을 눌러 명령하세요.');
+      // autoStart가 아닐 때만 예시를 낭독한다 — 자동 녹음 시작 흐름과 충돌을 막기 위함.
+      if (!widget.autoStart && mounted) {
+        final prefs = await SharedPreferences.getInstance();
+        final seen = prefs.getBool(_kExamplesSeenKey) ?? false;
+        if (!seen) {
+          await prefs.setBool(_kExamplesSeenKey, true);
+          final examples = kVoiceExampleCommands.take(4).join(', ');
+          await _speak('예시 명령으로는 $examples 등이 있습니다.');
+        }
+      }
     } else {
       _speak('음성 인식 기능을 사용할 수 없습니다.');
       setState(() {
@@ -596,7 +611,11 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         'error': e.toString(),
       });
       if (requestId != _analysisRequestId) return;
-      _speak('명령을 이해하지 못했습니다. 기기 이름과 동작을 함께 말해 주세요.');
+      _consecutiveFailures++;
+      final failMsg = _consecutiveFailures >= 2
+          ? '명령을 이해하지 못했습니다. 도움말을 들으시려면 "도움말"이라고 말씀해 주세요.'
+          : '명령을 이해하지 못했습니다. 기기 이름과 동작을 함께 말해 주세요.';
+      _speak(failMsg);
       setState(() {
         _statusMessage = '명령 이해 실패';
         _isProcessing = false;
@@ -748,6 +767,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
           FeedbackService.instance.playFailure(); // 실패 안내는 _sendBleSequence가 함
           return;
         }
+        _consecutiveFailures = 0;
         // "성공"이 아니라 "전송됨"이다: BLE write 성공일 뿐 GRBL 확인이 아니다.
         FeedbackService.instance.signalSent();
         // interrupt: true → TtsPriority.result로 승격. 스크린리더 활성 시에도 억제되지
@@ -795,6 +815,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
           FeedbackService.instance.playFailure(); // 실패: 성공 피드백/이동 금지
           return;
         }
+        _consecutiveFailures = 0;
         // "성공"이 아니라 "전송됨"이다: BLE write 성공일 뿐 GRBL 확인이 아니다.
         FeedbackService.instance.signalSent();
         final spokenMessage = forceExecution && confirmationMessage.isNotEmpty
@@ -829,6 +850,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
           FeedbackService.instance.playFailure();
           return;
         }
+        _consecutiveFailures = 0;
         FeedbackService.instance.signalSent();
         final washerMsg = message.isNotEmpty
             ? message
@@ -849,6 +871,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
           FeedbackService.instance.playFailure();
           return;
         }
+        _consecutiveFailures = 0;
         FeedbackService.instance.signalSent();
         final acMsg = message.isNotEmpty
             ? message
@@ -858,7 +881,12 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         return;
 
       default:
-        final fallback = message.isNotEmpty ? message : '이해하지 못했습니다.';
+        _consecutiveFailures++;
+        final fallback = message.isNotEmpty
+            ? message
+            : (_consecutiveFailures >= 2
+                ? '이해하지 못했습니다. 도움말을 들으시려면 "도움말"이라고 말씀해 주세요.'
+                : '이해하지 못했습니다. 기기 이름과 동작을 함께 말씀해 주세요.');
         setState(() {
           _statusMessage = fallback;
         });
