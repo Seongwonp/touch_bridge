@@ -93,20 +93,29 @@
 
 | # | 자료명 | 출처 |
 |---|--------|------|
-| 50 | **Toucha11y** — 스마트폰 접근성 UI에서 봇이 실제 터치스크린을 대신 누르는 구조 (Touch Bridge와 동일 아키텍처) | arXiv:2305.04097, https://arxiv.org/abs/2305.04097 |
-| 51 | **StateLens** — 대화형 에이전트 + 스마트폰 안내 + 물리 보조물. 기기 상태를 단계/다음 행동으로 모델링 | UIST 2019 |
-| 52 | **Slide Rule** — 제스처 UI는 빠르지만 오류율이 높아 명시 버튼과 병행 필요 | ASSETS, https://www.cs.rochester.edu/hci/pubs/pdfs/slide-rule.pdf |
-| 53 | 저시력 가전 인터페이스 연구 — 저대비·촉각 부족이 주요 조작 장애, 고대비 마커+음성 설명 효과 확인 | IUI 2023 |
-| 54 | **Brewster Earcon 설계 지침** — 리듬·음색·register 조합, 연속 earcon 간 ~0.1초 간격, 음량만으로 구별 금지 | S. Brewster, Researchgate, https://www.researchgate.net/publication/228607856_Experimentally_derived_guidelines_for_the_creation_of_earcons |
+| 50 | **Toucha11y** — 스마트폰 접근성 UI에서 봇이 실제 터치스크린을 대신 누르는 구조 (Touch Bridge와 동일 아키텍처). 시각장애인 9명 인터뷰: 6명은 공공 키오스크를 단 한 번도 독립 사용한 적 없음 | ACM CHI 2023, https://dl.acm.org/doi/10.1145/3544548.3581254 |
+| 51 | **BrushLens** — 스마트폰 케이스 형태 하드웨어 프록시가 사용자 대신 터치스크린을 물리적으로 누름. **오터치율 73.9% 감소**, 고정 환경 정확도 100% | ACM UIST 2023, https://dl.acm.org/doi/10.1145/3586183.3606730 |
+| 52 | **StateLens** — 대화형 에이전트 + 스마트폰 안내 + 물리 보조물. 기기 상태를 단계/다음 행동으로 모델링 | UIST 2019, https://arxiv.org/pdf/1908.07144 |
+| 53 | **VizLens** — 스마트폰으로 전자레인지·세탁기 조작부 촬영 → 크라우드소싱 레이블링(8분, 정확도 99.7%) → 손가락 위치를 초당 8회 갱신하며 버튼 안내 | ACM UIST 2016, https://www.cs.cmu.edu/~jbigham/pubs/pdfs/2016/vizlens.pdf |
+| 54 | **Appliance Displays: Accessibility Challenges** — 스마트폰 카메라 기반 Display Reader 앱 실험. 9회 중 8회 성공(89%), 소요시간 7~48초(중앙값 11초) | PMC/NIH 2016, https://pmc.ncbi.nlm.nih.gov/articles/PMC4725718/ |
+| 55 | **A Survey on Assistive Technologies for Visually Impaired** — 2017~2025 연구 종합. 멀티모달(음성+햅틱) 조합이 단일 피드백보다 우수 | ACM PERVASIVE 2025, https://dl.acm.org/doi/10.1145/3733155.3734895 |
+| 56 | **Slide Rule** — 제스처 UI는 빠르지만 오류율이 높아 명시 버튼과 병행 필요 | ASSETS, https://www.cs.rochester.edu/hci/pubs/pdfs/slide-rule.pdf |
+| 57 | 저시력 가전 인터페이스 연구 — 저대비·촉각 부족이 주요 조작 장애, 고대비 마커+음성 설명 효과 확인 | IUI 2023 |
+| 58 | **Brewster Earcon 설계 지침** — 리듬·음색·register 조합, 연속 earcon 간 ~0.1초 간격, 음량만으로 구별 금지 | S. Brewster, https://www.researchgate.net/publication/228607856 |
 
 ---
 
-## 7. 언론 기사
+## 7. 언론 기사 및 보도자료
 
 | # | 자료명 | 출처 |
 |---|--------|------|
-| 55 | 장애인의 가전제품 이용에 유용한 기술들 — 점자 탑재 가전이 극소수인 실태 (2023.08.11) | 에이블뉴스, https://www.ablenews.co.kr/news/articleView.html?idxno=206152 |
-| 56 | 월패드·키오스크 앞에 접근권 배제된 시각장애인 (2022.05.13) | 아시아경제, https://www.asiae.co.kr/article/2022051311471919371 |
+| 59 | 장애인의 가전제품 이용에 유용한 기술들 — 점자 탑재 가전이 극소수인 실태 (2023.08.11) | 에이블뉴스, https://www.ablenews.co.kr/news/articleView.html?idxno=206152 |
+| 60 | 너무나 가깝고도 멀기만 한 장애인의 가전제품 이용 불편 (2023) | 에이블뉴스, https://www.ablenews.co.kr/news/articleView.html?idxno=206776 |
+| 61 | 월패드·키오스크 앞에 접근권 배제된 시각장애인 (2022.05.13) | 아시아경제, https://www.asiae.co.kr/article/2022051311471919371 |
+| 62 | LG전자, 포브스 선정 글로벌 200대 접근성 혁신 기업 (2025) | 서울경제, https://www.sedaily.com/article/20046182 |
+| 63 | 고령자·장애인 위한 키오스크 접근성, 공공·민간 모두 열악 (2025.03.07) | 전자신문, https://www.etnews.com/20250307000253 |
+| 64 | 2024년 등록장애인 현황 (시각장애 9.4%, 약 24만 7천 명) | 보건복지부 보도자료, https://www.mohw.go.kr/board.es?mid=a10503000000&bid=0027&list_no=1485363&act=view |
+| 65 | 2023 장애인 실태조사 (사회적 고립 35.4%, 월소득 전국 평균 63.3%) | 보건복지부, https://www.mohw.go.kr/board.es?mid=a10503000000&bid=0027&list_no=1481225&act=view |
 
 ---
 

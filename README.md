@@ -6,6 +6,20 @@
 
 ---
 
+## 왜 이 문제인가
+
+> 시각장애인의 **77.1%**가 키오스크·가전 편의 기능 미비로 이용에 어려움을 겪고 있습니다. (보건복지부 2024)
+
+국내 시각장애 등록 인구는 약 **24만 7천 명**. 이들이 마주하는 전자레인지·세탁기·인덕션 등 평면 터치패널 가전은 버튼 위치를 손끝으로 더듬을 수 없습니다.
+
+- **기존 대안의 한계**: LG·삼성의 점자 스티커·음성 매뉴얼은 여전히 *정확한 위치를 사용자가 직접 터치*해야 합니다.  
+- **스마트홈 가전 교체**: 비용이 크고, 이미 집에 있는 가전은 그대로 못 씁니다.
+
+Touch Bridge는 **교체가 아닌 부착**으로 기존 가전을 그대로 접근성 있게 만듭니다.  
+물리 터치 대행 방식은 UIST 2023 BrushLens 연구에서 오터치율 **73.9% 감소** 효과가 확인된 접근법입니다.
+
+---
+
 ## 프로젝트 개요
 
 전자레인지·세탁기·키오스크 등 터치패널 기반 가전이 시각장애인에게 접근하기 어렵다는 문제를 해결합니다.  
@@ -67,7 +81,9 @@
 | 프레임워크 | Flutter / Dart | 3.x / 3.x |
 | 음성 인식 | `speech_to_text` | ^7.3.0 |
 | TTS | `flutter_tts` | ^4.2.5 |
-| AI (NLU + Vision) | `google_generative_ai` | ^0.2.3 |
+| AI (NLU + Vision) | `google_generative_ai` (백엔드 프록시) | ^0.2.3 |
+| BLE 통신 | `flutter_blue_plus` | ^1.x |
+| QR 스캔 | `mobile_scanner` | ^6.x |
 | 사진 선택 | `image_picker` | ^1.1.2 |
 | 설정 저장 | `shared_preferences` | ^2.3.2 |
 | 환경 변수 | `flutter_dotenv` | ^5.2.1 |
@@ -261,17 +277,21 @@ G0 Z5 F200
 - [x] 기본 사용자 모드 시작, 보호자/개발자 기능 격리
 - [x] `BT-xx → X/Y/Z G-code` dry-run 변환 및 개발자 콘솔 로그
 - [x] 개발자 콘솔 `$H`, `STOP`, Z축 테스트, 작은 화면 반응형 보강
-- [x] **접근성 고도화 (2026-08)** — 상세: [`docs/ACCESSIBILITY_GUIDELINES_RESEARCH.md`](docs/ACCESSIBILITY_GUIDELINES_RESEARCH.md)
-  - 비상정지가 실제로 하드웨어에 정지 명령 전송 + ACK로 정직하게 안내 (이전엔 미전송/무조건 완료)
-  - 성공/실패 구분 earcon(합성음) + TTS와 겹치지 않도록 오디오 세션 분리(mixWithOthers)
-  - TTS 직렬 큐 + 우선순위 중재자 — 안내가 드롭·겹침 없이 순서대로 재생
-  - 시스템 글자 확대 존중(200%) · 보조 텍스트 대비 AA · "작동 완료"와 "중단" 구분
-  - 하드웨어 실행 동작을 전 화면 2단계 탭으로 통일 + 이중 탭 만료 15초
-  - 스크린리더(VoiceOver/TalkBack) 활성 시 앱 TTS 이중 낭독 억제 + 롱프레스 기능에 접근성 액션 대안
-  - 좌표 매핑(설정)은 보호자 모드 전용으로 격리
-- [ ] BLE 실기기 검증 고도화 (재연결/타임아웃/센서 피드백)
-- [ ] GRBL `ok/error/ALARM` 응답을 사용자 문구로 번역
-- [ ] 사진 매핑 화면의 좌표 이동/Z축 테스트/미세 조정 UX 고도화
+- [x] **접근성 고도화 Phase 1-7 (2026-08)** — WCAG 2.2 AA/AAA + KS X 3253 준수
+  - ExcludeSemantics / CustomSemanticsAction / liveRegion / heading / Semantics value 전 화면 적용
+  - TalkBack PageView 잠금 + 대체 탐색 버튼, BottomSheet 자동 포커스
+  - WCAG 2.2.1 이중 탭 타임아웃 20초 통일, 200% 폰트 대응 minHeight 6곳
+  - 색상 대비 자동 검증 테스트 (`AA ≥4.5:1` / `AAA ≥7:1`)
+  - 비상정지 홀드 1초 간격 햅틱, 카운트다운 구간 TTS (5분→3초)
+  - BLE 자동 재연결 지수 백오프 (2→4→8초), BleStatusBanner liveRegion
+  - STT 침묵 타임아웃 설정화 (5~15초 슬라이더), 연속 실패 에스컬레이션
+  - NAVIGATE 음성 액션 구현 (설정·기기 연결·버튼 매핑 화면 이동)
+  - 세탁기·에어컨 음성 명령 BLE 전송 연결 (`ApplianceCommandRouter`)
+  - 첫 방문 예시 명령어 자동 낭독, 첫 실행 AlertDialog 온보딩
+  - 단위 테스트 160개+ (BLE 재연결 16 + 가전 라우터 25 + 색상 대비 + STT 타임아웃)
+- [ ] BLE 실기기 E2E 검증 (sendPress / sendEmergencyStop ACK)
+- [ ] GRBL `ok/error/ALARM` 응답을 한국어 TTS로 번역
+- [ ] 기기별 X/Y 오프셋 캘리브레이션 UI
 
 ---
 
