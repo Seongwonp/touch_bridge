@@ -14,6 +14,7 @@ class AccessibilitySettings extends ChangeNotifier {
   static const _kTtsVolume = 'tts_volume';
   static const _kContactName = 'contact_name';
   static const _kContactPhone = 'contact_phone';
+  static const _kSttSilenceTimeout = 'stt_silence_timeout';
 
   bool _voiceGuidanceEnabled = true;
   bool _largeTextEnabled = false;
@@ -22,6 +23,7 @@ class AccessibilitySettings extends ChangeNotifier {
   bool _developerModeEnabled = false;
   double _ttsSpeed = 1.0;
   double _ttsVolume = 1.0;
+  int _sttSilenceTimeoutSeconds = 8;
   String _contactName = '';
   String _contactPhone = '';
 
@@ -32,6 +34,7 @@ class AccessibilitySettings extends ChangeNotifier {
   bool get developerModeEnabled => _developerModeEnabled;
   double get ttsSpeed => _ttsSpeed;
   double get ttsVolume => _ttsVolume;
+  int get sttSilenceTimeoutSeconds => _sttSilenceTimeoutSeconds;
   String get contactName => _contactName;
   String get contactPhone => _contactPhone;
 
@@ -52,6 +55,7 @@ class AccessibilitySettings extends ChangeNotifier {
       _developerModeEnabled = prefs.getBool(_kDeveloperMode) ?? false;
       _ttsSpeed = prefs.getDouble(_kTtsSpeed) ?? 1.0;
       _ttsVolume = prefs.getDouble(_kTtsVolume) ?? 1.0;
+      _sttSilenceTimeoutSeconds = prefs.getInt(_kSttSilenceTimeout) ?? 8;
       _contactName = prefs.getString(_kContactName) ?? '';
       _contactPhone = prefs.getString(_kContactPhone) ?? '';
     } catch (e) {
@@ -104,6 +108,11 @@ class AccessibilitySettings extends ChangeNotifier {
     _saveDouble(_kTtsVolume, value);
   }
 
+  void setSttSilenceTimeoutSeconds(int value) {
+    _sttSilenceTimeoutSeconds = value;
+    _saveInt(_kSttSilenceTimeout, value);
+  }
+
   void setContact(String name, String phone) {
     _contactName = name.trim();
     _contactPhone = phone.trim();
@@ -119,6 +128,11 @@ class AccessibilitySettings extends ChangeNotifier {
   Future<void> _saveDouble(String key, double value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(key, value);
+  }
+
+  Future<void> _saveInt(String key, int value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(key, value);
   }
 
   Future<void> _saveContact() async {

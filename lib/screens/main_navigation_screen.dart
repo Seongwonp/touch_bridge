@@ -33,25 +33,25 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         _NavDestination(
           icon: Icons.home_rounded,
           label: '홈',
-          guide: '홈 화면입니다. 등록된 기기를 선택하고, 말하기 버튼으로 음성 제어를 시작합니다.',
+          guide: '홈 화면입니다. 말하기 버튼으로 음성 제어를 시작합니다.',
           screen: HomeScreen(),
         ),
         _NavDestination(
           icon: Icons.manage_search_rounded,
           label: '기기 관리',
-          guide: '보호자용 기기 관리 화면입니다. 기기 연결과 하드웨어 등록을 관리합니다.',
+          guide: '기기 관리 화면입니다. 기기를 등록합니다.',
           screen: DeviceManagementScreen(),
         ),
         _NavDestination(
           icon: Icons.emergency_rounded,
           label: '비상',
-          guide: '비상 정지 화면입니다. 큰 빨간 버튼을 두 번 눌러 현재 기기를 중단합니다.',
+          guide: '비상 정지입니다. 버튼을 눌러 기기를 중단합니다.',
           screen: EmergencyAccessScreen(),
         ),
         _NavDestination(
           icon: Icons.settings_rounded,
           label: '설정',
-          guide: '설정 화면입니다. 음성 안내, 접근성, 보호자 설정을 조정합니다.',
+          guide: '설정 화면입니다. 음성 속도와 접근성을 조정합니다.',
           screen: SettingsScreen(),
         ),
       ];
@@ -61,19 +61,19 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       _NavDestination(
         icon: Icons.home_rounded,
         label: '홈',
-        guide: '홈 화면입니다. 등록된 기기를 선택하고, 말하기 버튼으로 음성 제어를 시작합니다.',
+        guide: '홈 화면입니다. 말하기 버튼으로 음성 제어를 시작합니다.',
         screen: HomeScreen(),
       ),
       _NavDestination(
         icon: Icons.emergency_rounded,
         label: '비상',
-        guide: '비상 정지 화면입니다. 큰 빨간 버튼을 두 번 눌러 현재 기기를 중단합니다.',
+        guide: '비상 정지입니다. 버튼을 눌러 기기를 중단합니다.',
         screen: EmergencyAccessScreen(),
       ),
       _NavDestination(
         icon: Icons.settings_rounded,
         label: '설정',
-        guide: '설정 화면입니다. 음성 안내와 접근성 설정을 조정합니다.',
+        guide: '설정 화면입니다. 음성 속도와 접근성을 조정합니다.',
         screen: SettingsScreen(),
       ),
     ];
@@ -91,13 +91,27 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     if (seen) return;
 
     final guardianMode = AccessibilitySettings.instance.guardianModeEnabled;
-    final message = guardianMode
-        ? '보호자 안내입니다. 기기 관리에서 기기를 등록한 뒤, 홈에서 기기를 선택하세요. 홈의 말하기 버튼으로 음성 제어를 시작할 수 있습니다.'
-        : 'Touch Bridge입니다. 처음 사용하신다면 보호자에게 설정 화면의 보호자 모드를 켜고 기기를 먼저 등록해 달라고 요청하세요. '
-          '기기가 등록되면 홈에서 기기를 선택하고 말하기 버튼으로 음성 제어를 시작할 수 있습니다. '
-          '위급할 때는 비상 탭을 사용하세요.';
-
-    await _tts.speak(message, source: 'MainNavigationScreen', interrupt: true);
+    if (guardianMode) {
+      await _tts.speak(
+        '보호자 안내입니다. 기기 관리에서 기기를 등록하세요.',
+        source: 'MainNavigationScreen',
+        interrupt: true,
+      );
+      await _tts.speak(
+        '등록 후 홈에서 기기를 선택하고 말하기 버튼으로 제어합니다.',
+        source: 'MainNavigationScreen',
+      );
+    } else {
+      await _tts.speak(
+        'Touch Bridge입니다. 보호자가 기기를 먼저 등록해야 합니다.',
+        source: 'MainNavigationScreen',
+        interrupt: true,
+      );
+      await _tts.speak(
+        '설정에서 보호자 모드를 켜고 기기를 등록한 뒤, 홈에서 말하기를 누르세요.',
+        source: 'MainNavigationScreen',
+      );
+    }
     await prefs.setBool('quick_start_seen', true);
 
     // 사용자 모드 첫 실행 시 시각적 온보딩 다이얼로그도 노출한다.

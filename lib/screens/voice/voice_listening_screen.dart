@@ -30,11 +30,15 @@ import '../../services/voice_device_resolver.dart';
 import '../../services/mapping_execution_service.dart';
 import '../../services/home_device_store.dart';
 import '../../services/voice_text_matcher.dart';
+import '../../services/accessibility_settings.dart';
 import '../../theme/app_colors.dart';
 import 'widgets/voice_wave_visualizer.dart';
 import 'widgets/voice_action_buttons.dart';
 import 'widgets/voice_example_commands.dart';
 import '../../widgets/ble_status_banner.dart';
+import '../connection/device_connect_screen.dart';
+import '../mapping/manual_mapping_screen.dart';
+import '../settings/settings_screen.dart';
 
 class VoiceListeningScreen extends StatefulWidget {
   const VoiceListeningScreen({
@@ -96,7 +100,6 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   bool _isStartingRecording = false;
   int _analysisRequestId = 0;
   final Duration _maxRecordingDuration = const Duration(seconds: 10);
-  static const _silenceTimeout = Duration(seconds: 8);
 
   String? _resolvedDeviceId;
   String? _resolvedDeviceName;
@@ -196,7 +199,9 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
   void _resetSilenceTimer() {
     _silenceTimer?.cancel();
-    _silenceTimer = Timer(_silenceTimeout, () {
+    _silenceTimer = Timer(
+      Duration(seconds: AccessibilitySettings.instance.sttSilenceTimeoutSeconds),
+      () {
       if (!mounted || !_isRecording) return;
 
       // 만약 이미 명령이 인식되어 처리 중이라면 침묵 타이머 무시
@@ -878,6 +883,35 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
             : AcCommandService.buildCommandsLabel(commands);
         setState(() => _statusMessage = acMsg);
         await _speak(acMsg, interrupt: true);
+        return;
+
+      case 'NAVIGATE':
+        final target = data['target'] as String? ?? '';
+        final Widget? navigateDest;
+        final String destName;
+        switch (target) {
+          case 'connection':
+            navigateDest = const DeviceConnectScreen();
+            destName = '기기 연결';
+          case 'mapping':
+            navigateDest = const ManualMappingScreen();
+            destName = '버튼 매핑';
+          case 'settings':
+            navigateDest = const SettingsScreen();
+            destName = '설정';
+          default:
+            navigateDest = null;
+            destName = '';
+        }
+        if (navigateDest == null) return;
+        _consecutiveFailures = 0;
+        await _speak('$destName 화면으로 이동합니다.', interrupt: true);
+        if (!mounted) return;
+        final navScreen = navigateDest;
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => navScreen),
+        );
         return;
 
       default:
