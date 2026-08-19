@@ -71,6 +71,7 @@ class SliderRow extends StatelessWidget {
     required this.max,
     required this.display,
     required this.onChanged,
+    this.divisions,
   });
   final String label;
   final double value;
@@ -78,6 +79,7 @@ class SliderRow extends StatelessWidget {
   final double max;
   final String display;
   final ValueChanged<double> onChanged;
+  final int? divisions;
   @override
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
@@ -110,6 +112,7 @@ class SliderRow extends StatelessWidget {
             value: value,
             min: min,
             max: max,
+            divisions: divisions,
             onChanged: onChanged,
             activeColor: AppColors.primary,
             inactiveColor: AppColors.borderDefault,

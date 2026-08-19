@@ -33,25 +33,25 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         _NavDestination(
           icon: Icons.home_rounded,
           label: '홈',
-          guide: '홈 화면입니다. 등록된 기기를 선택하고, 말하기 버튼으로 음성 제어를 시작합니다.',
+          guide: '홈 화면입니다. 말하기 버튼으로 음성 제어를 시작합니다.',
           screen: HomeScreen(),
         ),
         _NavDestination(
           icon: Icons.manage_search_rounded,
           label: '기기 관리',
-          guide: '보호자용 기기 관리 화면입니다. 기기 연결과 하드웨어 등록을 관리합니다.',
+          guide: '기기 관리 화면입니다. 기기를 등록합니다.',
           screen: DeviceManagementScreen(),
         ),
         _NavDestination(
           icon: Icons.emergency_rounded,
           label: '비상',
-          guide: '비상 정지 화면입니다. 큰 빨간 버튼을 두 번 눌러 현재 기기를 중단합니다.',
+          guide: '비상 정지입니다. 버튼을 눌러 기기를 중단합니다.',
           screen: EmergencyAccessScreen(),
         ),
         _NavDestination(
           icon: Icons.settings_rounded,
           label: '설정',
-          guide: '설정 화면입니다. 음성 안내, 접근성, 보호자 설정을 조정합니다.',
+          guide: '설정 화면입니다. 음성 속도와 접근성을 조정합니다.',
           screen: SettingsScreen(),
         ),
       ];
@@ -61,19 +61,19 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       _NavDestination(
         icon: Icons.home_rounded,
         label: '홈',
-        guide: '홈 화면입니다. 등록된 기기를 선택하고, 말하기 버튼으로 음성 제어를 시작합니다.',
+        guide: '홈 화면입니다. 말하기 버튼으로 음성 제어를 시작합니다.',
         screen: HomeScreen(),
       ),
       _NavDestination(
         icon: Icons.emergency_rounded,
         label: '비상',
-        guide: '비상 정지 화면입니다. 큰 빨간 버튼을 두 번 눌러 현재 기기를 중단합니다.',
+        guide: '비상 정지입니다. 버튼을 눌러 기기를 중단합니다.',
         screen: EmergencyAccessScreen(),
       ),
       _NavDestination(
         icon: Icons.settings_rounded,
         label: '설정',
-        guide: '설정 화면입니다. 음성 안내와 접근성 설정을 조정합니다.',
+        guide: '설정 화면입니다. 음성 속도와 접근성을 조정합니다.',
         screen: SettingsScreen(),
       ),
     ];
@@ -91,12 +91,80 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     if (seen) return;
 
     final guardianMode = AccessibilitySettings.instance.guardianModeEnabled;
-    final message = guardianMode
-        ? '보호자 안내입니다. 기기 관리에서 기기를 등록한 뒤, 홈에서 기기를 선택하세요. 홈의 말하기 버튼으로 음성 제어를 시작할 수 있습니다.'
-        : 'Touch Bridge입니다. 홈에서 기기를 선택하고 말하기 버튼을 누르세요. 위급할 때는 비상 탭을 사용하세요.';
-
-    await _tts.speak(message, source: 'MainNavigationScreen', interrupt: true);
+    if (guardianMode) {
+      await _tts.speak(
+        '보호자 안내입니다. 기기 관리에서 기기를 등록하세요.',
+        source: 'MainNavigationScreen',
+        interrupt: true,
+      );
+      await _tts.speak(
+        '등록 후 홈에서 기기를 선택하고 말하기 버튼으로 제어합니다.',
+        source: 'MainNavigationScreen',
+      );
+    } else {
+      await _tts.speak(
+        'Touch Bridge입니다. 보호자가 기기를 먼저 등록해야 합니다.',
+        source: 'MainNavigationScreen',
+        interrupt: true,
+      );
+      await _tts.speak(
+        '설정에서 보호자 모드를 켜고 기기를 등록한 뒤, 홈에서 말하기를 누르세요.',
+        source: 'MainNavigationScreen',
+      );
+    }
     await prefs.setBool('quick_start_seen', true);
+
+    // 사용자 모드 첫 실행 시 시각적 온보딩 다이얼로그도 노출한다.
+    // TalkBack이 AlertDialog content를 자동으로 낭독 → TTS와 이중 보장.
+    if (!guardianMode && mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: AppColors.surfaceElevated,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: const BorderSide(color: AppColors.borderDefault),
+            ),
+            title: const Text(
+              '처음 오셨나요?',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            content: const Text(
+              '보호자가 아래 순서로 먼저 설정해야 합니다.\n\n'
+              '1. 설정 → 보호자 모드 켜기\n'
+              '2. 기기 관리 → 기기 등록\n'
+              '3. 보호자 모드 끄기\n\n'
+              '이후 홈 화면에서 음성으로 기기를 제어할 수 있습니다.',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                height: 1.6,
+              ),
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                child: const Text(
+                  '확인했습니다',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+        );
+      });
+    }
   }
 
   Future<void> _handleBottomTap(int index) async {
@@ -122,7 +190,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       setState(() => _armedNavIndex = index);
       FeedbackService.instance.vibrateSuccess();
       _navResetTimer?.cancel();
-      _navResetTimer = Timer(const Duration(seconds: 15), () {
+      _navResetTimer = Timer(const Duration(seconds: 20), () {
         if (mounted) setState(() => _armedNavIndex = null);
       });
       // interrupt: true는 스크린리더 활성 시에도 억제되지 않는 result 우선순위로

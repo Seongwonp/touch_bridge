@@ -23,7 +23,7 @@ class HomeVoiceActionButton extends StatelessWidget {
       label: '$deviceName 음성 제어 시작',
       button: true,
       child: Container(
-        height: 80 * rs,
+        constraints: BoxConstraints(minHeight: 80 * rs),
         decoration: BoxDecoration(
           gradient: enabled
               ? const LinearGradient(
@@ -43,20 +43,23 @@ class HomeVoiceActionButton extends StatelessWidget {
           child: InkWell(
             onTap: enabled ? onTap : null,
             borderRadius: BorderRadius.circular(14 * rs),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.mic_rounded, size: 28 * rs, color: Colors.black),
-                SizedBox(width: 10 * rs),
-                Text(
-                  '말하기',
-                  style: TextStyle(
-                    fontSize: 22 * rs,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.black,
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 10 * rs),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.mic_rounded, size: 28 * rs, color: Colors.black),
+                  SizedBox(width: 10 * rs),
+                  Text(
+                    '말하기',
+                    style: TextStyle(
+                      fontSize: 22 * rs,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.black,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

@@ -23,6 +23,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final TtsService _tts = TtsService();
   late double _speed;
   late double _volume;
+  late double _sttSilenceTimeout;
   late bool _guardianModeEnabled;
   late bool _developerModeEnabled;
   late bool _voiceGuidanceEnabled;
@@ -37,6 +38,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final s = AccessibilitySettings.instance;
     _speed = s.ttsSpeed;
     _volume = s.ttsVolume;
+    _sttSilenceTimeout = s.sttSilenceTimeoutSeconds.toDouble();
     _voiceGuidanceEnabled = s.voiceGuidanceEnabled;
     _largeTextEnabled = s.largeTextEnabled;
     _highContrastEnabled = s.highContrastEnabled;
@@ -173,6 +175,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     setState(() => _volume = v);
                     TtsService().setVolume(v);
                     AccessibilitySettings.instance.setTtsVolume(v);
+                  },
+                ),
+                const SettingsDivider(),
+                SliderRow(
+                  label: 'STT 침묵 감지',
+                  value: _sttSilenceTimeout,
+                  min: 5.0,
+                  max: 15.0,
+                  divisions: 10,
+                  display: '${_sttSilenceTimeout.round()}초',
+                  onChanged: (v) {
+                    setState(() => _sttSilenceTimeout = v);
+                    AccessibilitySettings.instance
+                        .setSttSilenceTimeoutSeconds(v.round());
                   },
                 ),
               ],

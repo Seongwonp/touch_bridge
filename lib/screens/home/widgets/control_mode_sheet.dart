@@ -114,7 +114,7 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
       setState(() => _armedActionId = id);
       FeedbackService.instance.vibrateSuccess();
       _actionResetTimer?.cancel();
-      _actionResetTimer = Timer(const Duration(seconds: 15), () {
+      _actionResetTimer = Timer(const Duration(seconds: 20), () {
         if (mounted) setState(() => _armedActionId = null);
       });
       await _tts.speak(guide, source: 'ControlModeSheet', interrupt: true);
@@ -261,6 +261,7 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
                       builder: (_) => VoiceListeningScreen(
                         deviceId: widget.deviceId,
                         deviceName: widget.deviceName,
+                        autoStart: true,
                       ),
                     ),
                   );

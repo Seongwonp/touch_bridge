@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../theme/app_colors.dart';
 import '../../../widgets/responsive_scale.dart';
+import '../../../services/accessibility_settings.dart';
 
 /// "좌우로 밀어서 기기 전환" 안내 + 이전/다음 화살표.
 class HomeFooterNavHint extends StatelessWidget {
@@ -18,6 +19,7 @@ class HomeFooterNavHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final rs = scale;
+    final screenReaderActive = AccessibilitySettings.isScreenReaderActive;
     return Padding(
       padding: EdgeInsets.only(
         top: ResponsiveScale.v(context, 12),
@@ -26,13 +28,17 @@ class HomeFooterNavHint extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          IconButton(
-            tooltip: '이전 기기',
-            onPressed: onPrevious,
-            icon: Icon(Icons.chevron_left_rounded, color: AppColors.textTertiary, size: 28 * rs),
+          Semantics(
+            label: '이전 기기',
+            button: true,
+            child: IconButton(
+              tooltip: '이전 기기',
+              onPressed: onPrevious,
+              icon: Icon(Icons.chevron_left_rounded, color: AppColors.textTertiary, size: 28 * rs),
+            ),
           ),
           Text(
-            '좌우로 밀어서 기기 전환',
+            screenReaderActive ? '버튼으로 기기 전환' : '좌우로 밀어서 기기 전환',
             style: TextStyle(
               fontSize: 12 * rs,
               fontWeight: FontWeight.w600,
@@ -40,10 +46,14 @@ class HomeFooterNavHint extends StatelessWidget {
               color: AppColors.textTertiary,
             ),
           ),
-          IconButton(
-            tooltip: '다음 기기',
-            onPressed: onNext,
-            icon: Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary, size: 28 * rs),
+          Semantics(
+            label: '다음 기기',
+            button: true,
+            child: IconButton(
+              tooltip: '다음 기기',
+              onPressed: onNext,
+              icon: Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary, size: 28 * rs),
+            ),
           ),
         ],
       ),

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/tts_service.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
@@ -19,6 +20,8 @@ import '../../services/ble_service.dart';
 import '../../services/emergency_intent.dart';
 import '../../services/help_intent.dart';
 import '../../services/microwave_command_service.dart';
+import '../../services/washing_machine_command_service.dart';
+import '../../services/ac_command_service.dart';
 import '../../services/appliance_command_router.dart';
 import '../../services/replay_intent.dart';
 import '../../services/device_mapping_service.dart';
@@ -27,11 +30,15 @@ import '../../services/voice_device_resolver.dart';
 import '../../services/mapping_execution_service.dart';
 import '../../services/home_device_store.dart';
 import '../../services/voice_text_matcher.dart';
+import '../../services/accessibility_settings.dart';
 import '../../theme/app_colors.dart';
 import 'widgets/voice_wave_visualizer.dart';
 import 'widgets/voice_action_buttons.dart';
 import 'widgets/voice_example_commands.dart';
 import '../../widgets/ble_status_banner.dart';
+import '../connection/device_connect_screen.dart';
+import '../mapping/manual_mapping_screen.dart';
+import '../settings/settings_screen.dart';
 
 class VoiceListeningScreen extends StatefulWidget {
   const VoiceListeningScreen({
@@ -93,10 +100,13 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   bool _isStartingRecording = false;
   int _analysisRequestId = 0;
   final Duration _maxRecordingDuration = const Duration(seconds: 10);
-  static const _silenceTimeout = Duration(seconds: 8);
 
   String? _resolvedDeviceId;
   String? _resolvedDeviceName;
+
+  // 연속 실패 횟수 — 2회 이상 시 "도움말" 힌트를 추가한다.
+  int _consecutiveFailures = 0;
+  static const _kExamplesSeenKey = 'voice_examples_announced';
 
   @override
   void initState() {
@@ -160,7 +170,17 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       },
     );
     if (_speechEnabled) {
-      _speak('음성 명령입니다. 마이크 버튼을 눌러 명령하세요.');
+      await _speak('음성 명령입니다. 마이크 버튼을 눌러 명령하세요.');
+      // autoStart가 아닐 때만 예시를 낭독한다 — 자동 녹음 시작 흐름과 충돌을 막기 위함.
+      if (!widget.autoStart && mounted) {
+        final prefs = await SharedPreferences.getInstance();
+        final seen = prefs.getBool(_kExamplesSeenKey) ?? false;
+        if (!seen) {
+          await prefs.setBool(_kExamplesSeenKey, true);
+          final examples = kVoiceExampleCommands.take(4).join(', ');
+          await _speak('예시 명령으로는 $examples 등이 있습니다.');
+        }
+      }
     } else {
       _speak('음성 인식 기능을 사용할 수 없습니다.');
       setState(() {
@@ -179,7 +199,9 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
   void _resetSilenceTimer() {
     _silenceTimer?.cancel();
-    _silenceTimer = Timer(_silenceTimeout, () {
+    _silenceTimer = Timer(
+      Duration(seconds: AccessibilitySettings.instance.sttSilenceTimeoutSeconds),
+      () {
       if (!mounted || !_isRecording) return;
 
       // 만약 이미 명령이 인식되어 처리 중이라면 침묵 타이머 무시
@@ -364,7 +386,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       setState(() => _micArmed = true);
       HapticFeedback.mediumImpact();
       _actionResetTimer?.cancel();
-      _actionResetTimer = Timer(const Duration(seconds: 15), () {
+      _actionResetTimer = Timer(const Duration(seconds: 20), () {
         if (mounted) setState(() => _micArmed = false);
       });
       _speak(_isRecording ? '녹음 중지' : '녹음 시작');
@@ -594,7 +616,11 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         'error': e.toString(),
       });
       if (requestId != _analysisRequestId) return;
-      _speak('명령을 이해하지 못했습니다. 기기 이름과 동작을 함께 말해 주세요.');
+      _consecutiveFailures++;
+      final failMsg = _consecutiveFailures >= 2
+          ? '명령을 이해하지 못했습니다. 도움말을 들으시려면 "도움말"이라고 말씀해 주세요.'
+          : '명령을 이해하지 못했습니다. 기기 이름과 동작을 함께 말해 주세요.';
+      _speak(failMsg);
       setState(() {
         _statusMessage = '명령 이해 실패';
         _isProcessing = false;
@@ -746,6 +772,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
           FeedbackService.instance.playFailure(); // 실패 안내는 _sendBleSequence가 함
           return;
         }
+        _consecutiveFailures = 0;
         // "성공"이 아니라 "전송됨"이다: BLE write 성공일 뿐 GRBL 확인이 아니다.
         FeedbackService.instance.signalSent();
         // interrupt: true → TtsPriority.result로 승격. 스크린리더 활성 시에도 억제되지
@@ -793,6 +820,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
           FeedbackService.instance.playFailure(); // 실패: 성공 피드백/이동 금지
           return;
         }
+        _consecutiveFailures = 0;
         // "성공"이 아니라 "전송됨"이다: BLE write 성공일 뿐 GRBL 확인이 아니다.
         FeedbackService.instance.signalSent();
         final spokenMessage = forceExecution && confirmationMessage.isNotEmpty
@@ -815,8 +843,84 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         }
         return;
 
+      case 'WASHER_CONTROL':
+        if (commands.isEmpty) {
+          final clarification = message.isNotEmpty ? message : '명령을 다시 말씀해 주세요.';
+          setState(() => _statusMessage = clarification);
+          await _speak(clarification);
+          return;
+        }
+        final washerSent = await _sendBleSequence(commands);
+        if (!washerSent) {
+          FeedbackService.instance.playFailure();
+          return;
+        }
+        _consecutiveFailures = 0;
+        FeedbackService.instance.signalSent();
+        final washerMsg = message.isNotEmpty
+            ? message
+            : WashingMachineCommandService.buildCommandsLabel(commands);
+        setState(() => _statusMessage = washerMsg);
+        await _speak(washerMsg, interrupt: true);
+        return;
+
+      case 'AC_CONTROL':
+        if (commands.isEmpty) {
+          final clarification = message.isNotEmpty ? message : '명령을 다시 말씀해 주세요.';
+          setState(() => _statusMessage = clarification);
+          await _speak(clarification);
+          return;
+        }
+        final acSent = await _sendBleSequence(commands);
+        if (!acSent) {
+          FeedbackService.instance.playFailure();
+          return;
+        }
+        _consecutiveFailures = 0;
+        FeedbackService.instance.signalSent();
+        final acMsg = message.isNotEmpty
+            ? message
+            : AcCommandService.buildCommandsLabel(commands);
+        setState(() => _statusMessage = acMsg);
+        await _speak(acMsg, interrupt: true);
+        return;
+
+      case 'NAVIGATE':
+        final target = data['target'] as String? ?? '';
+        final Widget? navigateDest;
+        final String destName;
+        switch (target) {
+          case 'connection':
+            navigateDest = const DeviceConnectScreen();
+            destName = '기기 연결';
+          case 'mapping':
+            navigateDest = const ManualMappingScreen();
+            destName = '버튼 매핑';
+          case 'settings':
+            navigateDest = const SettingsScreen();
+            destName = '설정';
+          default:
+            navigateDest = null;
+            destName = '';
+        }
+        if (navigateDest == null) return;
+        _consecutiveFailures = 0;
+        await _speak('$destName 화면으로 이동합니다.', interrupt: true);
+        if (!mounted) return;
+        final navScreen = navigateDest;
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => navScreen),
+        );
+        return;
+
       default:
-        final fallback = message.isNotEmpty ? message : '이해하지 못했습니다.';
+        _consecutiveFailures++;
+        final fallback = message.isNotEmpty
+            ? message
+            : (_consecutiveFailures >= 2
+                ? '이해하지 못했습니다. 도움말을 들으시려면 "도움말"이라고 말씀해 주세요.'
+                : '이해하지 못했습니다. 기기 이름과 동작을 함께 말씀해 주세요.');
         setState(() {
           _statusMessage = fallback;
         });

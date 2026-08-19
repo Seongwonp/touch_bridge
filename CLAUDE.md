@@ -216,7 +216,7 @@ if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) return;
 
 ### UX 원칙
 - **Look-free**: 화면 안 봐도 음성+진동으로 파악 가능
-- **Error-safe**: 이중 확인 + 즉시 취소 가능 (15초 타임아웃, WCAG 2.2.1)
+- **Error-safe**: 이중 확인 + 즉시 취소 가능 (20초 타임아웃, WCAG 2.2.1)
 - **Multimodal**: 음성 안내(TTS) + 햅틱 진동 + 고대비 큰 글씨
 
 ### 접근성 설정 (AccessibilitySettings)
@@ -229,7 +229,7 @@ if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) return;
 ### 준수 표준
 | 표준 | 등급 | 비고 |
 |------|------|------|
-| WCAG 2.2 AA | 준수 | 텍스트 4.5:1, 큰 텍스트 3:1, 타임아웃 15초 |
+| WCAG 2.2 AA | 준수 | 텍스트 4.5:1, 큰 텍스트 3:1, 타임아웃 20초 |
 | WCAG 2.2 AAA | 핵심 색상 준수 | textPrimary/secondary/tertiary, primary, secondary, success, warning ≥ 7:1 |
 | KS X 3253 | 준수 | 한국 모바일 앱 접근성 18개 항목 |
 
@@ -246,8 +246,11 @@ if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) return;
 | Semantics value | `emergency_stop_screen.dart` | `Semantics(label:'남은 시간', value: 'MM:SS')` — 포커스 시 타이머 값 읽기 |
 | heading 마킹 | `top_app_bar.dart` | `Semantics(header: true)` — 화면 제목을 heading으로 등록 |
 | 카운트다운 구간 TTS | `emergency_stop_screen.dart` | 5분·2분·1분·30초·10초·5초·3초 구간에서 자동 음성 알림 |
-| 이중 탭 타임아웃 | 전체 화면 | 15초 통일 (WCAG 2.2.1: 최소 20초, 앱 특성상 15초 적용) |
-| 200% 폰트 대응 | `emergency_button.dart`, `primary_button.dart` | `ConstrainedBox(minHeight:)` — 고정 height 제거 |
+| 이중 탭 타임아웃 | 전체 화면 | 20초 통일 (WCAG 2.2.1 준수) |
+| 200% 폰트 대응 | `emergency_button.dart`, `primary_button.dart`, `home_voice_action_button.dart`, `voice_action_buttons.dart` | `ConstrainedBox(minHeight:)` — 고정 height 제거 |
+| PageView TalkBack 잠금 | `home_screen.dart` | 스크린리더 활성 시 `NeverScrollableScrollPhysics` 적용, FooterNavHint 버튼으로 전환 |
+| 사용자 모드 음성 진입 액션 | `home_device_card.dart` | `CustomSemanticsAction('음성 명령 시작')` — TalkBack 액션 메뉴에서 바로 음성 진입 |
+| 첫 실행 온보딩 | `main_navigation_screen.dart` | 사용자 모드 TTS 안내 확장 + AlertDialog ("처음 오셨나요?") |
 
 ### 색상 대비 검증 (`test/theme/app_colors_contrast_test.dart`)
 `AppColors.getContrastRatio()` (IEC 61966-2-1 sRGB 공식, 지수 2.4)로 자동 검증.
@@ -324,6 +327,11 @@ BLE 연동 구현 파일: `lib/services/ble_service.dart`
 - [x] 기기 타입별 라우팅 — `ActiveDeviceService.getActiveDeviceType()`, 기기 등록 시 `deviceType` 저장
 - [x] BottomSheet 포커스 관리 — `FocusNode.requestFocus()` in `addPostFrameCallback`, TalkBack 첫 요소 자동 포커스
 - [x] 단위 테스트 160개 자동화 (BLE 재연결 16개 + 가전 명령 라우터 25개 추가)
+- [x] TalkBack 핵심 경로 차단 해소 — PageView 잠금, CustomSemanticsAction 음성 진입, autoStart 통일
+- [x] WCAG 2.2.1 타임아웃 20초 준수 (4곳)
+- [x] 200% 폰트 확대 대응 — `minHeight` 확산 적용 (6곳)
+- [x] 첫 실행 온보딩 안내 (TTS + AlertDialog)
+- [x] 세탁기·에어컨 음성 명령 BLE 전송 연결 (`WASHER_CONTROL` / `AC_CONTROL`)
 
 ## 하드웨어 연동 후 해야 할 일 (TODO)
 
@@ -345,9 +353,8 @@ BLE 연동 구현 파일: `lib/services/ble_service.dart`
   - 추가할 파일: `lib/services/hardware_sensor_service.dart`
   - UI: `lib/screens/settings/developer_console_screen.dart`에 센서 패널 추가
 - [ ] **세탁기·에어컨 버튼 매핑 프리셋** — `WashingMachineCommandService.BT-W01~09` / `AcCommandService.BT-A01~09` 논리 ID를 기기별 그리드 좌표로 변환하는 매핑 프리셋 파일 (`assets/presets/`)
-- [ ] **음성 명령 → 실제 BLE 시퀀스 연결** — 세탁기·에어컨 `WASHER_CONTROL` / `AC_CONTROL` 액션을 `VoiceListeningScreen._handleCommand`에서 BLE 전송으로 연결
+- [x] **음성 명령 → 실제 BLE 시퀀스 연결** — 세탁기·에어컨 `WASHER_CONTROL` / `AC_CONTROL` 액션 BLE 전송 구현
   - 파일: `lib/screens/voice/voice_listening_screen.dart:_handleCommand()`
-  - 현재: `MICROWAVE_CONTROL`만 BLE 전송 구현됨
 
 ### 선택 (공모전 후반)
 - [ ] **가디언 알림 (Firebase)** — 비상 정지 이벤트 발생 시 보호자 스마트폰에 Push 알림
@@ -361,7 +368,7 @@ BLE 연동 구현 파일: `lib/services/ble_service.dart`
 | 서비스 | 버튼 논리 ID | 음성 규칙 | BLE 연결 |
 |--------|-------------|-----------|---------|
 | `MicrowaveCommandService` | BT-01~09 | ✅ 구현 | ✅ 연결 |
-| `WashingMachineCommandService` | BT-W01~09 | ✅ 구현 | ❌ 미연결 (하드웨어 후) |
-| `AcCommandService` | BT-A01~09 | ✅ 구현 | ❌ 미연결 (하드웨어 후) |
+| `WashingMachineCommandService` | BT-W01~09 | ✅ 구현 | ✅ 연결 |
+| `AcCommandService` | BT-A01~09 | ✅ 구현 | ✅ 연결 |
 
 `ApplianceCommandRouter`가 `deviceType` 또는 `deviceName`을 보고 자동 라우팅.
