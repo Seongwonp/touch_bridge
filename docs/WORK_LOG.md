@@ -481,3 +481,37 @@
 - 병합 회귀 테스트 3건 추가 (`test/services/device_mapping_service_test.dart`):
   사진 매핑 데이터 보존(각 필드 전수 검증) / 그리드 축소 시 범위 밖 버튼 제거·보고 /
   그리드 확대 시 무손실.
+- 검증: `flutter analyze` 신규 이슈 0건, `flutter test` 181/181 통과.
+
+---
+
+## 2026-08-21 — [P0-5] 셀 충돌 검출 + Gemini Vision 결과 방어 (리뷰 후속 5단계)
+
+### 배경 (전면 리뷰에서 발견된 안전·견고성 결함)
+- 사진 매핑의 정밀 터치 좌표는 표시용일 뿐, 실제 물리 좌표는 row/col 그리드
+  양자화로만 계산된다. 서로 다른 두 버튼이 같은 셀에 떨어져도 **감지·경고가 없어**
+  "시작" 자리에서 "취소"가 눌릴 수 있었다.
+- `_applyAiMappingResult`가 파싱 **전에** `_points.clear()`를 호출해, AI가
+  `"x": "0.5"` 같은 문자열을 주면 cast 예외로 기존 수동 포인트까지 소실.
+  버튼 개수·그리드 크기 상한 없음(10개째부터 저장 시 조용히 유실), 빈 id에
+  DateTime 문자열 삽입 등.
+
+### 수정 내용
+- `MappingCoordinateService.detectCellCollisions()` 신설 (순수 함수):
+  정규화 좌표를 그리드로 양자화했을 때 같은 셀에 몰리는 버튼 라벨 그룹을 검출.
+- `PhotoMappingViewModel.save()`: 저장 전 충돌 검사 — 충돌 시 저장을 중단하고
+  겹친 버튼 이름을 TTS(result)로 고지, 그리드 확대/위치 조정 안내.
+- `_applyAiMappingResult` 전면 방어 재작성:
+  - 타입 안전 파싱(`num`/문자열 허용, 깨진 항목은 건너뛰고 카운트)
+  - **전체 파싱 성공 후에만** 기존 포인트 교체 (실패 시 수동 포인트 보존)
+  - 버튼 수 상한 9개(초과분 제외 고지), 그리드 상한 10×10 클램프
+  - 빈/중복 id는 BT-xx 순번으로 보정 (DateTime 문자열 제거)
+  - 적용 결과(개수/제외/건너뜀)를 TTS(result)로 구체 고지
+- 테스트 경로 기술용어 노출 수정: `testPoint`/`testAllPoints`가 개발자용
+  message(BT-xx 포함) 대신 userMessage/라벨을 읽어주도록 변경 + result 우선순위.
+
+### 테스트
+- 신규 `test/screens/mapping/photo_mapping_view_model_test.dart` 12건:
+  셀 충돌 검출 4건 / save 충돌 차단 1건 / AI 방어 7건 (문자열 좌표, 부분 실패,
+  전체 실패 시 보존, 빈 응답 보존, 9개 상한, 그리드 클램프, id 보정·중복 제거).
+  — 리뷰에서 "치명적 무테스트 영역"으로 지적된 PhotoMappingViewModel 첫 테스트.

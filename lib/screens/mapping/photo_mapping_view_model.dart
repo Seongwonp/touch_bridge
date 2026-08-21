@@ -7,6 +7,7 @@ import '../../services/tts_service.dart';
 import '../../services/ble_service.dart';
 import '../../services/microwave_command_service.dart';
 import '../../services/device_service.dart';
+import '../../services/mapping_coordinate_service.dart';
 import '../../services/mapping_execution_service.dart';
 import '../../services/home_device_store.dart';
 
@@ -200,11 +201,13 @@ class PhotoMappingViewModel extends ChangeNotifier {
     );
 
     if (result.ok) {
-      await _tts.speak('${point.label} 위치를 테스트합니다.');
+      await _tts.speak('${point.label} 위치를 테스트합니다.', priority: TtsPriority.result);
       return '${point.label} 테스트 명령 전송';
     }
-    await _tts.speak(result.message);
-    return result.message;
+    // message는 BT-xx 등 내부 용어가 섞인 개발자용 문구다 — 사용자에게는
+    // userMessage(기술용어 비노출 원칙)를 읽어준다.
+    await _tts.speak(result.userMessage, priority: TtsPriority.result);
+    return result.userMessage;
   }
 
   Future<String> testAllPoints() async {
@@ -267,12 +270,15 @@ class PhotoMappingViewModel extends ChangeNotifier {
       }
     }
     if (failed != null) {
+      // 내부 ID(BT-xx) 대신 사용자가 붙인 라벨로 안내한다.
+      final failedLabel = labels[failed.buttonId] ?? '해당';
       await _tts.speak(
-        '테스트에 실패했습니다. ${failed.buttonId ?? '해당'} 버튼 위치를 다시 조정하세요.',
+        '테스트에 실패했습니다. $failedLabel 버튼 위치를 다시 조정하세요.',
+        priority: TtsPriority.result,
       );
-      return failed.message;
+      return failed.userMessage;
     }
-    await _tts.speak('전체 버튼 테스트 명령을 전송했습니다.');
+    await _tts.speak('전체 버튼 테스트 명령을 전송했습니다.', priority: TtsPriority.result);
     return '전체 ${results.length}개 버튼 테스트 명령 전송';
   }
 
@@ -324,60 +330,171 @@ class PhotoMappingViewModel extends ChangeNotifier {
     }
   }
 
+  /// 테스트 전용 진입점 — AI 응답 방어 로직(_applyAiMappingResult)을 검증한다.
+  @visibleForTesting
+  void applyAiMappingResultForTest(Map<String, dynamic> res) =>
+      _applyAiMappingResult(res);
+
+  /// AI가 다룰 수 있는 최대 버튼 수. 논리 버튼 ID 체계(BT-01~09)와 일치한다.
+  /// 초과분은 저장 시 조용히 버려지는 문제가 있었으므로 적용 시점에 자르고 고지한다.
+  static const int maxAiButtons = 9;
+
+  /// 그리드 행/열 상한 — AI가 rows:1000 같은 값을 줘도 그대로 수용하지 않는다.
+  static const int maxGridDimension = 10;
+
   void _applyAiMappingResult(Map<String, dynamic> res) {
+    // AI 응답은 신뢰할 수 없는 외부 입력이다. 전부 파싱에 성공한 뒤에만 기존
+    // 포인트를 교체한다 — 중간에 예외가 나면 기존 수동 포인트가 이미 지워진
+    // 채 부분 적용 상태로 남던 버그(과거 `_points.clear()` 선행) 방지.
     final items =
         (res['buttons'] ?? res['items'] ?? res['detections']) as List<dynamic>?;
-    if (items == null) return;
+    if (items == null || items.isEmpty) {
+      _tts.speak(
+        '사진에서 버튼을 찾지 못했습니다. 버튼 위치를 직접 눌러 지정해 주세요.',
+        source: 'PhotoMappingScreen',
+        interrupt: true,
+        priority: TtsPriority.result,
+      );
+      return;
+    }
 
+    var rows = _mappingRows;
+    var cols = _mappingCols;
     final grid = res['grid'];
     if (grid is Map<String, dynamic>) {
-      _mappingRows = (grid['rows'] as num?)?.toInt() ?? _mappingRows;
-      _mappingCols = (grid['cols'] as num?)?.toInt() ?? _mappingCols;
-      if (_mappingRows <= 0) _mappingRows = 3;
-      if (_mappingCols <= 0) _mappingCols = 3;
+      rows = (grid['rows'] as num?)?.toInt() ?? rows;
+      cols = (grid['cols'] as num?)?.toInt() ?? cols;
     }
+    rows = rows.clamp(1, maxGridDimension);
+    cols = cols.clamp(1, maxGridDimension);
 
-    _points.clear();
+    final parsed = <ButtonPoint>[];
+    var malformed = 0;
     for (final raw in items) {
-      if (raw is Map<String, dynamic>) {
-        double? nx;
-        double? ny;
-        final id = (raw['button_id'] ?? raw['id'] ?? '').toString();
-        String label = (raw['label'] ?? raw['text'] ?? '').toString();
-        if (raw.containsKey('x') && raw.containsKey('y')) {
-          nx = (raw['x'] as num).toDouble();
-          ny = (raw['y'] as num).toDouble();
-        } else if (raw.containsKey('row') && raw.containsKey('col')) {
-          final row = (raw['row'] as num).toInt().clamp(0, _mappingRows - 1);
-          final col = (raw['col'] as num).toInt().clamp(0, _mappingCols - 1);
-          nx = (col + 0.5) / _mappingCols;
-          ny = (row + 0.5) / _mappingRows;
-        }
-        if (nx != null && ny != null) {
-          final normalizedX = nx.clamp(0.0, 1.0);
-          final normalizedY = ny.clamp(0.0, 1.0);
-          if (label.isEmpty && id.isNotEmpty) {
-            label = MicrowaveCommandService.buttonLabel[id] ?? id;
-          }
-          _points.add(
-            ButtonPoint(
-              id: id.isNotEmpty ? id : DateTime.now().toString(),
-              position: Offset(normalizedX, normalizedY),
-              label: label.isNotEmpty ? label : '버튼 ${_points.length + 1}',
-            ),
-          );
+      if (raw is! Map<String, dynamic>) {
+        malformed++;
+        continue;
+      }
+      // 타입 안전 파싱: AI가 "0.5" 같은 문자열이나 이상한 타입을 줘도
+      // 해당 항목만 건너뛰고 전체 적용은 계속한다.
+      final id = (raw['button_id'] ?? raw['id'] ?? '').toString();
+      String label = (raw['label'] ?? raw['text'] ?? '').toString();
+      double? nx = _asDouble(raw['x']);
+      double? ny = _asDouble(raw['y']);
+      if (nx == null || ny == null) {
+        final row = _asDouble(raw['row'])?.toInt();
+        final col = _asDouble(raw['col'])?.toInt();
+        if (row != null && col != null) {
+          nx = (col.clamp(0, cols - 1) + 0.5) / cols;
+          ny = (row.clamp(0, rows - 1) + 0.5) / rows;
         }
       }
+      if (nx == null || ny == null) {
+        malformed++;
+        continue;
+      }
+      if (label.isEmpty && id.isNotEmpty) {
+        label = MicrowaveCommandService.buttonLabel[id] ?? id;
+      }
+      parsed.add(
+        ButtonPoint(
+          id: id,
+          position: Offset(nx.clamp(0.0, 1.0), ny.clamp(0.0, 1.0)),
+          label: label.isNotEmpty ? label : '버튼 ${parsed.length + 1}',
+        ),
+      );
     }
+
+    if (parsed.isEmpty) {
+      _tts.speak(
+        '사진 분석 결과를 읽지 못했습니다. 버튼 위치를 직접 눌러 지정해 주세요.',
+        source: 'PhotoMappingScreen',
+        interrupt: true,
+        priority: TtsPriority.result,
+      );
+      return;
+    }
+
+    // 버튼 수 상한: 초과분은 저장 시 ID를 못 받아 조용히 버려지므로,
+    // 적용 시점에 자르고 사용자에게 알린다.
+    final dropped = parsed.length > maxAiButtons
+        ? parsed.length - maxAiButtons
+        : 0;
+    final applied = parsed.take(maxAiButtons).toList();
+
+    // 빈 id는 순번 기반으로 보정한다(이전에는 DateTime 문자열이 들어갔다).
+    final usedIds = <String>{};
+    for (var i = 0; i < applied.length; i++) {
+      var point = applied[i];
+      if (point.id.isEmpty || usedIds.contains(point.id)) {
+        for (var k = 1; k <= maxAiButtons; k++) {
+          final cand = 'BT-${k.toString().padLeft(2, '0')}';
+          if (!usedIds.contains(cand)) {
+            point = ButtonPoint(
+              id: cand,
+              position: point.position,
+              label: point.label,
+            );
+            break;
+          }
+        }
+      }
+      usedIds.add(point.id);
+      applied[i] = point;
+    }
+
+    // 파싱이 모두 끝난 뒤에야 교체한다.
+    _mappingRows = rows;
+    _mappingCols = cols;
+    _points
+      ..clear()
+      ..addAll(applied);
     notifyListeners();
+
+    final extra = [
+      if (dropped > 0) '버튼이 많아 $dropped개는 제외했습니다.',
+      if (malformed > 0) '읽지 못한 항목 $malformed개는 건너뛰었습니다.',
+    ].join(' ');
     _tts.speak(
-      '버튼 위치를 찾았습니다. 위치를 확인하고 저장하세요.',
+      '버튼 ${applied.length}개의 위치를 찾았습니다. $extra 위치를 확인하고 저장하세요.',
       source: 'PhotoMappingScreen',
       interrupt: true,
+      priority: TtsPriority.result,
     );
   }
 
+  double? _asDouble(Object? value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+
   Future<String> save() async {
+    // 저장 전 셀 충돌 검사: 서로 다른 버튼이 같은 그리드 셀로 양자화되면
+    // 하드웨어는 같은 지점을 누른다("시작" 자리에서 "취소"가 눌리는 최악의
+    // 오작동). 침묵 저장하지 않고 보호자에게 조정을 요구한다.
+    final collisions = MappingCoordinateService.detectCellCollisions(
+      points: [
+        for (final p in _points)
+          (label: p.label, x: p.position.dx, y: p.position.dy),
+      ],
+      rows: _mappingRows,
+      cols: _mappingCols,
+    );
+    if (collisions.isNotEmpty) {
+      final desc = collisions.map((g) => g.join('·')).join(', ');
+      final msg =
+          '버튼 위치가 서로 너무 가까워 같은 칸에 겹칩니다: $desc. '
+          '그리드 행·열을 늘리거나 겹친 버튼 위치를 조정한 뒤 다시 저장해 주세요.';
+      await _tts.speak(
+        msg,
+        source: 'PhotoMappingScreen',
+        interrupt: true,
+        priority: TtsPriority.result,
+      );
+      return msg;
+    }
+
     _isUploading = true;
     notifyListeners();
 
