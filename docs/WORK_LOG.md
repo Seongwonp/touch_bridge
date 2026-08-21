@@ -813,3 +813,28 @@
 
 ### 마무리
 - DOCS_MERGE_PROPOSAL은 병합 완료 주석과 함께 `docs/archive/`로 이동.
+- 검증: `flutter analyze` 신규 이슈 0건, `flutter test` 215/215 통과.
+
+---
+
+## 2026-08-21 — [P1-마감] 잔여 버그 일괄 수정 (리뷰 후속 15단계 — 3주차 완료)
+
+### 수정 목록 (전면 리뷰 잔여 P1)
+1. **BleLoadingHelper 중복 실행**: `StatefulBuilder` builder 안에서 `onExecute`를
+   호출해 진행률 setState마다 BLE 업로드가 재시작되던 결함 → `started` 플래그로
+   최초 1회만 실행, 다이얼로그 닫힌 뒤 콜백 가드(`closed`) 추가.
+2. **appliance_selection 취소/샘플 구분 불가**: 시트 dismiss와 '샘플 이미지'가
+   모두 null이라 취소해도 샘플로 매핑 화면에 진입 → 반환 계약을
+   `({path, useSample})?`로 변경(null=취소=진입 안 함), 피커 취소 시 안내 추가.
+3. **VoiceTextMatcher contains 오탐**: "그런데 말이야"의 '네' 같은 오탐이 곧
+   물리 버튼 누름이던 문제 → 긍정은 정확 일치+짧은 변형만(엄격), 부정은 포함
+   매칭 유지(오탐 결과가 '취소'라 안전한 비대칭 정책). 첫 테스트 9건 신설.
+4. **EmergencyIntent '일시정지' 충돌**: 세탁기 일시정지 요청이 '정지' 부분 매칭으로
+   항상 비상 정지에 가로채이던 문제 → "일시정지" 표현 제거 후 토큰 검사
+   (다른 중단 토큰 동반 시엔 여전히 비상 정지). 회귀 테스트 2건 추가.
+5. **home_screen**: `_deleteTimer` dispose 누락(죽은 context 다이얼로그 위험) 수정,
+   홈 안내를 최초 1회로 제한 + interrupt 제거 — 기기 목록 갱신마다 백그라운드
+   홈이 현재 안내/온보딩 TTS를 지우던 레이스 해소. 온보딩 안내는 result
+   우선순위로 승격(1회뿐인 핵심 안내, 홈 navigation 안내에 대체되지 않음).
+6. **ble_log_screen 구독 누수**: logStream 구독을 저장/취소하지 않아 화면을
+   여닫을 때마다 리스너가 누적되던 문제 수정 (+ScrollController dispose).

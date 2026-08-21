@@ -18,6 +18,18 @@ void main() {
       expect(EmergencyIntent.matches('전자레인지 30초 시작'), isFalse);
       expect(EmergencyIntent.matches('공기청정기 켜줘'), isFalse);
     });
+
+    test('"일시정지"는 비상 정지가 아니다 (세탁기 일시정지 버튼 명령)', () {
+      // '정지' 토큰이 "일시정지"에 부분 매칭돼 세탁기 일시정지 요청이 항상
+      // 비상 정지로 가로채이던 충돌의 회귀 테스트.
+      expect(EmergencyIntent.matches('세탁기 일시정지 해줘'), isFalse);
+      expect(EmergencyIntent.matches('일시 정지'), isFalse);
+    });
+
+    test('"일시정지"와 함께 다른 중단 토큰이 있으면 여전히 비상 정지다', () {
+      expect(EmergencyIntent.matches('일시정지 말고 전부 멈춰'), isTrue);
+      expect(EmergencyIntent.matches('일시정지 아니고 그만'), isTrue);
+    });
   });
 
   group('EmergencyStopOutcome.fromAck', () {

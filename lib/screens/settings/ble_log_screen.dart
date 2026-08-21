@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../services/ble_service.dart';
 import '../../widgets/responsive_scale.dart';
@@ -13,6 +15,7 @@ class BleLogScreen extends StatefulWidget {
 class _BleLogScreenState extends State<BleLogScreen> {
   final List<String> _logs = [];
   final ScrollController _scrollController = ScrollController();
+  StreamSubscription<String>? _logSub;
 
   ({String source, Color color, String text}) _parseLog(String log) {
     final isSend = log.contains('SEND:');
@@ -50,12 +53,21 @@ class _BleLogScreenState extends State<BleLogScreen> {
   @override
   void initState() {
     super.initState();
-    BleService.instance.logStream.listen((log) {
+    // 구독을 저장했다가 dispose에서 취소한다 — 화면을 여닫을 때마다 리스너가
+    // 누적되던 누수(과거 결함) 방지.
+    _logSub = BleService.instance.logStream.listen((log) {
       if (mounted) {
         setState(() => _logs.add(log));
         _scrollToBottom();
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _logSub?.cancel();
+    _scrollController.dispose();
+    super.dispose();
   }
 
   void _scrollToBottom() {

@@ -50,6 +50,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // 홈 안내는 최초 로드에만 발화한다.
+  // 홈은 IndexedStack에 상주하므로, 기기 목록 갱신(deviceListUpdateNotifier)마다
+  // interrupt 안내를 하면 (a) 보호자가 기기 관리 화면에 있는데 백그라운드 홈이
+  // 현재 안내를 선점하고, (b) 첫 실행 온보딩 TTS를 지워버리는 레이스가 있었다.
+  bool _announcedOnce = false;
+
   Future<void> _loadDevices() async {
     try {
       final devices = await HomeDeviceStore.loadDevices();
@@ -58,7 +64,10 @@ class _HomeScreenState extends State<HomeScreen> {
         _devices = devices;
         _isLoading = false;
       });
-      await _announceScreen();
+      if (!_announcedOnce) {
+        _announcedOnce = true;
+        await _announceScreen();
+      }
     } catch (e) {
       debugPrint('Error loading devices: $e');
       if (mounted) {
@@ -69,13 +78,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _announceScreen() async {
     final guardianMode = AccessibilitySettings.instance.guardianModeEnabled;
+    // interrupt를 쓰지 않는다 — 첫 실행 온보딩 안내(main_navigation)가 재생 중일
+    // 수 있으므로 큐 뒤에 자연스럽게 이어 붙인다.
     if (_devices.isEmpty) {
       await _tts.speak(
         guardianMode
             ? '홈입니다. 등록된 기기가 없습니다. 기기 관리에서 새 기기를 추가하세요.'
             : '홈입니다. 등록된 기기가 없습니다. 화면의 기기 추가하기 버튼으로 직접 등록하거나, 보호자에게 요청하세요.',
         source: 'HomeScreen',
-        interrupt: true,
       );
       return;
     }
@@ -85,13 +95,15 @@ class _HomeScreenState extends State<HomeScreen> {
           ? '홈입니다. 등록된 기기 ${_devices.length}개가 있습니다. 기기를 선택하거나 말하기 버튼을 누르세요.'
           : '홈입니다. 등록된 기기 ${_devices.length}개가 있습니다. 기기를 선택한 뒤 말하기 버튼을 누르세요.',
       source: 'HomeScreen',
-      interrupt: true,
     );
   }
 
   @override
   void dispose() {
     _quickVoiceTapTimer?.cancel();
+    // 롱프레스 도중 화면이 사라지면 5초 뒤 죽은 context로 다이얼로그를 띄우려던
+    // 누수(타이머 미취소) 방지.
+    _deleteTimer?.cancel();
     _pageController.dispose();
     ActiveDeviceService.instance.deviceListUpdateNotifier.removeListener(
       _loadDevices,
@@ -312,6 +324,7 @@ class _HomeScreenState extends State<HomeScreen> {
       interrupt: true,
     );
     _deleteTimer = Timer(const Duration(seconds: 5), () {
+      if (!mounted) return;
       _showDeleteConfirmation(index);
     });
   }

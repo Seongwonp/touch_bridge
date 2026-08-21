@@ -91,25 +91,32 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     if (seen) return;
 
     final guardianMode = AccessibilitySettings.instance.guardianModeEnabled;
+    // 첫 실행 1회뿐인 핵심 온보딩 안내 — result 우선순위로 재생해
+    // (a) 스크린리더 활성 시에도 들리고, (b) 홈 화면의 navigation 안내가
+    // 큐에서 이 안내를 대체(navigation 최신 1건 유지 규칙)하지 못하게 한다.
     if (guardianMode) {
       await _tts.speak(
         '보호자 안내입니다. 기기 관리에서 기기를 등록하세요.',
         source: 'MainNavigationScreen',
         interrupt: true,
+        priority: TtsPriority.result,
       );
       await _tts.speak(
         '등록 후 홈에서 기기를 선택하고 말하기 버튼으로 제어합니다.',
         source: 'MainNavigationScreen',
+        priority: TtsPriority.result,
       );
     } else {
       await _tts.speak(
         'Touch Bridge입니다. 보호자가 기기를 먼저 등록해야 합니다.',
         source: 'MainNavigationScreen',
         interrupt: true,
+        priority: TtsPriority.result,
       );
       await _tts.speak(
         '설정에서 보호자 모드를 켜고 기기를 등록한 뒤, 홈에서 말하기를 누르세요.',
         source: 'MainNavigationScreen',
+        priority: TtsPriority.result,
       );
     }
     await prefs.setBool('quick_start_seen', true);

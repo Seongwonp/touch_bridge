@@ -55,7 +55,16 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
     super.dispose();
   }
 
-  Future<String?> _chooseImageForMapping(BuildContext context) async {
+  /// 매핑용 이미지 선택.
+  ///
+  /// 반환 계약: **null = 사용자가 취소** (시트 dismiss 또는 피커 취소) —
+  /// 호출부는 매핑 화면으로 진입하면 안 된다. 샘플 이미지 선택은
+  /// `(path: null, useSample: true)`로 구분한다.
+  /// (이전에는 취소와 샘플이 모두 null이라, 취소했는데도 샘플 이미지로
+  /// 매핑 화면에 진입하는 버그가 있었다.)
+  Future<({String? path, bool useSample})?> _chooseImageForMapping(
+    BuildContext context,
+  ) async {
     final choice = await showModalBottomSheet<int>(
       context: context,
       backgroundColor: AppColors.surfaceElevated,
@@ -93,8 +102,8 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
       ),
     );
 
-    if (choice == null) return null;
-    if (choice == 2) return null; // use built-in sample image
+    if (choice == null) return null; // 시트 dismiss = 취소
+    if (choice == 2) return (path: null, useSample: true); // 샘플 이미지로 진행
 
     try {
       // [CRITICAL] iOS 리소스 격리: 모든 고부하 작업 중지
@@ -114,10 +123,15 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
       // 피커 종료 후 다시 대기
       await Future.delayed(const Duration(milliseconds: 800));
 
-      return xfile?.path;
+      if (xfile == null) {
+        // 피커에서 취소 — 매핑 진입 없이 원래 화면 유지.
+        _tts.speak('사진 선택을 취소했습니다.', priority: TtsPriority.result);
+        return null;
+      }
+      return (path: xfile.path, useSample: false);
     } catch (e) {
       debugPrint('Error picking image (Critical Isolation): $e');
-      _tts.speak('사진을 가져오는 중 오류가 발생했습니다.');
+      _tts.speak('사진을 가져오는 중 오류가 발생했습니다.', priority: TtsPriority.result);
       return null;
     }
   }
@@ -203,6 +217,7 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
               }
 
               final result = await _chooseImageForMapping(context);
+              if (result == null) return; // 취소 — 매핑 화면으로 넘어가지 않는다
               if (!context.mounted) return;
 
               // [CRITICAL] 피커 종료 후 OS 리소스 안정화를 위해 추가 대기
@@ -214,7 +229,7 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
                 MaterialPageRoute(
                   builder: (_) => PhotoMappingScreen(
                     deviceId: _newDeviceId(ap.name.replaceAll(' ', '_')),
-                    imagePath: result,
+                    imagePath: result.path,
                     applianceName: ap.name,
                     applianceType: ap.type.name,
                     bleId: widget.bleId,

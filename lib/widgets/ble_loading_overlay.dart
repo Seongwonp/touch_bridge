@@ -189,6 +189,16 @@ class BleLoadingHelper {
   }) async {
     double progress = 0.0;
     bool completed = false;
+    bool started = false;
+    bool closed = false;
+    StateSetter? rebuild;
+
+    // 다이얼로그가 닫힌 뒤 도착하는 진행률 콜백이 dispose된 StatefulBuilder의
+    // setState를 부르지 않도록 가드한다.
+    void safeRebuild(VoidCallback fn) {
+      if (closed) return;
+      rebuild?.call(fn);
+    }
 
     // 로딩 다이얼로그 표시
     showDialog(
@@ -196,12 +206,22 @@ class BleLoadingHelper {
       barrierDismissible: false,
       builder: (_) => StatefulBuilder(
         builder: (_, setState) {
-          // 작업 실행
-          onExecute((newProgress) {
-            setState(() => progress = newProgress.clamp(0.0, 1.0));
-          }).then((_) {
-            setState(() => completed = true);
-          });
+          rebuild = setState;
+          // 작업은 최초 1회만 시작한다. builder는 진행률 setState마다 재실행되므로
+          // 여기서 무조건 실행하면 BLE 업로드가 갱신 때마다 중복 시작되는 버그가
+          // 있었다(과거 결함).
+          if (!started) {
+            started = true;
+            Future<void>(() async {
+              try {
+                await onExecute((newProgress) {
+                  safeRebuild(() => progress = newProgress.clamp(0.0, 1.0));
+                });
+              } finally {
+                safeRebuild(() => completed = true);
+              }
+            });
+          }
 
           return BleLoadingOverlay(
             progress: progress,
@@ -211,6 +231,6 @@ class BleLoadingHelper {
           );
         },
       ),
-    );
+    ).then((_) => closed = true);
   }
 }

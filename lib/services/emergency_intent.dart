@@ -20,8 +20,14 @@ class EmergencyIntent {
   ];
 
   /// [text]에 중단 토큰이 포함되면 true.
+  ///
+  /// 예외: "일시정지"는 세탁기 등의 **일시정지 버튼을 눌러 달라는 명령**이지
+  /// 갠트리 비상 정지가 아니다. '정지' 토큰이 "일시정지"에 부분 매칭되어
+  /// 세탁기 일시정지 요청이 항상 비상 정지로 가로채이던 충돌을 막기 위해,
+  /// "일시정지" 표현을 제거한 뒤 토큰을 검사한다.
+  /// ("일시정지 말고 다 멈춰"처럼 다른 중단 토큰이 함께 있으면 여전히 비상 정지.)
   static bool matches(String text) {
-    final lower = text.toLowerCase();
+    final lower = text.toLowerCase().replaceAll(RegExp(r'일시\s*정지'), '');
     return tokens.any(lower.contains);
   }
 }
