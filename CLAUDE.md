@@ -1,4 +1,4 @@
-# Touch Bridge — AI Context Document
+﻿# Touch Bridge — AI Context Document
 
 ## 프로젝트 개요
 
@@ -21,14 +21,15 @@
 
 가전 터치패드 위에 **부착하는 IoT 장치**가 스마트폰 앱/음성 명령을 받아 **물리적으로 버튼을 대신 눌러주는** 시스템
 
-## 하드웨어 (연동 대기 중)
+## 하드웨어 (현행 — GRBL XYZ 갠트리)
 
-3단계 전략:
-1. **초슬림 키캡 (5.1mm)** — 정전용량 센싱 + 음성 안내, 오프라인 동작
-2. **범용 SG90** — 랙&피니언 X/Y 레일로 버튼 위치 이동 후 물리 터치
-3. **CoreXY 레일** — 솔레노이드 + CoreXY 구조로 전 영역 정밀 제어
-
-**핵심 부품:** ESP32 (BLE 5.0 GATT), SG90/NEMA14 모터, 솔레노이드, 전류·온도 센서
+- X/Y/Z: `NK1704S` 42각 스텝모터 3개 + `TB6600` 드라이버 3개
+- 제어: `Arduino Uno + GRBL`, 통신: 앱 → BLE → `ESP32` → UART → Uno
+- 전원: 모터 12V 별도 전원, MCU 전원 분리, 공통 GND
+- 상세 기준: `docs/HARDWARE_MIGRATION_PLAN.md` (NK1704S+TB6600+GRBL 버전),
+  구조 연구: `docs/HARDWARE_FRAME_MODEL_RESEARCH.md`, `docs/DAGUIRRE_COMPACT_REDESIGN.md`
+- (과거의 키캡/SG90/CoreXY 3단계 전략은 폐기 — CoreXY는 클래식 GRBL과 충돌해
+  기각됨. 구버전 계획은 `docs/archive/` 참조)
 
 ## Flutter 앱 — 기술 스택
 
@@ -61,7 +62,7 @@ lib/
 │   │                                       # home_empty_state, control_mode_sheet
 │   ├── control/remote_control_screen.dart, image_control_screen.dart, course_control_screen.dart
 │   ├── voice/
-│   │   ├── voice_listening_screen.dart    # STT + Gemini AI 음성 명령 (5초 침묵 감지)
+│   │   ├── voice_listening_screen.dart    # STT + Gemini AI 음성 명령 (침묵 감지(기본 8초, 설정 5~15초))
 │   │   └── widgets/                       # voice_wave_visualizer, voice_action_buttons, voice_example_commands
 │   ├── safety/
 │   │   ├── emergency_stop_screen.dart     # 비상 정지 (3초 홀드 OR "멈춰" 음성)
@@ -116,10 +117,6 @@ lib/
 - AnimationController로 진행바 표시 (3초)
 - 완료 → StopDoneScreen
 
-### 스와이프 뒤로가기
-오른쪽 스와이프 (velocity > 450) → 이전 화면
-TTS: "이전 화면으로 돌아갑니다."
-
 ### TTS 피드백 패턴
 - 화면 진입: 화면 이름 + 조작 방법 안내
 - 버튼 첫 탭: `"[버튼명] 버튼입니다. 한 번 더 누르면 실행합니다."`
@@ -127,11 +124,11 @@ TTS: "이전 화면으로 돌아갑니다."
 - 완료: `"완료되었습니다."` or `"작동이 안전하게 중단되었습니다."`
 
 ### 기기 목록 관리 (HomeScreen)
-- `DeviceInfo` 클래스: id(immutable), name, status, iconCodePoint → JSON 직렬화
-- SharedPreferences 키: `home_devices`
-- 상단 "+" 버튼: 이름 + 아이콘 8종 선택 → 추가
-- 카드 롱프레스: 수정 / 버튼 매핑 / 삭제 Bottom Sheet
-- 기본 기기 3개는 저장된 데이터 없을 때만 표시
+- 기기는 `Map<String, dynamic>`(id/name/status/iconCodePoint/bleId/bleName[/deviceType])
+  형태로 `HomeDeviceStore`(`home_devices` 키)에서 단일 관리
+- 기기 추가 경로: 기기 연결 화면(BLE/NFC/코드 입력) 또는 가전 선택 화면 — 보호자 모드
+- 카드 롱프레스(5초) 또는 스크린리더 커스텀 액션: 삭제 확인
+- 저장된 기기가 없으면 빈 상태 화면(기기 추가 안내) 표시
 
 ### 버튼 매핑 (PhotoMappingScreen)
 - `deviceId` / `deviceName` 파라미터로 기기별 독립 저장
@@ -173,15 +170,17 @@ TTS: "이전 화면으로 돌아갑니다."
 `_calculateSeconds(commands)` — 버튼 시퀀스에서 총 초를 계산해 `EmergencyStopScreen`에 전달.
 버튼 ID 시퀀스는 기기별 매핑(rows×cols)에 따라 좌표로 변환되어 `BleService.sendPress()`로 전송됨.
 
-- 5초 침묵 감지: 말 없음 → 재시도 안내 / 말 있었음 → 자동 분석
+- 침묵 감지(기본 8초, 설정 5~15초): 말 없음 → 재시도 안내 / 말 있었음 → 자동 분석
 - Chrome `onStatus: 'done'` 처리 포함
 
 ## 환경 설정 (.env)
 
 ```
 AI_BACKEND_URL=http://127.0.0.1:8000
+AI_BACKEND_API_KEY=   # 백엔드 BACKEND_API_KEY 설정 시 같은 값
 ```
 앱은 API 키를 직접 보관하지 않고 백엔드 경유로 AI 기능을 사용.
+백엔드에는 API 키 인증(X-API-Key)·레이트리밋·AI 응답 스키마 검증이 있다 (2026-08-21).
 
 ## 플랫폼별 TTS/STT 주의사항
 
@@ -297,7 +296,7 @@ BLE 연동 구현 파일: `lib/services/ble_service.dart`
 - [x] 앱 기본 구조 및 4탭 네비게이션
 - [x] 이중 탭 확인 패턴 (모든 화면)
 - [x] TTS 서비스 (Singleton, 한국어, 설정 영속화)
-- [x] STT + Gemini AI 음성 명령 (5초 침묵 감지 포함)
+- [x] STT + Gemini AI 음성 명령 (침묵 감지(기본 8초, 설정 5~15초) 포함)
 - [x] 비상 정지 화면 (3초 홀드 + 음성)
 - [x] 설정 화면 (접근성, 음성 안내, 가디언 모드)
 - [x] 기기 연결 화면 (QR/BLE/NFC UI)

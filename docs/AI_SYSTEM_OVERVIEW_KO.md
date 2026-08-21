@@ -1,3 +1,7 @@
+﻿> [최신화 주석 2026-08-21] 3장의 하드웨어 3단계 전략(키캡/SG90/CoreXY)은 **폐기된 구버전**입니다.
+> 현행 하드웨어는 NK1704S+TB6600+Arduino Uno GRBL XYZ 갠트리 — docs/HARDWARE_MIGRATION_PLAN.md 참조.
+> 4~6장(프로토콜, AI 논리 ID 원칙, 가변 그리드)은 현행과 일치합니다.
+
 # Touch Bridge: AI 시스템 통합 가이드 (AI System Overview)
 
 이 문서는 AI(Gemini, Claude 등)가 **Touch Bridge** 프로젝트의 전체 아키텍처, 하드웨어 연동 규약, 그리고 소프트웨어 로직을 빠르게 이해하고 협업할 수 있도록 돕기 위해 작성되었습니다.

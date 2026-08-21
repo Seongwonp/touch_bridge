@@ -2,7 +2,7 @@
 
 > 담당: 박성원 | AI 협업: Gemini CLI (Auto-Edit)
 > 프로젝트: 2026 한이음 드림업 — 시각장애인용 가전 터치패드 자동 입력 시스템  
-> 팀: 3팀 멜론머스크 (차아미 · 박성원 · 서예솔)  
+> 팀: 3팀 멜론머스크 (박성원 · 서예솔) — README/CLAUDE.md와 통일 (2026-08-21)  
 > 기간: 2026.03 ~ 2026.10
 
 ---
@@ -745,3 +745,36 @@
   CLAUDE.md 이중 탭 절. REFERENCES.md "15초 통일" → 20초로 정정.
 - 상수 드리프트 방지 회귀 테스트 1건 추가(값 변경 시 문서 동반 갱신 강제 신호).
 - AGENTS.md의 4초 서술은 다음 단계(문서 정합성 패스)에서 파일 자체를 정리하며 처리.
+- 검증: `flutter analyze` 신규 이슈 0건, `flutter test` 215/215 통과.
+
+---
+
+## 2026-08-21 — [정합성-2] 문서 계보 복구·아카이빙 (리뷰 후속 13단계)
+
+### HARDWARE_MIGRATION_PLAN.md 복구 (최우선 모순 해소)
+- README가 "NK1704S+TB6600+GRBL 기준은 이 문서"라고 링크하는데, 실제 파일은
+  전혀 다른 구버전(NEMA11+TMC2208)이었다 — git 히스토리 조사 결과 `0a1d1e0`
+  커밋("초기 프로젝트 구조...")이 현행 문서를 구버전으로 **덮어쓴 사고**로 확인.
+- `cf770f8` 시점의 현행 버전(NK1704S+TB6600+GRBL)을 복원하고, NEMA11 구버전은
+  `docs/archive/HARDWARE_MIGRATION_PLAN_NEMA11_TMC2208_구버전.md`로 이동
+  (아카이브 사유 헤더 포함).
+
+### AGENTS.md 이중 관리 제거
+- CLAUDE.md의 스테일 사본(3인 팀, 4초 타임아웃, 구 하드웨어 전략)이던 AGENTS.md를
+  **CLAUDE.md 포인터 파일**로 교체 — 같은 내용을 두 곳에서 관리하다 어긋나는
+  사고의 재발 방지.
+
+### CLAUDE.md 허위/구식 서술 정정
+- 하드웨어 절: 폐기된 키캡/SG90/CoreXY 3단계 → 현행 GRBL XYZ 갠트리로 교체
+  (CoreXY 기각 사유·참조 문서 명시).
+- 존재하지 않는 "스와이프 뒤로가기" 절 삭제, "5초 침묵" → 기본 8초·설정 5~15초,
+  홈 화면 기기 목록 서술을 실제 구조(HomeDeviceStore/Map)로 교체,
+  환경변수 절에 AI_BACKEND_API_KEY 추가.
+
+### 스테일 문서 아카이빙 + 정리
+- `docs/archive/` 신설: CLOUD_INTEGRATION_PLAN(실코드 MongoDB에 추월당함),
+  MAPPING_VOICE_STABILIZATION_TODO, FEATURE_COMPLETION_INVENTORY,
+  accessibility-improvements-2026-05-04 이동. `.ipynb_checkpoints` 삭제.
+- AI_SYSTEM_OVERVIEW_KO(3장 스테일)·HARDWARE_TASKS(SG90/DRV8825 잔존)에
+  최신화 주석 헤더 추가 — 전면 재작성 대신 어느 부분이 유효한지 명시.
+- WORK_LOG 헤더 팀 구성을 README와 통일(박성원 · 서예솔).
