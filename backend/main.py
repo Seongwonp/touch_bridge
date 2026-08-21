@@ -315,4 +315,6 @@ async def process_voice(file: UploadFile = File(...)):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    # 포트는 문서 전반(README/.env_ex/REPRO_RUNBOOK)과 8000으로 통일 —
+    # 과거 8000/8001 혼재로 재현 실패 여지가 있었다.
+    uvicorn.run(app, host="0.0.0.0", port=8000)

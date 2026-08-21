@@ -8,8 +8,11 @@
 ## 2) 환경 변수
 ### 앱 루트 `.env`
 ```env
-# 아이폰 실기기 테스트 시 맥의 hostname.local 주소를 사용하세요
-AI_BACKEND_URL=http://bagseong-won-ui-MacBookPro.local:8001
+AI_BACKEND_URL=http://127.0.0.1:8000
+# 실기기 테스트 시 백엔드 PC의 같은 Wi-Fi IP 또는 <호스트명>.local 주소를 사용
+# 예: AI_BACKEND_URL=http://192.168.0.10:8000
+# 백엔드에 BACKEND_API_KEY를 설정한 경우 같은 값 지정
+AI_BACKEND_API_KEY=
 ```
 (`.env_ex` 참고)
 
@@ -17,20 +20,45 @@ AI_BACKEND_URL=http://bagseong-won-ui-MacBookPro.local:8001
 ```env
 GOOGLE_API_KEY=YOUR_REAL_KEY
 GEMINI_MODEL=gemini-1.5-flash
+BACKEND_API_KEY=
 MONGO_URI=mongodb://localhost:27017/
 ```
-(`backend/.env_ex` 참고)
+(`backend/.env_ex` 참고. MongoDB가 없어도 인메모리 폴백으로 동작한다.)
+
+## 2-1) 하드웨어 안전 체크리스트 (실기기 연동 시)
+
+전원 인가 전:
+- [ ] TB6600 3개의 DIP 전류 설정이 NK1704S 정격 이내인지 확인
+- [ ] 12V 모터 전원과 로직 전원(Uno/ESP32)이 분리되어 있고 GND는 공통인지 확인
+- [ ] ESP32 TX → Uno RX 배선과 전압 레벨 처리 확인
+- [ ] 12V 전원 스위치/배럴잭이 즉시 손 닿는 위치인지 확인 (물리적 최종 비상 차단)
+- [ ] 축 이동 범위 안 장애물/손 제거
+
+전원 인가 후:
+- [ ] GRBL 부팅 메시지 수신 확인 (시리얼 115200)
+- [ ] `$H` 홈 복귀 정상 동작 (리미트 스위치 연동 확인)
+- [ ] 각 축 단독 소거리 이동으로 방향/스텝 확인 (앱은 G91→G1→G90 이동 명령 사용)
+
+상세 배선/GRBL 설정값은 [HARDWARE_MIGRATION_PLAN.md](HARDWARE_MIGRATION_PLAN.md) 기준.
 
 ## 3) 백엔드 실행
-- **MongoDB 실행**: `brew services start mongodb-community` (최초 1회)
-- **가상환경 활성화 및 실행**:
+
+### macOS
 ```bash
+brew services start mongodb-community   # 선택 (없어도 인메모리 폴백)
 cd backend
-source .venv/bin/activate
-python3 -m uvicorn main:app --host 0.0.0.0 --port 8001
+source .venv/bin/activate               # 최초 1회: python3 -m venv .venv && pip install -r requirements.txt
+python3 -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-기본 주소: `http://localhost:8001`
+### Windows
+```powershell
+cd backend
+.venv\Scripts\Activate.ps1              # 최초 1회: python -m venv .venv; pip install -r requirements.txt
+python -m uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+기본 주소: `http://localhost:8000` (앱 `.env`의 AI_BACKEND_URL 포트와 일치해야 함)
 
 ## 4) 앱 실행
 ```bash
@@ -48,6 +76,10 @@ flutter test
 ```
 
 ## 6) 데모 체크리스트
+
+> 합격 기준: 항목 1~7은 화면을 가리고(또는 눈을 감고) 음성 안내만으로 완료 가능해야 한다.
+> 시각 확인이 필요했던 항목은 "실패"로 기록하고 문구/플로우를 보완한다.
+
 1. 홈 화면 기기 선택 가능
 2. 보호자 모드 ON에서 기기 관리/기기 추가 진입 가능
 3. 보호자 모드 OFF에서 하단 바가 홈/비상/설정으로 단순화되는지 확인
@@ -65,8 +97,19 @@ flutter test
 4. 개발자 콘솔에서 `ESP 선택`으로 다른 ESP32를 검색/연결할 수 있는지 확인한다.
 5. 개발자 콘솔에서 이동 단위와 속도 `F값`을 바꾼 뒤 X/Y/Z 조이스틱 로그가 바뀐 값으로 출력되는지 확인한다.
 
-## 6-1) 매핑/음성 제어 검증
+## 6-0-1) GRBL 오류/통신 신뢰성 검증 (개발자 모드)
+1. 의도적 오류 명령(예: `G999`) 전송 → 개발자 로그에 `error` 표기, 사용자 화면에는
+   "실행하지 못했습니다" 계열 문구만 나오는지 확인.
+2. 소프트 리미트 밖 좌표 전송 → ALARM 발생 확인, 복구 절차($X 또는 리셋+`$H`)가
+   개발자/보호자 흐름에서만 가능한지 확인.
+3. 연속 명령 10회 전송 → 유실/순서 뒤바뀜 없는지 로그로 확인.
+4. 전송 중 BLE 범위 이탈 → 연결 끊김 감지와 앱 안내 확인.
+5. dry-run 모드에서 BT-xx 실행 → 실제 전송 없이 변환 G-code 시퀀스가
+   "XY 이동 → Z 하강 → Z 복귀" 순서인지 로그로 확인.
+
+## 6-1) 매핑/조작 검증
 1. 개발자 모드 또는 수동 매핑 화면에서 X/Y/Z 조이스틱 이동을 확인한다.
+   (앱은 `$J` 대신 `G91` → `G1` → `G90` 안정 이동 명령을 사용한다.)
 2. 사진 매핑 화면에서 기준점(0,0)을 먼저 찍고, 각 버튼 위치를 사진 위에 찍는다.
 3. 버튼 마커를 눌러 `테스트 터치`를 실행하고, 실제 하드웨어가 의도한 버튼 칸을 누르는지 확인한다.
 4. 저장 후 홈 > 기기 선택 > 이미지로 제어 화면에 들어가, 노란 마커가 사진에서 찍은 위치 그대로 표시되는지 확인한다.
@@ -74,18 +117,31 @@ flutter test
 6. 작은 화면/큰 화면/가로로 긴 사진/세로로 긴 사진에서 사진이 잘리지 않고, 레터박스 영역을 눌러도 매핑 포인트가 추가되지 않는지 확인한다.
 7. 사진 매핑 화면의 `전체 버튼 테스트`를 눌러 매핑된 버튼이 순서대로 실행되는지 확인한다.
 8. 수동 매핑 화면에서 조이스틱으로 기준점까지 이동한 뒤 `현재 위치를 원점으로 지정`을 누르고, `원점 테스트 터치`가 의도한 기준점에서 실행되는지 확인한다.
-9. 실행 로그에서 `mapping.press.send` 이벤트의 `button_id`, `row`, `col`, `btn`, `x`, `y`, `device_id`가 기록되는지 확인한다.
-   - 현재 앱은 `$J` 대신 `G91` -> `G1` -> `G90` 안정 이동 명령을 사용한다.
-2. 수동 매핑 화면에서 `rows`, `cols`, `originX`, `originY`, `pitchX`, `pitchY`를 저장한다.
-3. 사진 매핑 화면에서 버튼 라벨 또는 AI 분석 결과를 저장한다.
+9. 두 버튼을 같은 그리드 칸에 겹치게 찍고 저장 시, 저장이 차단되고 겹친 버튼 이름이 음성으로 안내되는지 확인한다 (셀 충돌 검출).
+10. 실행 로그에서 `mapping.press.send` 이벤트의 `button_id`, `row`, `col`, `btn`, `x`, `y`, `device_id`가 기록되는지 확인한다.
+
+## 6-1-1) 매핑 저장 → 음성 실행 검증
+1. 수동 매핑 화면에서 `rows`, `cols`, `originX`, `originY`, `pitchX`, `pitchY`를 저장한다.
+   (사진 매핑으로 만든 버튼/라벨은 보존되고 그리드 값만 갱신되는지 함께 확인 — 병합 저장.)
+2. 사진 매핑 화면에서 버튼 라벨 또는 AI 분석 결과를 저장한다.
    - Vision 응답은 `button_id`, `row`, `col`, `label` 형식을 우선 사용한다.
-4. 홈에서 같은 기기를 선택한 뒤 음성 명령을 실행한다.
+3. 홈에서 같은 기기를 선택한 뒤 음성 명령을 실행한다.
    - 저장된 `DeviceMappingProfile.buttonMap`이 있으면 해당 매핑을 우선 사용한다.
    - 저장 매핑이 없을 때만 `docs/MOCK_MAPPING_DATA.md` 좌표 fallback을 사용한다.
-5. BLE 로그에서 `SET_GRID` 후 `BTN_n` 또는 fallback G-code 전송이 보이는지 확인한다.
+4. BLE 로그에서 `SET_GRID` 후 `BTN_n` 또는 fallback G-code 전송이 보이는지 확인한다.
 
 ## 6-2) 연동 규약 문서
 - `docs/HW_APP_INTEGRATION_CONTRACT_KO.md`를 기준으로 enum/명령/주의점을 준수한다.
+
+## 6-3) 스크린리더 병행 검증 (VoiceOver / TalkBack)
+1. VoiceOver(iOS) 또는 TalkBack(Android)을 켜고 6) 데모 체크리스트 1~7을 반복한다.
+2. 스크린리더 더블탭과 앱 이중 탭이 충돌하지 않는지 확인한다
+   (스크린리더 더블탭 1회 = 앱의 탭 1회 → 첫 탭 안내가 나와야 함).
+3. 앱 TTS와 스크린리더 음성이 겹쳐 알아들을 수 없는 구간을 기록한다.
+   (앱은 스크린리더 활성 시 화면 안내(navigation)를 억제하고 결과/비상 안내만
+   재생한다 — `tts_service.dart` 억제 계약.)
+4. 모든 버튼에 의미 있는 라벨이 읽히는지 확인한다 ("버튼"만 읽히면 실패).
+5. 비상 정지 실행 후 성공/미확인/실패 결과 음성이 스크린리더 상태에서도 들리는지 확인한다.
 
 ## 7) 장애 대응 플랜 B
 - 백엔드 미연결:
@@ -97,3 +153,14 @@ flutter test
 - 마이크 권한 거부:
   - 증상: STT 시작 불가
   - 대응: 권한 허용 후 앱 재시작
+
+## 8) 릴리스 전 회귀 최소 세트
+- [ ] 이중 탭 첫 탭 안내 / 둘째 탭 실행 / 20초 타임아웃 해제
+- [ ] 비상 정지 3초 홀드 + "멈춰" 음성 최우선 처리
+- [ ] 6-3) 스크린리더 병행 1회
+- [ ] 매핑 저장 → 사용자 모드 음성 실행 경로
+- [ ] 보호자 모드 OFF에서 기기 관리 미노출, 개발자 모드 OFF에서 개발자 도구 미노출
+- [ ] flutter analyze / flutter test 통과
+
+## 9) 결과 기록 양식
+날짜: / 테스터: / 빌드·커밋: / 플랫폼: / 스크린리더 사용 여부: / 실패 항목과 증상:
