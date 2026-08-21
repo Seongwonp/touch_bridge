@@ -31,6 +31,19 @@ class AiBackendService {
     }
   }
 
+  /// 백엔드 공유 API 키 (선택). 서버의 BACKEND_API_KEY와 짝을 이룬다 —
+  /// 설정돼 있으면 모든 요청에 X-API-Key 헤더로 전송한다.
+  String get _apiKey {
+    try {
+      return dotenv.get('AI_BACKEND_API_KEY', fallback: '').trim();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Map<String, String> get _authHeaders =>
+      _apiKey.isEmpty ? const {} : {'X-API-Key': _apiKey};
+
   bool get isConfigured => _baseUrl.isNotEmpty;
 
   Uri _uri(String path) {
@@ -83,48 +96,40 @@ class AiBackendService {
     return base;
   }
 
+  /// POST JSON 요청. 일시적 네트워크 예외(SocketException/ClientException)면
+  /// 250ms 후 1회 재시도한다. (이전에는 같은 요청 블록이 3중 복붙돼 있었다.)
+  Future<http.Response> _postJsonWithRetry(
+    String path,
+    Map<String, dynamic> body, {
+    Duration timeout = const Duration(seconds: 15),
+  }) async {
+    Future<http.Response> doPost() => _client
+        .post(
+          _uri(path),
+          headers: {
+            'Content-Type': 'application/json',
+            'Connection': 'close',
+            ..._authHeaders,
+          },
+          body: jsonEncode(body),
+        )
+        .timeout(timeout);
+
+    try {
+      return await doPost();
+    } on SocketException catch (e) {
+      AppLogger.warn('ai.post.socket_retry', {'path': path, 'error': e.toString()});
+    } on http.ClientException catch (e) {
+      AppLogger.warn('ai.post.client_retry', {'path': path, 'error': e.toString()});
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    return doPost();
+  }
+
   Future<Map<String, dynamic>> parseVoiceCommand(String text) async {
     _validatedBaseUrl();
     AppLogger.info('ai.parse.request', {'text_len': text.length});
-    http.Response res;
-    try {
-      res = await _client
-          .post(
-            _uri('/parse-command'),
-            headers: const {
-              'Content-Type': 'application/json',
-              'Connection': 'close',
-            },
-            body: jsonEncode({'text': text}),
-          )
-          .timeout(const Duration(seconds: 15));
-    } on SocketException catch (e) {
-      AppLogger.warn('ai.parse.socket_retry', {'error': e.toString()});
-      await Future<void>.delayed(const Duration(milliseconds: 250));
-      res = await _client
-          .post(
-            _uri('/parse-command'),
-            headers: const {
-              'Content-Type': 'application/json',
-              'Connection': 'close',
-            },
-            body: jsonEncode({'text': text}),
-          )
-          .timeout(const Duration(seconds: 15));
-    } on http.ClientException catch (e) {
-      AppLogger.warn('ai.parse.client_retry', {'error': e.toString()});
-      await Future<void>.delayed(const Duration(milliseconds: 250));
-      res = await _client
-          .post(
-            _uri('/parse-command'),
-            headers: const {
-              'Content-Type': 'application/json',
-              'Connection': 'close',
-            },
-            body: jsonEncode({'text': text}),
-          )
-          .timeout(const Duration(seconds: 15));
-    }
+    final res = await _postJsonWithRetry('/parse-command', {'text': text});
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
       AppLogger.warn('ai.parse.response_error', {'status': res.statusCode});
@@ -151,6 +156,7 @@ class AiBackendService {
 
     Future<http.Response> doRequest() async {
       final req = http.MultipartRequest('POST', _uri('/vision-mapping'))
+        ..headers.addAll(_authHeaders)
         ..files.add(
           http.MultipartFile.fromBytes(
             'image',
@@ -198,7 +204,11 @@ class AiBackendService {
         deviceId,
       ],
     );
-    final res = await http.get(uri);
+    // 전역 http.get이 아니라 타임아웃/프록시 설정이 적용된 _client를 쓴다
+    // (이전에는 이 메서드만 무한정 대기가 가능했다).
+    final res = await _client
+        .get(uri, headers: _authHeaders)
+        .timeout(const Duration(seconds: 15));
 
     if (res.statusCode == 404) {
       throw StateError('등록되지 않은 기기입니다. (ID: $deviceId)');

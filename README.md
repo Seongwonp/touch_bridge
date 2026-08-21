@@ -118,6 +118,8 @@ Touch Bridge는 **교체가 아닌 부착**으로 기존 가전을 그대로 접
 
 ```env
 AI_BACKEND_URL=http://127.0.0.1:8000
+# 백엔드에 BACKEND_API_KEY가 설정된 경우 같은 값 지정
+AI_BACKEND_API_KEY=
 ```
 
 앱은 Gemini API 키를 직접 사용하지 않고, 백엔드 API를 통해 AI 기능을 호출합니다.
@@ -129,8 +131,15 @@ AI_BACKEND_URL=http://127.0.0.1:8000
 ```env
 GOOGLE_API_KEY=여기에_실제_키_입력
 GEMINI_MODEL=gemini-1.5-flash
+# 배포 시 필수 — 설정하면 모든 API 요청에 X-API-Key 헤더를 요구합니다
+BACKEND_API_KEY=
+# MongoDB (미설정 시 localhost, 연결 실패 시 인메모리 폴백)
+MONGO_URI=mongodb://localhost:27017/
 ```
 (`backend/.env_ex` 참고)
+
+> 백엔드에는 IP당 분당 60회(비전 10회) 레이트리밋, 업로드 5MB 상한,
+> AI 응답 스키마 검증(버튼 ID 화이트리스트 등)이 적용되어 있습니다.
 
 ---
 

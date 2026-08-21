@@ -683,3 +683,46 @@
 - `speech_session_service_test.dart` 신설 6건: 최상단 전달 / detach 후 승계 /
   재attach 시 최상단 승격(중복 없음) / 중간 detach / 무소유 시 무예외 /
   에러 이벤트 위임.
+- 검증: `flutter analyze` 신규 이슈 0건, `flutter test` 214/214 통과.
+
+---
+
+## 2026-08-21 — [P0-8] 백엔드 보안·견고성 (리뷰 후속 11단계 — 2주차 완료)
+
+### 배경 (전면 리뷰에서 발견된 심각 결함)
+1. **무인증 공개 프록시**: 모든 엔드포인트 무인증 + rate limit 없음 — URL만
+   알면 누구나 Gemini 쿼터를 소진 가능(요금 폭탄 표면).
+2. **무인증 프로필 덮어쓰기**: `/vision-mapping?save_as_id=`가 검증 없이
+   `replace_one(upsert)` — 임의 이미지 한 장으로 기존 기기 프로필의
+   시작↔취소 배치를 바꿔치기 가능(물리 안전 결함). 앱은 이 파라미터를 쓰지도 않음.
+3. 이벤트 루프 블로킹(동기 generate_content), 업로드 크기 무제한, `*`+credentials
+   CORS, 발화 원문 INFO 로깅(개인정보), deprecated on_event, vision이 명령
+   파싱용 system_instruction이 박힌 모델을 재사용, 프롬프트 주입으로
+   needs_confirmation 우회/임의 message 낭독 가능.
+
+### 수정 내용 (backend/)
+- **save_as_id 제거** — 필요 시 인증된 관리자 경로로 재도입(주석 명시).
+- **API 키 인증**: `BACKEND_API_KEY` 설정 시 `/parse-command`·`/vision-mapping`·
+  `/device-profile`에 `X-API-Key` 헤더 필수(미설정 = 로컬 개발 개방 모드).
+- **레이트리밋**: 인메모리 슬라이딩 윈도우, IP당 분당 60회(비전 10회) → 429.
+- **응답 스키마 검증** (`validation.py` 신설): action/target 화이트리스트,
+  버튼 ID `BT-[A-Z]?\d{2}` 패턴 강제, 실행형 액션에 유효 버튼이 없으면 NONE
+  강등, seconds 0~1200 클램프, confidence 0~1, needs_confirmation은 정확히
+  true일 때만, message 제어문자 제거+200자 절단 — 프롬프트 주입의 마지막 방어선.
+- 업로드 5MB 상한(413), `interpret`를 to_thread+30초 타임아웃으로(루프 블로킹
+  해소), vision 전용 모델 분리(system_instruction 충돌 제거),
+  `get_interpret_prompt("")`의 빈 꼬리 제거(MICROWAVE_SYSTEM_PROMPT 직접 사용),
+  CORS credentials 해제, 발화 로그를 길이+20자 미리보기로 축소,
+  on_event → lifespan, 오류 상세를 클라이언트에 노출하지 않도록 정리.
+- `.env_ex`(루트/백엔드)에 `AI_BACKEND_API_KEY`/`BACKEND_API_KEY`/`MONGO_URI` 추가,
+  README 환경 설정 절 갱신.
+
+### 수정 내용 (앱 — `ai_backend_service.dart`)
+- `X-API-Key` 헤더 전송(선택적, .env `AI_BACKEND_API_KEY`).
+- 3중 복붙이던 재시도 블록을 `_postJsonWithRetry` 헬퍼로 통합.
+- `fetchDeviceProfile`이 전역 `http.get`(타임아웃 없음) 대신 `_client`+15초
+  타임아웃 사용 — 이 메서드만 무한정 대기 가능하던 문제 수정.
+
+### 검증 한계
+- 이 PC에는 Python이 없어 백엔드는 정적 구현만 검증됨. **백엔드 실행 환경에서
+  `uvicorn main:app` 기동 + `/parse-command` 스모크 확인 필요.**
