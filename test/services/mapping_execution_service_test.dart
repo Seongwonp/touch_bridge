@@ -214,4 +214,153 @@ void main() {
       expect(result.ok, isTrue);
     });
   });
+
+  group('Z축 복구 시퀀스 (하강 후 실패 시 눌린 채 방치 방지)', () {
+    tearDown(() => BleService.instance.setSendRawOverride(null));
+
+    test('pressPhysical: Z 하강 후 실패 시 상대 상승+G90 복구를 전송한다', () async {
+      // 하강(G1 Z-1.0)까지 성공시키고 그 다음(G4 터치 유지)에서 실패시킨다.
+      final sent = <String>[];
+      BleService.instance.setSendRawOverride((cmd) async {
+        sent.add(cmd);
+        return !cmd.startsWith('G4'); // 터치 유지 명령만 실패
+      });
+
+      final result =
+          await MappingExecutionService.instance.pressPhysical('BT-01');
+
+      expect(result.ok, isFalse);
+      // 실패 지점 이후 best-effort 복구: 상대 상승 → 절대 모드 복귀.
+      final failIdx = sent.indexWhere((c) => c.startsWith('G4'));
+      expect(failIdx, greaterThan(0));
+      expect(
+        sent.sublist(failIdx + 1),
+        ['G1 Z1.0 F150', 'G90'],
+        reason: 'Z 하강 후 실패하면 반드시 복구 시퀀스가 전송되어야 한다',
+      );
+      // 복구에 성공했으므로 "눌린 채 멈춤" 경고가 아니라 일반 재시도 안내여야 한다.
+      expect(result.userMessage, isNot(contains('누른 채')));
+    });
+
+    test('pressPhysical: 복구까지 실패하면 "눌린 채 멈춤" 경고를 안내한다', () async {
+      var failFrom = false;
+      BleService.instance.setSendRawOverride((cmd) async {
+        if (cmd.startsWith('G4')) failFrom = true;
+        return !failFrom; // G4부터 이후 전부(복구 포함) 실패
+      });
+
+      final result =
+          await MappingExecutionService.instance.pressPhysical('BT-01');
+
+      expect(result.ok, isFalse);
+      expect(result.userMessage, contains('누른 채'));
+      expect(result.userMessage, contains('비상 정지'));
+    });
+
+    test('pressPhysical: Z 하강 전 실패는 복구를 전송하지 않는다', () async {
+      var callCount = 0;
+      final sent = <String>[];
+      BleService.instance.setSendRawOverride((cmd) async {
+        callCount++;
+        sent.add(cmd);
+        return callCount < 4; // 4번째(G1 X.. Y.. 이동)에서 실패 — 아직 Z는 위
+      });
+
+      final result =
+          await MappingExecutionService.instance.pressPhysical('BT-01');
+
+      expect(result.ok, isFalse);
+      expect(callCount, 4, reason: 'Z 하강 전 실패에는 복구 전송이 없어야 한다');
+      expect(result.userMessage, isNot(contains('누른 채')));
+    });
+
+    test('pressButton: Z 하강 라인 이후 실패 시 G90+안전높이 복구를 전송한다', () async {
+      const profile = DeviceMappingProfile(
+        rows: 3,
+        cols: 3,
+        originX: 0,
+        originY: 0,
+        pitchX: 10,
+        pitchY: 10,
+        travelHeightZ: 5,
+        pressDepthZ: -1,
+        travelFeed: 1200,
+        pressFeed: 200,
+        buttonMap: {'BT-05': (row: 1, col: 1)},
+      );
+      final sent = <String>[];
+      BleService.instance.setSendRawOverride((cmd) async {
+        sent.add(cmd);
+        return !cmd.startsWith('G4'); // 누름 유지(dwell)에서 실패
+      });
+
+      final result = await MappingExecutionService.instance.pressButton(
+        deviceId: 'test-device',
+        profile: profile,
+        buttonId: 'BT-05',
+      );
+
+      expect(result.ok, isFalse);
+      final failIdx = sent.indexWhere((c) => c.startsWith('G4'));
+      expect(
+        sent.sublist(failIdx + 1),
+        ['G90', 'G0 Z5 F200'],
+        reason: '프로필 경로도 Z 하강 후 실패 시 안전 높이 복구를 전송해야 한다',
+      );
+      expect(result.userMessage, isNot(contains('누른 채')));
+    });
+
+    test('pressButton: 복구까지 실패하면 "눌린 채 멈춤" 경고를 안내한다', () async {
+      const profile = DeviceMappingProfile(
+        rows: 3,
+        cols: 3,
+        originX: 0,
+        originY: 0,
+        pitchX: 10,
+        pitchY: 10,
+        buttonMap: {'BT-05': (row: 1, col: 1)},
+      );
+      var failFrom = false;
+      BleService.instance.setSendRawOverride((cmd) async {
+        if (cmd.startsWith('G1 Z')) failFrom = true;
+        return !failFrom; // Z 하강부터 전부(복구 포함) 실패
+      });
+
+      final result = await MappingExecutionService.instance.pressButton(
+        deviceId: 'test-device',
+        profile: profile,
+        buttonId: 'BT-05',
+      );
+
+      expect(result.ok, isFalse);
+      expect(result.userMessage, contains('누른 채'));
+      expect(result.userMessage, contains('비상 정지'));
+    });
+
+    test('pressButton: Z 하강 전 실패는 복구를 전송하지 않는다', () async {
+      const profile = DeviceMappingProfile(
+        rows: 3,
+        cols: 3,
+        originX: 0,
+        originY: 0,
+        pitchX: 10,
+        pitchY: 10,
+        buttonMap: {'BT-05': (row: 1, col: 1)},
+      );
+      final sent = <String>[];
+      BleService.instance.setSendRawOverride((cmd) async {
+        sent.add(cmd);
+        return !cmd.startsWith('G0 X'); // XY 이동(Z 하강 전)에서 실패
+      });
+
+      final result = await MappingExecutionService.instance.pressButton(
+        deviceId: 'test-device',
+        profile: profile,
+        buttonId: 'BT-05',
+      );
+
+      expect(result.ok, isFalse);
+      expect(sent.last, startsWith('G0 X'), reason: '실패 지점 이후 전송이 없어야 한다');
+    });
+  });
 }
