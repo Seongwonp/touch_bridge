@@ -586,3 +586,35 @@
 ### 테스트
 - `active_device_service_test.dart`에 연결 결과 전파 3건 추가
   (실패 시 false + 선택은 저장 / 성공 시 true / bleId 없으면 true).
+- 검증: `flutter analyze` 신규 이슈 0건, `flutter test` 197/197 통과.
+
+---
+
+## 2026-08-21 — [P0-7] 물리 동작 경로 인증 게이트 (리뷰 후속 8단계)
+
+### 배경 (전면 리뷰에서 발견된 보안 결함)
+- `ble_service.dart` 주석은 "PRESS·SET_GRID·raw G-code는 반드시 인증 후에만
+  허용"이라 선언했지만, 인증 검사는 JSON 명령(`_sendAndWaitAck`)에만 있고
+  **물리 동작을 일으키는 `sendRaw` 경로 전체가 인증을 우회**했다.
+  HMAC 세션이 보호하는 것은 set_servo/get_servo/home뿐 — 사실상 장식.
+
+### 확정한 정책 (BleSecuritySession.authorizePhysicalAction)
+- **프로비저닝된 기기(페어링 키 있음)**: 유효한 HMAC 세션 없이는 raw 명령을
+  보내지 않는다(fail-closed). 세션이 없으면 자동으로 challenge/auth 핸드셰이크를
+  시도하고 실패 시 차단 + `ble.raw.blocked_unauthorized` 로그.
+- **미프로비저닝 기기(데모)**: 경고 로그와 함께 허용(fail-open) — 인증을
+  구현하지 않은 데모 펌웨어와의 호환 유지. 프로덕션 전환 시 fail-closed로
+  변경해야 함(SECURITY.md 로드맵과 연동).
+- STOP(비상정지)은 기존대로 JSON 비인증 허용 유지 — 인증 실패로 못 멈추는
+  상황 방지(안전 우선).
+
+### 남은 한계 (펌웨어 협업 필요 — 문서화만)
+- `provision`이 여전히 비인증·평문: 최초 1회 물리 확인(기기 버튼) 기반 제한은
+  펌웨어 측 구현이 필요하다. 세션 수립 후 명령별 MAC/카운터 부재도 동일.
+  → `docs/SECURITY.md` 프로덕션 로드맵 항목으로 유지.
+
+### 테스트
+- **`ble_security_session` 첫 테스트 7건** 신설(리뷰 지적: 보안 코어 무테스트):
+  미프로비저닝 fail-open(핸드셰이크 미시도 확인) / 핸드셰이크 성공 허용(MAC hex
+  검증) / 인증 실패 차단 / NONCE 형식 오류 차단 / 세션 캐시(재인증 없음) /
+  reset 후 재인증 / 키 다르면 MAC 다름.

@@ -72,8 +72,10 @@ class BleService {
   // Security/session — challenge-response 인증은 BleSecuritySession에 위임
   late final BleSecuritySession _security;
 
-  // 인증 없이 허용되는 명령은 페어링·인증·비상정지만으로 제한한다.
-  // PRESS·SET_GRID·raw G-code는 물리 동작을 유발하므로 반드시 인증 후에만 허용.
+  // 인증 없이 허용되는 JSON 액션은 페어링·인증·비상정지뿐이다.
+  // raw 경로(sendRaw)는 별도의 물리 동작 게이트
+  // (BleSecuritySession.authorizePhysicalAction)를 거친다 —
+  // 프로비저닝된 기기는 인증 필수, 미프로비저닝(데모)은 경고와 함께 허용.
   static const _nonAuthActions = {
     'challenge',
     'auth',
@@ -476,9 +478,22 @@ class BleService {
       _addLog('DEMO SEND_RAW: $command');
       return true;
     }
-    _addLog('SEND_RAW: $command');
     final c = _commandCharacteristic;
     if (c == null) return false;
+
+    // 물리 동작 인증 게이트: 페어링 키가 프로비저닝된 기기는 유효한 HMAC
+    // 세션 없이는 raw 명령(G-code/BTN_n/SET_GRID)을 보내지 않는다.
+    // (이전에는 JSON 명령만 인증을 거치고 이 경로가 전부 우회됐다.)
+    final authorized = await _security.authorizePhysicalAction(
+      sendAndWaitAck: _sendAndWaitAck,
+    );
+    if (!authorized) {
+      _addLog('RAW 차단: 인증되지 않은 세션 ($command)');
+      AppLogger.warn('ble.raw.blocked_unauthorized', {'command': command});
+      return false;
+    }
+
+    _addLog('SEND_RAW: $command');
     try {
       await c.write(utf8.encode('$command\r\n'), withoutResponse: false);
       return true;
