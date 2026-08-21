@@ -554,3 +554,35 @@
 ### 참고
 - NFC/전화는 실기기 검증 필요(에뮬레이터/PC에서는 폴백 경로만 확인 가능).
   NFC 태그는 NDEF 텍스트 레코드에 기기 코드를 쓰면 됨.
+- 검증: `flutter analyze` 신규 이슈 0건, `flutter test` 194/194 통과.
+
+---
+
+## 2026-08-21 — [P1-7] BLE 연결 이벤트 신뢰성 (리뷰 후속 7단계 — 2주차 시작)
+
+### 배경 (전면 리뷰에서 발견된 "침묵 상태" 결함)
+1. 연결 리스너 가드가 `_connectedDevice`(discoverServices 후에야 설정됨) 기준이라,
+   연결 직후 플랫폼이 밀어주는 connected 이벤트가 타이밍에 따라 드롭 →
+   UI/배너가 "연결됨" 안내를 영영 못 받을 수 있었다.
+2. 명시적 `disconnect()`가 리스너를 먼저 취소해 disconnected 이벤트도 UI에 미전달.
+3. `ActiveDeviceService.setActiveDevice`가 `ensureConnected` 실패 bool을 버림 —
+   기기 선택은 성공처럼 보이는데 연결 실패가 첫 명령에서야 드러남.
+   시각장애인 사용자가 연결/끊김을 모른 채 침묵 속에 방치되는 실패 모드.
+
+### 수정 내용
+- `ble_service.dart`:
+  - 리스너 가드를 `identical(sub, _connectionSub)`(활성 구독 여부)로 교체 —
+    타이밍 의존 드롭 제거.
+  - 연결 셋업 완료 시 connected를 **명시 emit**, 명시적 disconnect 시(실제 연결이
+    있었던 경우) disconnected를 명시 emit.
+  - `isConnectedStream`에 `distinct()` — 명시 emit과 플랫폼 이벤트가 겹쳐도
+    배너/TTS가 같은 상태를 두 번 안내하지 않음.
+- `active_device_service.dart`:
+  - `setActiveDevice`가 BLE 연결 결과 bool 반환 (bleId 없으면 true).
+    실패 시 `active_device.ble_connect_failed` 로그. 선택 저장 자체는 유지.
+  - `autoPickFirstDevice`가 `deviceType`을 함께 전달 — ApplianceCommandRouter가
+    이름 추론에 의존하지 않도록.
+
+### 테스트
+- `active_device_service_test.dart`에 연결 결과 전파 3건 추가
+  (실패 시 false + 선택은 저장 / 성공 시 true / bleId 없으면 true).

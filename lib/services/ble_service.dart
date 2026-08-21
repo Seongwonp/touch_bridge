@@ -38,8 +38,11 @@ class BleService {
       _connectionStateController.stream;
 
   /// 연결 여부만 필요한 위젯에서 flutter_blue_plus 없이 구독할 수 있는 편의 스트림.
+  /// distinct: 연결 성공 시 명시 emit과 플랫폼 스트림 이벤트가 겹쳐도
+  /// 구독 위젯(배너 TTS 등)이 같은 상태를 두 번 안내하지 않게 한다.
   Stream<bool> get isConnectedStream => connectionStateStream
-      .map((s) => s == BluetoothConnectionState.connected);
+      .map((s) => s == BluetoothConnectionState.connected)
+      .distinct();
 
   // ── 자동 재연결 ──────────────────────────────────────────────────────────
   final _reconnectStateController =
@@ -243,9 +246,16 @@ class BleService {
       // 연결 상태 모니터링 — 구독을 저장해 재연결 시 이전 구독을 취소한다.
       // 저장하지 않으면 연결을 바꿀 때마다 리스너가 누적되어 이전 기기의
       // disconnected 이벤트가 현재 연결을 잘못 초기화할 수 있다.
+      //
+      // 가드는 "이 구독이 아직 활성 구독인가"로 판단한다. 이전 구현은
+      // `_connectedDevice?.remoteId != target.remoteId`로 가드했는데,
+      // _connectedDevice는 discoverServices까지 끝난 뒤에야 설정되므로
+      // 연결 직후 플랫폼이 밀어주는 connected 이벤트가 그 사이에 도착하면
+      // 드롭되어 UI가 "연결됨" 안내를 영영 못 받는 문제가 있었다.
       _connectionSub?.cancel();
-      _connectionSub = target.connectionState.listen((state) {
-        if (_connectedDevice?.remoteId != target.remoteId) return;
+      late final StreamSubscription<BluetoothConnectionState> sub;
+      sub = target.connectionState.listen((state) {
+        if (!identical(sub, _connectionSub)) return; // 교체된 옛 구독이면 무시
         _connectionStateController.add(state);
         _addLog('연결 상태 변경: ${state.name}');
         if (state == BluetoothConnectionState.disconnected) {
@@ -256,6 +266,7 @@ class BleService {
           _maybeScheduleReconnect();
         }
       });
+      _connectionSub = sub;
 
       await target.connect(timeout: const Duration(seconds: 10));
       final services = await target.discoverServices();
@@ -306,6 +317,10 @@ class BleService {
       _reconnectAttempt = 0;
       _addLog('연결 성공: ${target.platformName}');
       AppLogger.info('ble.connect.ok', {'device_id': deviceId});
+      // 연결 완료를 명시적으로 emit — 플랫폼 스트림의 connected 이벤트가
+      // 준비 전에 도착해 유실됐더라도 구독자(배너/TTS)는 반드시 알림을 받는다.
+      // (isConnectedStream은 distinct라 중복 emit은 안내되지 않는다.)
+      _connectionStateController.add(BluetoothConnectionState.connected);
       return true;
     } catch (e) {
       _addLog('연결 실패: $e');
@@ -332,6 +347,9 @@ class BleService {
     _autoReconnectTargetId = null;
     _reconnectAttempt = 0;
     _isReconnecting = false;
+    // 리스너를 먼저 취소하므로 플랫폼의 disconnected 이벤트는 UI에 전달되지
+    // 않는다 — 실제로 연결돼 있던 경우에는 아래에서 직접 emit해 준다.
+    final hadConnection = _connectedDevice != null;
     try {
       await _connectionSub?.cancel();
       await _notifySub?.cancel();
@@ -345,6 +363,9 @@ class BleService {
       _connectionSub = null;
       _notifySub = null;
       _security.reset();
+      if (hadConnection) {
+        _connectionStateController.add(BluetoothConnectionState.disconnected);
+      }
     }
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'app_logger.dart';
 import 'ble_service.dart';
 import 'home_device_store.dart';
 
@@ -34,7 +35,13 @@ class ActiveDeviceService {
     _activeDeviceType = prefs.getString(_kActiveDeviceType);
   }
 
-  Future<void> setActiveDevice({
+  /// 활성 기기를 설정하고 BLE 연결까지 시도한다.
+  ///
+  /// 반환값: BLE 연결 결과. bleId가 없으면(연결할 게 없으면) true.
+  /// 이전 구현은 `ensureConnected`의 실패를 버려서, 기기 선택은 성공한 것처럼
+  /// 보이는데 실제 연결은 안 된 상태가 첫 명령 실패로만 드러났다 — 호출부가
+  /// 이 값으로 조기 안내 여부를 결정할 수 있게 한다(선택 자체는 실패해도 저장됨).
+  Future<bool> setActiveDevice({
     required String deviceId,
     String? deviceName,
     String? bleId,
@@ -48,16 +55,23 @@ class ActiveDeviceService {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kActiveDeviceId, deviceId);
-    
+
     if (deviceName != null && deviceName.isNotEmpty) {
       await prefs.setString(_kActiveDeviceName, deviceName);
     } else {
       await prefs.remove(_kActiveDeviceName);
     }
-    
+
+    var bleConnected = true;
     if (bleId != null) {
       await prefs.setString(_kActiveBleId, bleId);
-      await BleService.instance.ensureConnected(bleId);
+      bleConnected = await BleService.instance.ensureConnected(bleId);
+      if (!bleConnected) {
+        AppLogger.warn('active_device.ble_connect_failed', {
+          'device_id': deviceId,
+          'ble_id': bleId,
+        });
+      }
     } else {
       await prefs.remove(_kActiveBleId);
       await BleService.instance.disconnect();
@@ -74,6 +88,7 @@ class ActiveDeviceService {
     } else {
       await prefs.remove(_kActiveDeviceType);
     }
+    return bleConnected;
   }
 
   String? getActiveDeviceId() => _activeDeviceId;
@@ -99,6 +114,9 @@ class ActiveDeviceService {
       deviceName: first['name'],
       bleId: first['bleId'],
       bleName: first['bleName'],
+      // deviceType을 함께 넘겨야 ApplianceCommandRouter가 이름 추론에
+      // 의존하지 않는다 (등록 시 저장돼 있으면 사용).
+      deviceType: first['deviceType'],
     );
     return true;
   }
