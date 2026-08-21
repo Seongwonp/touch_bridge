@@ -618,3 +618,38 @@
   미프로비저닝 fail-open(핸드셰이크 미시도 확인) / 핸드셰이크 성공 허용(MAC hex
   검증) / 인증 실패 차단 / NONCE 형식 오류 차단 / 세션 캐시(재인증 없음) /
   reset 후 재인증 / 키 다르면 MAC 다름.
+- 검증: `flutter analyze` 신규 이슈 0건, `flutter test` 204/204 통과.
+
+---
+
+## 2026-08-21 — [P1-8] BLE 응답 채널 재설계: 명령 직렬화 + waiter 선등록 (리뷰 후속 9단계)
+
+### 배경 (전면 리뷰에서 발견된 경쟁 조건)
+1. `_sendAndWaitAck`과 `readResponse`가 **같은 `_ackCompleter`를 덮어써** 동시
+   명령 시 첫 호출의 completer가 유실되고, 두 번째 호출이 첫 명령의 응답을
+   받을 수 있었다(명령-응답 상관관계 없음, 큐/뮤텍스 없음).
+2. `sendGetStatus`는 `sendRaw('$$')` **완료 후에** waiter를 등록해, write 직후
+   도착한 응답이 버려지고 2초 타임아웃으로 끝나는 경쟁. 사진 매핑의
+   `sendSetGrid + readResponse` 패턴도 동일한 문제.
+
+### 수정 내용 (`ble_service.dart`)
+- `_withCommandLock` 명령 직렬화 큐 도입: 모든 write와 응답 대기가 요청 순서대로
+  하나씩 실행된다. 앞선 명령이 예외로 끝나도 큐는 계속 진행.
+  **재진입 금지 계약**: 인증 핸드셰이크는 잠금 밖에서 수행(주석 명시) —
+  sendRaw 게이트/JSON 인증 모두 잠금 획득 전에 auth를 끝내므로 데드락 없음.
+- `_ackCompleter` → `_responseWaiter`로 정리하고 조작을 잠금 안으로 한정.
+- `sendRawWithResponse()` 신설: **waiter를 write 전에 등록**하고 다음 notify
+  한 줄을 기다린다. `sendGetStatus`가 이를 사용(응답 유실 경쟁 해소).
+- `sendSetGridWithResponse()` 신설 + 사진 매핑 `_executeBleUpload`를 이 API로
+  전환. 위험한 구 `readResponse`는 제거. 전송 미확인 시 메시지도 정직화
+  ("하드웨어 전송 미확인 — 연결 상태를 확인하세요").
+- 비상정지(STOP)는 JSON 경로로 잠금을 공유하지만, raw 라인 write는 잠금 구간이
+  짧아(응답 대기 없음) 시퀀스 사이에 즉시 끼어든다.
+
+### 남은 한계 (하드웨어 연동 시 개선)
+- GRBL `ok` 기반 흐름 제어(라인별 ok 확인 후 다음 라인)는 실기기에서 응답
+  포맷을 확인한 뒤 도입 예정 — 현재는 직렬화 + 120ms 간격 오픈루프 유지.
+
+### 테스트
+- `ble_command_queue_test.dart` 신설 4건: 순서 보장 / 예외 후 큐 지속 /
+  다중 결과 반환 / sendRawWithResponse 오버라이드 경로.

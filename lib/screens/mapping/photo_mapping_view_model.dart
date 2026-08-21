@@ -590,7 +590,9 @@ class PhotoMappingViewModel extends ChangeNotifier {
     int cols,
     String deviceId,
   ) async {
-    final ok = await BleService.instance.sendSetGrid(
+    // waiter 선등록 방식: 전송과 응답 대기를 한 호출로 묶어, write 직후 도착한
+    // 하드웨어 확인 응답이 유실되던 경쟁(구 sendSetGrid+readResponse)을 없앤다.
+    final response = await BleService.instance.sendSetGridWithResponse(
       rows: newProfile.rows,
       cols: newProfile.cols,
       originX: newProfile.originX,
@@ -598,15 +600,14 @@ class PhotoMappingViewModel extends ChangeNotifier {
       pitchX: newProfile.pitchX,
       pitchY: newProfile.pitchY,
       deviceId: deviceId,
-    );
-    if (!ok) return {'message': 'BLE 전송 실패'};
-
-    final response = await BleService.instance.readResponse(
       timeout: const Duration(seconds: 5),
     );
-    if (response != null &&
-        (response.contains('GRID_CONFIG_UPDATED') ||
-            response.toLowerCase().contains('ok'))) {
+    // null = 전송 실패/차단/응답 없음 — 로컬 저장은 됐지만 하드웨어 반영은 미확인.
+    if (response == null) {
+      return {'message': '매핑 저장 완료 (하드웨어 전송 미확인 — 연결 상태를 확인하세요)'};
+    }
+    if (response.contains('GRID_CONFIG_UPDATED') ||
+        response.toLowerCase().contains('ok')) {
       return {'message': '매핑 저장 및 BLE 보정 완료'};
     }
     return {'message': '매핑 저장 완료 (하드웨어 확인 지연)'};

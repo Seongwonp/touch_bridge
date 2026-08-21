@@ -62,7 +62,24 @@ class BleService {
   bool get isReconnecting => _isReconnecting;
   // ─────────────────────────────────────────────────────────────────────────
 
-  Completer<String>? _ackCompleter;
+  // ── 명령 직렬화 + 응답 대기 ──────────────────────────────────────────────
+  // 단일 GATT characteristic에 여러 경로(JSON ACK, raw, 상태 질의)가 동시에
+  // 쓰면 응답이 엉뚱한 호출로 배달되거나 유실된다(과거: 공유 _ackCompleter를
+  // 서로 덮어쓰는 경쟁). 모든 write와 응답 대기는 [_withCommandLock]으로
+  // 직렬화하고, 응답 waiter 등록은 반드시 write **전에** 한다.
+  Completer<String>? _responseWaiter;
+  Future<void> _commandLockTail = Future<void>.value();
+
+  /// 명령 큐 잠금: body들이 요청 순서대로 하나씩 실행된다.
+  /// 주의: body 안에서 다시 _withCommandLock을 잡는 재진입은 데드락이다 —
+  /// 인증 핸드셰이크(ensureAuthenticated)는 반드시 잠금 **밖**에서 수행할 것.
+  Future<T> _withCommandLock<T>(Future<T> Function() body) {
+    final previous = _commandLockTail;
+    final release = Completer<void>();
+    _commandLockTail = release.future;
+    return previous.then((_) => body()).whenComplete(release.complete);
+  }
+
   String? _lastScanError;
 
   Future<List<BleDeviceInfo>> Function(Duration timeout)? _scanOverride;
@@ -309,8 +326,8 @@ class BleService {
         _addLog('RECV: ${_normalizeHardwareLog(res)}');
         // isCompleted 체크: 빠른 연속 알림이 오면 이미 완료된 Completer에
         // 다시 complete를 시도해 StateError가 발생하므로 반드시 가드한다.
-        if (_ackCompleter != null && !_ackCompleter!.isCompleted) {
-          _ackCompleter!.complete(res);
+        if (_responseWaiter != null && !_responseWaiter!.isCompleted) {
+          _responseWaiter!.complete(res);
         }
       });
 
@@ -447,29 +464,34 @@ class BleService {
     }
 
     final json = jsonEncode(payload);
-    _addLog('SEND: $json');
 
-    if (!waitAck) {
+    // write + 응답 대기를 명령 큐로 직렬화한다. waiter는 write 전에 등록해
+    // "보낸 직후 도착한 응답이 waiter가 없어 버려지는" 경쟁을 막는다.
+    return _withCommandLock(() async {
+      _addLog('SEND: $json');
+
+      if (!waitAck) {
+        try {
+          await c.write(utf8.encode(json), withoutResponse: false);
+          return 'OK'; // 대기 없이 즉시 성공 반환
+        } catch (e) {
+          _addLog('전송 오류: $e');
+          return 'ERROR:WRITE_FAILED';
+        }
+      }
+
+      _responseWaiter = Completer<String>();
       try {
         await c.write(utf8.encode(json), withoutResponse: false);
-        return 'OK'; // 대기 없이 즉시 성공 반환
+        final res = await _responseWaiter!.future.timeout(timeout);
+        return res;
       } catch (e) {
-        _addLog('전송 오류: $e');
-        return 'ERROR:WRITE_FAILED';
+        _addLog('전송/응답 타임아웃 또는 오류: $e');
+        return 'ERROR:TIMEOUT';
+      } finally {
+        _responseWaiter = null; // 다음 명령을 방해하지 않도록 반드시 정리
       }
-    }
-
-    _ackCompleter = Completer<String>();
-    try {
-      await c.write(utf8.encode(json), withoutResponse: false);
-      final res = await _ackCompleter!.future.timeout(timeout);
-      return res;
-    } catch (e) {
-      _addLog('전송/응답 타임아웃 또는 오류: $e');
-      return 'ERROR:TIMEOUT';
-    } finally {
-      _ackCompleter = null; // 타임아웃이나 에러 발생 시 반드시 null 처리하여 다음 명령 방해 금지
-    }
+    });
   }
 
   Future<bool> sendRaw(String command) async {
@@ -493,14 +515,62 @@ class BleService {
       return false;
     }
 
-    _addLog('SEND_RAW: $command');
-    try {
-      await c.write(utf8.encode('$command\r\n'), withoutResponse: false);
-      return true;
-    } catch (e) {
-      _addLog('RAW 전송 오류: $e');
-      return false;
+    // write는 명령 큐로 직렬화한다 (인증 핸드셰이크는 위에서 이미 끝났으므로
+    // 잠금 안에서 재진입하지 않는다 — _withCommandLock 주석 참조).
+    return _withCommandLock(() async {
+      _addLog('SEND_RAW: $command');
+      try {
+        await c.write(utf8.encode('$command\r\n'), withoutResponse: false);
+        return true;
+      } catch (e) {
+        _addLog('RAW 전송 오류: $e');
+        return false;
+      }
+    });
+  }
+
+  /// raw 명령을 보내고 **다음 notify 응답 한 줄**을 기다린다.
+  ///
+  /// waiter를 write 전에 등록하고 전체를 명령 큐로 직렬화한다 — 이전의
+  /// "sendRaw 후 readResponse" 패턴은 write 직후 도착한 응답이 waiter가 없어
+  /// 버려지고 타임아웃으로 끝나는 경쟁이 있었다(sendGetStatus/SET_GRID 확인).
+  Future<String?> sendRawWithResponse(
+    String command, {
+    Duration timeout = const Duration(seconds: 2),
+  }) async {
+    if (_sendRawOverride != null) {
+      final ok = await _sendRawOverride!(command);
+      return ok ? 'OK' : null;
     }
+    if (_demoMode) {
+      _addLog('DEMO SEND_RAW(+RESP): $command');
+      return 'OK';
+    }
+    final c = _commandCharacteristic;
+    if (c == null) return null;
+
+    final authorized = await _security.authorizePhysicalAction(
+      sendAndWaitAck: _sendAndWaitAck,
+    );
+    if (!authorized) {
+      _addLog('RAW 차단: 인증되지 않은 세션 ($command)');
+      AppLogger.warn('ble.raw.blocked_unauthorized', {'command': command});
+      return null;
+    }
+
+    return _withCommandLock(() async {
+      _addLog('SEND_RAW: $command');
+      _responseWaiter = Completer<String>();
+      try {
+        await c.write(utf8.encode('$command\r\n'), withoutResponse: false);
+        return await _responseWaiter!.future.timeout(timeout);
+      } catch (e) {
+        _addLog('RAW 응답 대기 타임아웃/오류: $e');
+        return null;
+      } finally {
+        _responseWaiter = null;
+      }
+    });
   }
 
   Future<bool> sendRelativeMove({
@@ -522,23 +592,8 @@ class BleService {
     return okMode && okMove && okReset;
   }
 
-  Future<String?> readResponse({
-    Duration timeout = const Duration(seconds: 2),
-  }) async {
-    final c = _commandCharacteristic;
-    if (c == null) return null;
-
-    _ackCompleter = Completer<String>();
-    try {
-      final res = await _ackCompleter!.future.timeout(timeout);
-      return res;
-    } catch (e) {
-      _addLog('응답 대기 타임아웃: $e');
-      return null;
-    } finally {
-      _ackCompleter = null;
-    }
-  }
+  // (제거됨) readResponse: "보낸 뒤 waiter 등록" 패턴은 응답 유실 경쟁이 있어
+  // sendRawWithResponse / sendSetGridWithResponse로 대체했다.
 
   Future<bool> sendPress({
     required int x,
@@ -593,12 +648,31 @@ class BleService {
     return await sendRaw(cmd);
   }
 
+  /// SET_GRID를 전송하고 하드웨어 확인 응답(GRID_CONFIG_UPDATED/ok)을 기다린다.
+  /// 반환: 응답 문자열(없으면 null — 전송 실패 또는 응답 지연).
+  Future<String?> sendSetGridWithResponse({
+    required int rows,
+    required int cols,
+    required double originX,
+    required double originY,
+    required double pitchX,
+    required double pitchY,
+    required String deviceId,
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    final ox10 = (originX * 10).toInt();
+    final oy10 = (originY * 10).toInt();
+    final px10 = (pitchX * 10).toInt();
+    final py10 = (pitchY * 10).toInt();
+    final cmd =
+        '${HardwareProtocol.uartSetGridPrefix} $rows $cols $ox10 $oy10 $px10 $py10';
+    return sendRawWithResponse(cmd, timeout: timeout);
+  }
+
   Future<String?> sendGetStatus() async {
-    // 하드웨어 상태를 요청하는 텍스트 명령 '$$' 전송
-    if (await sendRaw('\$\$')) {
-      return await readResponse(timeout: const Duration(seconds: 2));
-    }
-    return null;
+    // 하드웨어 상태를 요청하는 텍스트 명령 '$$' 전송 — waiter 선등록 방식으로
+    // write 직후 도착한 응답이 유실되지 않는다.
+    return sendRawWithResponse('\$\$', timeout: const Duration(seconds: 2));
   }
 
   Future<bool> sendSetServo({
@@ -670,6 +744,11 @@ class BleService {
   void setSendRawOverride(Future<bool> Function(String command)? fn) {
     _sendRawOverride = fn;
   }
+
+  /// 명령 직렬화 큐 검증용 — 실제 전송 없이 큐 순서/예외 격리를 테스트한다.
+  @visibleForTesting
+  Future<T> runInCommandQueueForTest<T>(Future<T> Function() body) =>
+      _withCommandLock(body);
 
   // ── 재연결 상태 머신 테스트 지원 ─────────────────────────────────────────
   @visibleForTesting
