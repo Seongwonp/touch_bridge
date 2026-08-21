@@ -256,6 +256,22 @@ class TtsService {
     }
   }
 
+  /// 대기열이 비고 현재 발화가 끝날 때까지 기다린다(최대 [timeout]).
+  ///
+  /// 용도: 확인 질문("맞으면 예라고 말씀해 주세요")을 말한 **뒤에** 마이크를
+  /// 다시 열어야 TTS 소리가 STT에 섞여 들어가거나, 사용자가 질문을 듣는 중에
+  /// 침묵 타이머가 돌기 시작하는 문제를 막을 수 있다.
+  /// speak()는 재생 완료를 기다리지 않으므로 호출부가 이 메서드로 타이밍을 잡는다.
+  Future<void> waitUntilIdle({
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while ((_processing || _queue.isNotEmpty) &&
+        DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+    }
+  }
+
   /// TTS 정지 및 대기열 비우기(명시적 중단).
   Future<void> stop() async {
     _queue.clear();

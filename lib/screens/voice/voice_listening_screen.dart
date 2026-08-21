@@ -429,9 +429,18 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     );
   }
 
+  /// 안내/질문 발화가 끝난 뒤 자동으로 청취를 재개한다.
+  ///
+  /// "예/아니오로 답하세요"라고 말해놓고 마이크가 꺼져 있으면 전맹 사용자는
+  /// 마이크 버튼을 다시 찾아 두 번 눌러야 하는 dead-end에 빠진다. 모든
+  /// 확인·되묻기 경로는 발화 후 이 메서드를 호출해야 한다.
+  /// TTS 큐가 빌 때까지 기다렸다가 마이크를 열어, 질문 소리가 STT에 섞이거나
+  /// 질문을 듣는 중에 침묵 타이머가 도는 문제를 막는다.
   void _restartListeningAfterPrompt() {
     if (!_speechEnabled || !mounted) return;
-    Future<void>.delayed(const Duration(milliseconds: 900), () {
+    Future<void>(() async {
+      await _tts.waitUntilIdle();
+      await Future<void>.delayed(const Duration(milliseconds: 300));
       if (!mounted || _isRecording || _isProcessing) return;
       _toggleRecording();
     });
@@ -515,6 +524,8 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
           _isProcessing = false;
         });
         await _speak('알겠습니다. 다시 말씀해 주세요.');
+        // "다시 말씀해 주세요"라고 요청했으니 마이크를 자동으로 다시 연다.
+        _restartListeningAfterPrompt();
         return;
       }
       // 예/아니오가 아니면 새로 들어온 문장을 새 명령으로 계속 처리한다.
@@ -537,6 +548,8 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         _isProcessing = false;
       });
       await _speak(confirmQuestion, interrupt: true);
+      // 질문했으니 답을 들을 수 있게 마이크를 자동으로 다시 연다.
+      _restartListeningAfterPrompt();
       return;
     }
 
@@ -825,6 +838,8 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
             _statusMessage = clarification;
           });
           await _speak(clarification);
+          // 확인 질문/재발화 요청 뒤에는 답을 들을 수 있게 마이크를 자동으로 연다.
+          _restartListeningAfterPrompt();
           return;
         }
 
@@ -836,6 +851,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
             _statusMessage = clarification;
           });
           await _speak(clarification);
+          _restartListeningAfterPrompt();
           return;
         }
 
@@ -875,6 +891,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
           final clarification = message.isNotEmpty ? message : '명령을 다시 말씀해 주세요.';
           setState(() => _statusMessage = clarification);
           await _speak(clarification);
+          _restartListeningAfterPrompt();
           return;
         }
         final washerSent = await _sendBleSequence(commands);
@@ -896,6 +913,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
           final clarification = message.isNotEmpty ? message : '명령을 다시 말씀해 주세요.';
           setState(() => _statusMessage = clarification);
           await _speak(clarification);
+          _restartListeningAfterPrompt();
           return;
         }
         final acSent = await _sendBleSequence(commands);

@@ -398,3 +398,31 @@
 - `test/services/tts_service_test.dart`에 억제 계약 회귀 테스트 5건 추가:
   SR 활성 시 navigation 억제 / interrupt:true여도 억제 / result 유지 / emergency 유지 /
   SR 비활성 시 navigation 정상 재생.
+- 검증: `flutter analyze` 신규 이슈 0건, `flutter test` 169/169 통과 (Flutter 3.47.1).
+
+---
+
+## 2026-08-21 — [P0-2] 확인 질문 후 자동 재청취 (리뷰 후속 2단계)
+
+### 배경 (전면 리뷰에서 발견된 결함)
+- 저신뢰 인식 확인("맞으면 예라고 말씀해 주세요")과 AI `needs_confirmation` 경로에서
+  질문을 말한 뒤 **마이크가 꺼진 채로 끝났다**. 답하려면 마이크 버튼을 다시 찾아
+  두 번(arm→확인) 눌러야 해서, 전맹 사용자에게 사실상 dead-end급 마찰이었음.
+  `_restartListeningAfterPrompt()`는 기기 명확화(되묻기) 경로에서만 호출되고 있었다.
+
+### 수정 내용
+- `TtsService.waitUntilIdle()` 신설 — 발화 큐가 빌 때까지 대기(최대 10초).
+  `speak()`는 재생 완료를 기다리지 않으므로, 질문이 끝난 **뒤** 마이크를 열
+  타이밍을 호출부가 잡을 수 있게 하는 기반 API.
+- `_restartListeningAfterPrompt()`를 고정 900ms 지연 → `waitUntilIdle` + 300ms
+  버퍼로 변경. 질문 소리가 STT에 섞여 들어가거나, 질문을 듣는 중에 침묵 타이머가
+  돌기 시작하는 문제를 함께 방지(기존 기기 명확화 경로도 같이 개선됨).
+- 재청취 호출 추가 5곳: 저신뢰 확인 질문, 저신뢰 거절 후 "다시 말씀해 주세요",
+  MICROWAVE `needs_confirmation` 확인 질문, MICROWAVE 저신뢰/빈 명령 재발화 요청,
+  WASHER/AC 빈 명령 재발화 요청.
+- 취소 확정("알겠습니다. 취소할게요") 등 질문이 아닌 종료 안내에는 붙이지 않음 —
+  사용자가 끝내려는 흐름에서 마이크가 다시 켜지는 역효과 방지.
+
+### 테스트
+- `TtsService.waitUntilIdle` 단위 테스트 3건 추가 (유휴 즉시 완료 / 큐 소진 후 완료 /
+  타임아웃 시 예외 없음).

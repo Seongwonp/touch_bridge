@@ -64,6 +64,36 @@ void main() {
     });
   });
 
+  group('TtsService.waitUntilIdle', () {
+    // 확인 질문 후 자동 재청취 타이밍의 기반 API. 큐가 처리되는 동안 대기하고,
+    // 유휴 상태에서는 즉시 완료되어야 한다(테스트 환경에는 TTS 엔진이 없어
+    // 발화 자체는 catchError 경로로 곧바로 끝난다).
+    test('유휴 상태에서는 즉시 완료된다', () async {
+      final tts = TtsService();
+      final sw = Stopwatch()..start();
+      await tts.waitUntilIdle(timeout: const Duration(seconds: 3));
+      sw.stop();
+      expect(sw.elapsed, lessThan(const Duration(seconds: 2)));
+    });
+
+    test('발화를 넣은 뒤 호출하면 큐 소진 후 완료된다', () async {
+      final tts = TtsService();
+      await tts.speak('대기 검증용 안내', source: 'test', force: true);
+      await expectLater(
+        tts.waitUntilIdle(timeout: const Duration(seconds: 5)),
+        completes,
+      );
+    });
+
+    test('타임아웃을 넘겨도 예외 없이 반환한다', () async {
+      final tts = TtsService();
+      await expectLater(
+        tts.waitUntilIdle(timeout: Duration.zero),
+        completes,
+      );
+    });
+  });
+
   group('TtsService.replayLast', () {
     test('아무것도 말한 적 없으면 예외 없이 완료된다', () async {
       // 싱글톤이라 이전 테스트의 상태가 남아있을 수 있지만, replayLast는
