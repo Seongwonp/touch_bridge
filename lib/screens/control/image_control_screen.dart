@@ -65,7 +65,11 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
       _tts.speak('${widget.deviceName} 제어 화면입니다. 이미지의 버튼을 눌러 조작하세요.');
     } catch (e) {
       setState(() => _isLoading = false);
-      _tts.speak('매핑 데이터를 불러오는데 실패했습니다.');
+      FeedbackService.instance.playFailure();
+      _tts.speak(
+        '매핑 데이터를 불러오는데 실패했습니다.',
+        priority: TtsPriority.result,
+      );
     }
   }
 
@@ -100,7 +104,12 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
     String label,
   ) async {
     if (!BleService.instance.isConnected) {
-      _tts.speak('기기가 연결되어 있지 않습니다. 보호자에게 기기 연결을 요청해 주세요.');
+      // 무반응 dead-end 방지: 실패 earcon + result 우선순위(스크린리더에서도 들림).
+      FeedbackService.instance.playFailure();
+      _tts.speak(
+        '기기가 연결되어 있지 않습니다. 보호자에게 기기 연결을 요청해 주세요.',
+        priority: TtsPriority.result,
+      );
       return;
     }
 
@@ -112,7 +121,12 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
       _armResetTimer = Timer(const Duration(seconds: 15), () {
         if (mounted) setState(() => _armedButtonId = null);
       });
-      _tts.speak('$label 버튼. 다시 누르면 실행합니다.', interrupt: true);
+      // arm 안내는 스크린리더가 자동으로 읽어주지 않으므로 result 명시.
+      _tts.speak(
+        '$label 버튼. 다시 누르면 실행합니다.',
+        interrupt: true,
+        priority: TtsPriority.result,
+      );
       return;
     }
 
@@ -122,7 +136,11 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
   }
 
   Future<void> _executePress(String btId, String label) async {
-    _tts.speak('$label 실행합니다.', interrupt: true);
+    _tts.speak(
+      '$label 실행합니다.',
+      interrupt: true,
+      priority: TtsPriority.result,
+    );
 
     final profile = _profile;
     if (profile == null) {

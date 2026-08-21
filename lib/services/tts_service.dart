@@ -75,8 +75,14 @@ class TtsService {
     }
   }
 
+  /// 테스트에서 스크린리더 활성 상태를 강제하기 위한 오버라이드.
+  /// null이면 실제 플랫폼 값을 사용한다.
+  @visibleForTesting
+  bool? screenReaderOverrideForTest;
+
   /// VoiceOver/TalkBack 등 스크린리더가 활성인지.
   bool get _screenReaderActive =>
+      screenReaderOverrideForTest ??
       PlatformDispatcher.instance.accessibilityFeatures.accessibleNavigation;
 
   String _normalize(String text) {
@@ -119,7 +125,9 @@ class TtsService {
   }
 
   /// 발화 요청. 기존 호출부 호환을 위해 [force]/[interrupt]/[source]를 유지하고,
-  /// [priority]를 추가했다. interrupt=true는 최소 result 우선순위(선점)로 처리된다.
+  /// [priority]를 추가했다. interrupt=true는 큐에서 최소 result 우선순위(선점)로
+  /// 처리되지만, **스크린리더 억제 판단에는 반영되지 않는다** — 스크린리더
+  /// 활성 시에도 들려야 하는 발화는 priority를 result/emergency로 명시할 것.
   Future<void> speak(
     String text, {
     bool force = false,
@@ -135,11 +143,19 @@ class TtsService {
       final message = _toConcise(text);
       if (message.isEmpty) return;
 
-      // 스크린리더 활성 시: interrupt 승격 전 원래 priority로 판단한다.
-      // navigation/info 수준 안내는 스크린리더가 포커스로 대신 읽으므로
-      // 앱 TTS를 억제해 이중 낭독을 막는다. interrupt:true 로 result 수준으로
-      // 승격되기 전에 체크해야 화면 진입 speak(interrupt:true) 호출도 억제된다.
-      // result·emergency는 스크린리더가 자동 안내하지 않으므로 유지한다.
+      // ── 스크린리더 억제 계약 ──────────────────────────────────────────
+      // 억제 여부는 호출부가 명시한 [priority]로만 판단한다. interrupt는
+      // "선점 재생" 플래그일 뿐이며 억제 여부와 무관하다(아래에서 큐 순서를
+      // 위해 result로 승격되지만, 그 승격은 억제 판단에 반영되지 않는다).
+      //
+      // - navigation/info: 화면 진입 안내 등. 스크린리더가 포커스/liveRegion
+      //   으로 대신 읽으므로 앱 TTS를 억제해 이중 낭독을 막는다.
+      // - result/emergency: 명령 결과·실패·비상 안내. 스크린리더가 자동으로
+      //   읽어주지 않으므로 절대 억제하지 않는다.
+      //
+      // 따라서 "스크린리더에서도 반드시 들려야 하는" 발화는 호출부에서
+      // priority: TtsPriority.result (또는 emergency)를 **명시**해야 한다.
+      // interrupt: true만으로는 스크린리더 활성 시 무음이 된다.
       if (_screenReaderActive && priority.index < TtsPriority.result.index) {
         _addLog('(SUPPRESSED: 스크린리더 활성 - ${priority.name})', source);
         return;

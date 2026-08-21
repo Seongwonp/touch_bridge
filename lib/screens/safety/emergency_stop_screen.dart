@@ -110,7 +110,9 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     if (_announcedMilestones.contains(seconds)) return;
     _announcedMilestones.add(seconds);
     final msg = seconds >= 60 ? '${seconds ~/ 60}분 남았습니다.' : '$seconds초 남았습니다.';
-    _speak(msg);
+    // 카운트다운 구간 안내는 스크린리더가 자동으로 읽어주지 않는 상태 변화이므로
+    // result 우선순위로 스크린리더 활성 시에도 들려준다.
+    _speak(msg, priority: TtsPriority.result);
   }
 
   void _startCountdown() {
@@ -146,15 +148,21 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     String message, {
     String source = 'EmergencyStopScreen',
     bool interrupt = false,
+    TtsPriority priority = TtsPriority.navigation,
   }) async {
-    await _tts.speak(message, source: source, interrupt: interrupt);
+    await _tts.speak(
+      message,
+      source: source,
+      interrupt: interrupt,
+      priority: priority,
+    );
   }
 
   void _onHoldStart() {
     setState(() => _isHolding = true);
     HapticFeedback.heavyImpact();
     _holdController.forward(from: 0);
-    _speak('멈추는 중입니다. 그대로 눌러주세요.');
+    _speak('멈추는 중입니다. 그대로 눌러주세요.', priority: TtsPriority.result);
     _holdHapticTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_isHolding) HapticFeedback.mediumImpact();
     });
@@ -187,7 +195,13 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     } else {
       FeedbackService.instance.playFailure();
     }
-    await _speak(outcome.message, interrupt: true);
+    // 정지 성공/미확인/실패 결과는 안전 정보이므로 스크린리더 활성 시에도
+    // 반드시 들려야 한다 — emergency 우선순위 명시.
+    await _speak(
+      outcome.message,
+      interrupt: true,
+      priority: TtsPriority.emergency,
+    );
 
     if (!mounted) return;
     if (outcome.acknowledged) {

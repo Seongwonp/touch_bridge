@@ -193,8 +193,14 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     String message, {
     String source = 'voicelisteningScreen',
     bool interrupt = false,
+    TtsPriority priority = TtsPriority.navigation,
   }) async {
-    await _tts.speak(message, source: source, interrupt: interrupt);
+    await _tts.speak(
+      message,
+      source: source,
+      interrupt: interrupt,
+      priority: priority,
+    );
   }
 
   void _resetSilenceTimer() {
@@ -523,11 +529,14 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         'confidence': _lastConfidence,
       });
       _pendingLowConfidenceText = text;
+      final confirmQuestion = '"$text"라고 들었어요. 맞으면 "예", 아니면 "아니오"라고 말씀해 주세요.';
       setState(() {
-        _statusMessage = '다시 확인 중';
+        // 확인 질문 전문을 liveRegion에 실어 스크린리더 사용자도 질문 내용을
+        // 들을 수 있게 한다('다시 확인 중'만으로는 무엇을 확인하는지 알 수 없다).
+        _statusMessage = confirmQuestion;
         _isProcessing = false;
       });
-      await _speak('"$text"라고 들었어요. 맞으면 "예", 아니면 "아니오"라고 말씀해 주세요.', interrupt: true);
+      await _speak(confirmQuestion, interrupt: true);
       return;
     }
 
@@ -666,7 +675,14 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     } else {
       FeedbackService.instance.playFailure();
     }
-    await _speak(outcome.message, interrupt: true);
+    // 정지 결과는 안전 정보: emergency 우선순위로 스크린리더 활성 시에도 반드시
+    // 들려주고, liveRegion(_statusMessage) 채널로도 함께 전달한다.
+    if (mounted) setState(() => _statusMessage = outcome.message);
+    await _speak(
+      outcome.message,
+      interrupt: true,
+      priority: TtsPriority.emergency,
+    );
     if (!mounted) return;
     if (outcome.acknowledged) {
       Navigator.push(
@@ -687,13 +703,22 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       await ActiveDeviceService.instance.autoPickFirstDevice();
       final activeBleId = ActiveDeviceService.instance.getActiveBleId();
       if (activeBleId == null) {
+        // 실패 원인을 _statusMessage에도 반영해 liveRegion(스크린리더 채널)으로
+        // 전달한다 — TTS만으로는 스크린리더 활성 시 억제되어 무음이 된다.
+        if (mounted) {
+          setState(() => _statusMessage = '먼저 보호자에게 기기 연결을 요청해 주세요.');
+        }
         _speak('먼저 보호자에게 기기 연결을 요청해 주세요.');
         return false;
       }
 
+      if (mounted) setState(() => _statusMessage = '기기에 연결 중입니다...');
       _speak('기기에 연결 중입니다...');
       final connected = await BleService.instance.ensureConnected(activeBleId);
       if (!connected) {
+        if (mounted) {
+          setState(() => _statusMessage = '연결에 실패했습니다. 기기 전원을 확인하세요.');
+        }
         _speak('연결에 실패했습니다. 기기 전원을 확인하세요.');
         return false;
       }
@@ -721,6 +746,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         buttonIds: commands.cast<String>(),
       );
       if (!result.ok) {
+        if (mounted) setState(() => _statusMessage = result.userMessage);
         _speak(result.userMessage);
         return false;
       }
@@ -734,6 +760,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       final btn = raw as String;
       final result = await MappingExecutionService.instance.pressPhysical(btn);
       if (!result.ok) {
+        if (mounted) setState(() => _statusMessage = result.userMessage);
         _speak(result.userMessage);
         return false;
       }
@@ -775,9 +802,9 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         _consecutiveFailures = 0;
         // "성공"이 아니라 "전송됨"이다: BLE write 성공일 뿐 GRBL 확인이 아니다.
         FeedbackService.instance.signalSent();
-        // interrupt: true → TtsPriority.result로 승격. 스크린리더 활성 시에도 억제되지
-        // 않으므로 전맹 사용자도 "무엇이 전송됐는지" 안내를 받는다.
-        // _statusMessage 갱신 → liveRegion이 스크린리더 채널로 동일 내용을 다시 전달(이중 보장).
+        // _statusMessage 갱신 → liveRegion이 스크린리더 채널로 결과를 전달한다.
+        // (주의: interrupt:true만으로는 스크린리더 활성 시 TTS가 억제되므로,
+        // 이 liveRegion 갱신이 스크린리더 사용자용 주 채널이다.)
         setState(() => _statusMessage = message);
         await _speak(message, interrupt: true);
         return;

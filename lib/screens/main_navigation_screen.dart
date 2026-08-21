@@ -193,13 +193,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       _navResetTimer = Timer(const Duration(seconds: 20), () {
         if (mounted) setState(() => _armedNavIndex = null);
       });
-      // interrupt: true는 스크린리더 활성 시에도 억제되지 않는 result 우선순위로
-      // 승격된다. 탭 이동은 스크린리더가 자동으로 다시 읽어주지 않는 "확인 필요"
-      // 상태이므로 반드시 들려야 한다.
+      // 탭 arm은 스크린리더가 자동으로 다시 읽어주지 않는 "확인 필요" 상태이므로
+      // result 우선순위를 명시해 스크린리더 활성 시에도 반드시 들리게 한다
+      // (interrupt만으로는 억제됨 — TtsService 억제 계약 참조).
       await _tts.speak(
         '${destinations[index].label}. ${destinations[index].guide} 이동하려면 한 번 더 누르세요.',
         source: 'MainNavigationScreen',
         interrupt: true,
+        priority: TtsPriority.result,
       );
       return;
     }
@@ -211,9 +212,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     });
     await _tts.stop();
     FeedbackService.instance.vibrateSuccess();
+    // 탭 전환 확정도 스크린리더가 자동 안내하지 않으므로 result로 들려준다.
     await _tts.speak(
       '${destinations[index].label} 이동. ${destinations[index].guide}',
       source: 'MainNavigationScreen',
+      priority: TtsPriority.result,
     );
   }
 
@@ -239,6 +242,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               label: '${item.label} 탭',
               selected: isActive,
               button: true,
+              // PrimaryButton과 같은 패턴: armed 상태를 value/hint/liveRegion으로
+              // 노출해 TTS 외에 스크린리더 자체 채널로도 "확인 대기"가 전달되게 한다.
+              value: isArmed ? '이동 대기 중' : null,
+              hint: isArmed ? '한 번 더 누르면 이동합니다' : null,
+              liveRegion: isArmed,
               child: GestureDetector(
                 onTap: () => _handleBottomTap(index),
                 child: AnimatedContainer(

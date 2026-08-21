@@ -51,7 +51,12 @@ class _CourseControlScreenState extends State<CourseControlScreen> {
   Future<void> _runCourse(Course course) async {
     if (_isExecuting) return;
     if (!BleService.instance.isConnected) {
-      _tts.speak('기기가 연결되어 있지 않습니다. 보호자에게 기기 연결을 요청해 주세요.');
+      // 무반응 dead-end 방지: 실패 earcon + result 우선순위(스크린리더에서도 들림).
+      FeedbackService.instance.playFailure();
+      _tts.speak(
+        '기기가 연결되어 있지 않습니다. 보호자에게 기기 연결을 요청해 주세요.',
+        priority: TtsPriority.result,
+      );
       return;
     }
 
@@ -63,7 +68,12 @@ class _CourseControlScreenState extends State<CourseControlScreen> {
       _armResetTimer = Timer(const Duration(seconds: 15), () {
         if (mounted) setState(() => _armedCourseName = null);
       });
-      _tts.speak('${course.name} 코스. 다시 누르면 시작합니다.', interrupt: true);
+      // arm 안내는 스크린리더가 자동으로 읽어주지 않으므로 result 명시.
+      _tts.speak(
+        '${course.name} 코스. 다시 누르면 시작합니다.',
+        interrupt: true,
+        priority: TtsPriority.result,
+      );
       return;
     }
 
@@ -74,7 +84,11 @@ class _CourseControlScreenState extends State<CourseControlScreen> {
 
   Future<void> _executeCourse(Course course) async {
     setState(() => _isExecuting = true);
-    _tts.speak('${course.name} 코스를 시작합니다.', interrupt: true);
+    _tts.speak(
+      '${course.name} 코스를 시작합니다.',
+      interrupt: true,
+      priority: TtsPriority.result,
+    );
     FeedbackService.instance.vibrateSuccess();
 
     try {
@@ -119,11 +133,16 @@ class _CourseControlScreenState extends State<CourseControlScreen> {
           '${course.name} 코스를 시작했습니다. 소요 시간을 알 수 없어 타이머는 표시하지 않습니다. '
           '멈추려면 비상 정지를 사용하세요.',
           interrupt: true,
+          priority: TtsPriority.result,
         );
         if (mounted) Navigator.of(context).pop();
       }
     } catch (e) {
-      _tts.speak('코스를 실행하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+      FeedbackService.instance.playFailure();
+      _tts.speak(
+        '코스를 실행하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+        priority: TtsPriority.result,
+      );
     } finally {
       if (mounted) setState(() => _isExecuting = false);
     }

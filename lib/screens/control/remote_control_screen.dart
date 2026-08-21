@@ -69,8 +69,14 @@ class _RemoteControlScreenState extends State<RemoteControlScreen>
     String message, {
     String source = 'RemoteControlScreen',
     bool interrupt = false,
+    TtsPriority priority = TtsPriority.navigation,
   }) async {
-    await _tts.speak(message, source: source, interrupt: interrupt);
+    await _tts.speak(
+      message,
+      source: source,
+      interrupt: interrupt,
+      priority: priority,
+    );
   }
 
   Future<void> _armAndRun({
@@ -92,9 +98,14 @@ class _RemoteControlScreenState extends State<RemoteControlScreen>
         });
       });
 
-      // interrupt: true는 스크린리더 활성 시에도 억제되지 않는 result 우선순위로
-      // 승격된다. arm 안내는 스크린리더가 자동으로 다시 읽어주지 않는다.
-      await _speak(guide, interrupt: true);
+      // arm 안내는 스크린리더가 자동으로 다시 읽어주지 않으므로 result
+      // 우선순위를 명시한다(interrupt만으로는 스크린리더 활성 시 억제됨).
+      // "다시 누르면 실행" 힌트를 붙여 이중 탭 패턴을 모르는 사용자도 안내받게 한다.
+      await _speak(
+        '$guide. 한 번 더 누르면 실행합니다.',
+        interrupt: true,
+        priority: TtsPriority.result,
+      );
       return;
     }
 
@@ -127,7 +138,8 @@ class _RemoteControlScreenState extends State<RemoteControlScreen>
       _draft = (_draft.substring(1) + value.toString());
     });
     _updateFromDraft();
-    _speak('$value 입력됨');
+    // 입력 피드백은 스크린리더가 자동으로 읽어주지 않는 상태 변화 → result.
+    _speak('$value 입력됨', priority: TtsPriority.result);
   }
 
   void _backspaceDigit() {
@@ -136,7 +148,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen>
       _draft = '0${_draft.substring(0, 3)}';
     });
     _updateFromDraft();
-    _speak('마지막 숫자 지움');
+    _speak('마지막 숫자 지움', priority: TtsPriority.result);
   }
 
   void _cancelTimer() {
@@ -145,7 +157,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen>
       _draft = '0000';
       _secondsLeft = 0;
     });
-    _speak('초기화되었습니다.');
+    _speak('초기화되었습니다.', priority: TtsPriority.result);
   }
 
   bool _isSending = false;
@@ -157,19 +169,29 @@ class _RemoteControlScreenState extends State<RemoteControlScreen>
         _draft = '0030';
         _secondsLeft = 30;
       });
-      _speak('30초로 시작합니다.');
+      _speak('30초로 설정했습니다. 시작하려면 다시 누르세요.', priority: TtsPriority.result);
       return; // 시간만 채웠을 뿐 아직 시작하지 않았으므로 다시 눌러야 한다.
     }
 
     if (!BleService.instance.isConnected) {
-      _speak('기기가 연결되어 있지 않습니다. 보호자에게 기기 연결을 요청해 주세요.');
+      // 이중 탭까지 마친 사용자가 무반응 상태에 빠지지 않도록 실패 earcon과
+      // result 우선순위 안내를 함께 준다(스크린리더 활성 시에도 들림).
+      FeedbackService.instance.playFailure();
+      _speak(
+        '기기가 연결되어 있지 않습니다. 보호자에게 기기 연결을 요청해 주세요.',
+        priority: TtsPriority.result,
+      );
       return;
     }
 
     final deviceId =
         widget.deviceId ?? ActiveDeviceService.instance.getActiveDeviceId();
     if (deviceId == null || deviceId.isEmpty) {
-      _speak('기기를 찾지 못했습니다. 홈에서 기기를 먼저 선택해 주세요.');
+      FeedbackService.instance.playFailure();
+      _speak(
+        '기기를 찾지 못했습니다. 홈에서 기기를 먼저 선택해 주세요.',
+        priority: TtsPriority.result,
+      );
       return;
     }
 
@@ -180,16 +202,28 @@ class _RemoteControlScreenState extends State<RemoteControlScreen>
     // buildStartSequence는 1~4초를 10초로 올리지만, 만약 actualSeconds == 0이
     // 되는 edge case가 생기면 카운트다운 화면이 즉시 완료로 보이므로 막는다.
     if (sequence.actualSeconds <= 0) {
-      _speak('시간을 10초 이상 입력해 주세요.', interrupt: true);
+      // 여기서 그냥 return하면 _isSending이 true로 남아 시작 버튼이 영구
+      // 무반응이 된다(과거 잠재 버그) — 반드시 해제하고 나간다.
+      setState(() => _isSending = false);
+      _speak(
+        '시간을 10초 이상 입력해 주세요.',
+        interrupt: true,
+        priority: TtsPriority.result,
+      );
       return;
     }
     if (sequence.actualSeconds != _secondsLeft) {
       _speak(
         '${_formatMMSS(sequence.actualSeconds)}로 맞춰 시작합니다.',
         interrupt: true,
+        priority: TtsPriority.result,
       );
     } else {
-      _speak('${_formatMMSS(_secondsLeft)} 시작합니다.', interrupt: true);
+      _speak(
+        '${_formatMMSS(_secondsLeft)} 시작합니다.',
+        interrupt: true,
+        priority: TtsPriority.result,
+      );
     }
 
     try {

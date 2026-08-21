@@ -354,3 +354,47 @@
 
 ### 검증
 - 매 단계 `flutter analyze`(0건), `flutter test`(29/29 통과), Chrome 부팅 스모크 테스트로 회귀 확인.
+
+---
+
+## 2026-08-20 — [P0-1] 스크린리더 TTS 억제 정합화 (전면 코드 리뷰 후속 1단계)
+
+### 배경 (전면 리뷰에서 발견된 버그)
+- `TtsService.speak()`의 스크린리더 억제 검사가 **interrupt 승격 전 원래 priority**로
+  판단하는데, 화면 코드 곳곳의 주석과 CLAUDE.md는 정반대("interrupt:true는 result로
+  승격되어 억제되지 않는다")를 가정하고 있었음.
+- 결과: TalkBack/VoiceOver 활성 시 **이중 탭 arm 안내, 비상정지 성공/실패 결과,
+  명령 전송/실패 안내가 전부 무음**. `TtsPriority.emergency`를 명시한
+  `EmergencyButton` arm 안내만 살아남는 상태였음.
+
+### 확정한 계약 (tts_service.dart에 문서화)
+- 억제 여부는 **호출부가 명시한 priority로만** 판단한다. `interrupt`는 선점 재생
+  플래그일 뿐 억제와 무관.
+- navigation/info → 스크린리더 활성 시 억제 (포커스/liveRegion이 대신 전달).
+- result/emergency → 절대 억제하지 않음. 스크린리더에서도 들려야 하는 결과·실패·비상
+  발화는 호출부에서 `priority: TtsPriority.result/emergency`를 **명시**해야 한다.
+
+### 수정 내용
+- `tts_service.dart`: 계약 주석 전면 재작성 + 테스트용 `screenReaderOverrideForTest` 추가.
+- **비상 경로 emergency 명시**: `emergency_access_screen`(기기 없음/연결 실패/즉시 중단/
+  ACK 결과 4곳), `emergency_stop_screen`(정지 결과), `voice_listening_screen._handleEmergencyStop`.
+- **결과·arm·실패 경로 result 명시**: `emergency_stop_screen`(카운트다운 구간·홀드 안내),
+  `stop_done_screen`(완료 안내·홈 버튼 arm), `main_navigation_screen`(탭 arm·탭 전환),
+  `command_feedback_service`(sent/confirmed/failed), `remote_control_screen`(숫자 입력·
+  초기화·시작·미연결 실패 등 전부), `course_control_screen`, `image_control_screen`.
+- **liveRegion 공백 보완**(voice_listening_screen): `_sendBleSequence` 실패 4곳과
+  비상정지 결과가 `_statusMessage`를 갱신하지 않아 스크린리더 채널로도 전달되지 않던
+  문제 수정. 저신뢰 확인 질문은 질문 전문을 liveRegion에 싣도록 변경.
+- **무반응 dead-end 보완**: remote/course/image 제어 화면의 "기기 미연결" 경로에
+  실패 earcon(`playFailure`) 추가.
+- **부수 수정**: `remote_control_screen._toggleStart`에서 `actualSeconds <= 0` 조기
+  return 시 `_isSending`이 true로 남아 시작 버튼이 영구 무반응이 되는 잠재 버그 수정.
+  탭 arm 상태를 `main_navigation_screen` Semantics(value/hint/liveRegion)로도 노출.
+  arm 안내가 "취소" 한 단어였던 것을 "취소. 한 번 더 누르면 실행합니다"로 확장.
+- **틀린 주석 정정**: stop_done/remote_control/main_navigation/voice_listening의
+  "interrupt는 억제되지 않는다" 주석 제거, CLAUDE.md 스크린리더 지원 표 갱신.
+
+### 테스트
+- `test/services/tts_service_test.dart`에 억제 계약 회귀 테스트 5건 추가:
+  SR 활성 시 navigation 억제 / interrupt:true여도 억제 / result 유지 / emergency 유지 /
+  SR 비활성 시 navigation 정상 재생.

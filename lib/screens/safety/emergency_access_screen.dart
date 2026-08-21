@@ -50,17 +50,31 @@ class _EmergencyAccessScreenState extends State<EmergencyAccessScreen> {
 
     if (targetId == null || targetId.isEmpty) {
       FeedbackService.instance.playFailure();
-      await _tts.speak('연결된 기기가 없습니다. 기기 전원을 확인해 주세요.');
+      // 비상 경로의 실패 안내는 스크린리더 활성 시에도 반드시 들려야 하므로
+      // emergency 우선순위를 명시한다(TtsService 억제 계약 참조).
+      await _tts.speak(
+        '연결된 기기가 없습니다. 기기 전원을 확인해 주세요.',
+        priority: TtsPriority.emergency,
+        interrupt: true,
+      );
       if (mounted) setState(() => _isStopping = false);
       return;
     }
 
-    await _tts.speak('즉시 중단합니다.', interrupt: true);
+    await _tts.speak(
+      '즉시 중단합니다.',
+      priority: TtsPriority.emergency,
+      interrupt: true,
+    );
     if (!BleService.instance.isConnected) {
       final connected = await BleService.instance.ensureConnected(targetId);
       if (!connected) {
         FeedbackService.instance.playFailure();
-        await _tts.speak('기기에 연결하지 못했습니다. 기기 전원을 확인해 주세요.', interrupt: true);
+        await _tts.speak(
+          '기기에 연결하지 못했습니다. 기기 전원을 확인해 주세요.',
+          priority: TtsPriority.emergency,
+          interrupt: true,
+        );
         if (mounted) setState(() => _isStopping = false);
         return;
       }
@@ -74,7 +88,11 @@ class _EmergencyAccessScreenState extends State<EmergencyAccessScreen> {
     } else {
       FeedbackService.instance.playFailure();
     }
-    await _tts.speak(outcome.message, interrupt: true);
+    await _tts.speak(
+      outcome.message,
+      priority: TtsPriority.emergency,
+      interrupt: true,
+    );
 
     if (!mounted) return;
     setState(() => _isStopping = false);

@@ -237,7 +237,7 @@ if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) return;
 
 | 패턴 | 구현 위치 | 설명 |
 |------|-----------|------|
-| TTS 이중 발화 방지 | `tts_service.dart` | 스크린리더 활성 시 navigation 우선순위 TTS 억제 (interrupt:true는 result로 승격해 예외 허용) |
+| TTS 이중 발화 방지 | `tts_service.dart` | 스크린리더 활성 시 navigation/info 우선순위 TTS 억제. **억제 판단은 명시된 priority로만** — interrupt:true는 선점 플래그일 뿐 억제를 우회하지 않으므로, 스크린리더에서도 들려야 하는 결과·실패·비상 발화는 `priority: TtsPriority.result/emergency`를 명시해야 한다 (2026-08-20 계약 확정) |
 | 스크린리더 감지 | `accessibility_settings.dart` | `isScreenReaderActive` — PlatformDispatcher 비반응형 게터 |
 | 최소 터치 영역 | `button_marker.dart`, `mapping_markers_layer.dart` | `.clamp(48.0, double.infinity)` + `HitTestBehavior.opaque` |
 | CustomSemanticsAction | `button_marker.dart`, `main_navigation_screen.dart`, `home_device_card.dart` | 롱프레스·숨겨진 제스처를 스크린리더 액션 메뉴로 노출 |

@@ -25,16 +25,34 @@ class CommandFeedbackService {
           source: source,
           priority: TtsPriority.result,
         );
+      // 아래 세 phase 모두 명령의 "결과"이므로 result 우선순위를 명시한다.
+      // interrupt만으로는 스크린리더 활성 시 억제되어 무음이 된다
+      // (TtsService 억제 계약 참조).
       case CommandPhase.sent:
         // 전송은 됐지만 기기 확인은 아니므로 confirmed와 다른 소리를 쓴다.
         FeedbackService.instance.signalSent();
-        return _tts.speak(result.userMessage, source: source, interrupt: true);
+        return _tts.speak(
+          result.userMessage,
+          source: source,
+          interrupt: true,
+          priority: TtsPriority.result,
+        );
       case CommandPhase.confirmed:
         FeedbackService.instance.signalSuccess();
-        return _tts.speak(result.userMessage, source: source, interrupt: true);
+        return _tts.speak(
+          result.userMessage,
+          source: source,
+          interrupt: true,
+          priority: TtsPriority.result,
+        );
       case CommandPhase.failed:
         FeedbackService.instance.signalFailure();
-        return _tts.speak(result.userMessage, source: source, interrupt: true);
+        return _tts.speak(
+          result.userMessage,
+          source: source,
+          interrupt: true,
+          priority: TtsPriority.result,
+        );
     }
   }
 }

@@ -28,11 +28,14 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
   @override
   void initState() {
     super.initState();
+    // 이 안내는 화면 이름이 아니라 "무슨 일이 일어났는지"의 결과 보고이므로
+    // 스크린리더 활성 시에도 들려야 한다 — result 우선순위 명시.
     _tts.speak(
       widget.completed
           ? '작동이 끝났습니다. 홈으로 돌아가려면 버튼을 누르세요.'
           : '즉시 중단했습니다. 홈으로 돌아가려면 버튼을 누르세요.',
       interrupt: true,
+      priority: TtsPriority.result,
     );
   }
 
@@ -46,9 +49,14 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
     if (!_armedHomeButton) {
       setState(() => _armedHomeButton = true);
       HapticFeedback.mediumImpact();
-      // interrupt: true는 스크린리더 활성 시에도 억제되지 않는 result 우선순위로
-      // 승격된다. arm 안내는 스크린리더가 자동으로 다시 읽어주지 않는다.
-      await _tts.speak('홈으로 돌아가기 버튼입니다. 한 번 더 누르면 홈으로 이동합니다.', interrupt: true);
+      // arm 안내는 스크린리더가 자동으로 다시 읽어주지 않으므로 result
+      // 우선순위를 명시해야 스크린리더 활성 시에도 들린다(interrupt만으로는
+      // 억제됨 — TtsService 억제 계약 참조).
+      await _tts.speak(
+        '홈으로 돌아가기 버튼입니다. 한 번 더 누르면 홈으로 이동합니다.',
+        interrupt: true,
+        priority: TtsPriority.result,
+      );
       Future.delayed(const Duration(seconds: 15), () {
         if (mounted) setState(() => _armedHomeButton = false);
       });
