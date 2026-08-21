@@ -1,6 +1,7 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../services/accessibility_settings.dart';
 import '../../services/ble_service.dart';
 import '../../services/command_feedback_service.dart';
 import '../../services/course_service.dart';
@@ -65,7 +66,8 @@ class _CourseControlScreenState extends State<CourseControlScreen> {
       setState(() => _armedCourseName = course.name);
       FeedbackService.instance.vibrateSuccess();
       _armResetTimer?.cancel();
-      _armResetTimer = Timer(const Duration(seconds: 15), () {
+      // WCAG 2.2.1: 이중 탭 대기(armed)는 앱 전체 20초로 통일.
+      _armResetTimer = Timer(kDoubleTapArmTimeout, () {
         if (mounted) setState(() => _armedCourseName = null);
       });
       // arm 안내는 스크린리더가 자동으로 읽어주지 않으므로 result 명시.

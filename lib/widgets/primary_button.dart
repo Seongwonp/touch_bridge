@@ -1,8 +1,9 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/accessibility_settings.dart';
 import '../services/tts_service.dart';
 import '../theme/app_colors.dart';
 
@@ -66,7 +67,7 @@ class _PrimaryButtonState extends State<PrimaryButton>
       HapticFeedback.mediumImpact();
 
       _confirmResetTimer?.cancel();
-      _confirmResetTimer = Timer(const Duration(seconds: 20), () {
+      _confirmResetTimer = Timer(kDoubleTapArmTimeout, () {
         if (!mounted) {
           return;
         }

@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
@@ -190,7 +190,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       setState(() => _armedNavIndex = index);
       FeedbackService.instance.vibrateSuccess();
       _navResetTimer?.cancel();
-      _navResetTimer = Timer(const Duration(seconds: 20), () {
+      _navResetTimer = Timer(kDoubleTapArmTimeout, () {
         if (mounted) setState(() => _armedNavIndex = null);
       });
       // 탭 arm은 스크린리더가 자동으로 다시 읽어주지 않는 "확인 필요" 상태이므로

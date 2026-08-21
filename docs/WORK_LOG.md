@@ -726,3 +726,22 @@
 ### 검증 한계
 - 이 PC에는 Python이 없어 백엔드는 정적 구현만 검증됨. **백엔드 실행 환경에서
   `uvicorn main:app` 기동 + `/parse-command` 스모크 확인 필요.**
+
+---
+
+## 2026-08-21 — [정합성-1] 이중 탭 타임아웃 20초 통일 + 단일 상수화 (리뷰 후속 12단계 — 3주차 시작)
+
+### 배경
+- "이중 탭 타임아웃 20초 통일(WCAG 2.2.1)"이 README·심사 문서의 대외 주장이었지만
+  실제 코드는 20초 4곳 + **15초 6곳** 혼재, 주석에는 "4초"까지 잔존 —
+  심사위원이 코드로 반증 가능한 상태였다.
+
+### 수정 내용
+- `kDoubleTapArmTimeout`(20초) 상수를 `accessibility_settings.dart`에 신설하고
+  arm 타이머 **10곳 전부**를 상수로 치환: primary/emergency 버튼,
+  메인 내비 탭, 제어 3화면, control_mode_sheet, voice 마이크, stop_done 홈 버튼,
+  manual_mapping. (TTS 안전 타임아웃 20초·NFC 15초·HTTP 15초는 별개 값으로 유지)
+- "4초" 잔존 주석/문서 정리: manual_mapping·control_mode_sheet 주석,
+  CLAUDE.md 이중 탭 절. REFERENCES.md "15초 통일" → 20초로 정정.
+- 상수 드리프트 방지 회귀 테스트 1건 추가(값 변경 시 문서 동반 갱신 강제 신호).
+- AGENTS.md의 4초 서술은 다음 단계(문서 정합성 패스)에서 파일 자체를 정리하며 처리.

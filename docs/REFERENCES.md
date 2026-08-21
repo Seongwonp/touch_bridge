@@ -145,7 +145,7 @@
 | WCAG 1.4.3 / 1.4.6 (대비 AA/AAA) | 고대비 다크 테마 설계 — 배경 #000000, 주요색 #FFEB00, 전체 색상 토큰화 | `lib/theme/app_colors.dart` |
 | WCAG 1.4.3 / 1.4.6 (대비 AA/AAA) | 색상 대비 자동 단위 테스트 작성 (AA 4.5:1 / AAA 7:1 검증) | `test/theme/app_colors_contrast_test.dart` |
 | WCAG 1.4.11 (비텍스트 대비 3:1) | 버튼 외곽선·매핑 마커·포커스 링 대비 확보 | `lib/screens/mapping/widgets/mapping_markers_layer.dart` |
-| WCAG 2.2.1 (시간 제한 조정) | 이중 탭 타임아웃 15초로 통일 (전체 화면) | `lib/widgets/primary_button.dart` 외 전체 |
+| WCAG 2.2.1 (시간 제한 조정) | 이중 탭 타임아웃 20초로 통일 (전체 화면, 2026-08-21 최종) | `lib/widgets/primary_button.dart` 외 전체 |
 | WCAG 2.4.3 (포커스 순서) | BottomSheet 열릴 때 첫 요소 자동 포커스 이동 (`addPostFrameCallback`) | `lib/screens/home/widgets/control_mode_sheet.dart`, `lib/screens/settings/device_management_screen.dart` |
 | WCAG 2.5.5 / 2.5.8 (터치 타깃) | 최소 터치 영역 48px 확보 (`.clamp(48.0, double.infinity)` + `HitTestBehavior.opaque`) | `lib/screens/mapping/widgets/button_marker.dart` |
 | WCAG 4.1.2 (이름·역할·값) | 전체 화면 `Semantics(label, button, value, checked, onTap)` 적용 | 전체 화면 |

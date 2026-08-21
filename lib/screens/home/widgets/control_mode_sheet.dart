@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -104,7 +104,7 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
     }
   }
 
-  /// 첫 탭: 안내 + 햅틱, 둘째 탭(4초 이내): 실행.
+  /// 첫 탭: 안내 + 햅틱, 둘째 탭(20초 이내): 실행.
   Future<void> _armAndRun({
     required String id,
     required String guide,
@@ -114,7 +114,7 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
       setState(() => _armedActionId = id);
       FeedbackService.instance.vibrateSuccess();
       _actionResetTimer?.cancel();
-      _actionResetTimer = Timer(const Duration(seconds: 20), () {
+      _actionResetTimer = Timer(kDoubleTapArmTimeout, () {
         if (mounted) setState(() => _armedActionId = null);
       });
       await _tts.speak(guide, source: 'ControlModeSheet', interrupt: true);

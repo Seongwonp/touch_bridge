@@ -1,7 +1,8 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../services/accessibility_settings.dart';
 import '../../services/active_device_service.dart';
 import '../../services/ble_service.dart';
 import '../../services/command_feedback_service.dart';
@@ -91,7 +92,8 @@ class _RemoteControlScreenState extends State<RemoteControlScreen>
       FeedbackService.instance.vibrateSuccess();
 
       _actionResetTimer?.cancel();
-      _actionResetTimer = Timer(const Duration(seconds: 15), () {
+      // WCAG 2.2.1: 이중 탭 대기(armed)는 앱 전체 20초로 통일.
+      _actionResetTimer = Timer(kDoubleTapArmTimeout, () {
         if (!mounted) return;
         setState(() {
           _armedActionId = null;
@@ -262,7 +264,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen>
 
   Widget _numberKey(int number, double rs) {
     // 숫자 입력은 하드웨어를 건드리지 않고 화면의 임시 시간 값만 바꾸며
-    // 지우기로 언제든 되돌릴 수 있다. 매번 2단계 확인+15초 대기를 강제하면
+    // 지우기로 언제든 되돌릴 수 있다. 매번 2단계 확인+20초 대기를 강제하면
     // "0230" 같은 네 자리 입력에도 안내를 계속 들어야 해 반복 사용 피로가
     // 크다. 실제 하드웨어를 움직이는 "시작"만 2단계로 유지한다.
     return Semantics(

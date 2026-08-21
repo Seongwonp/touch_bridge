@@ -1,8 +1,9 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
+import '../../services/accessibility_settings.dart';
 import '../../services/tts_service.dart';
 import '../../theme/app_colors.dart';
 
@@ -57,7 +58,8 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
         interrupt: true,
         priority: TtsPriority.result,
       );
-      Future.delayed(const Duration(seconds: 15), () {
+      // WCAG 2.2.1: 이중 탭 대기(armed)는 앱 전체 20초로 통일.
+      Future.delayed(kDoubleTapArmTimeout, () {
         if (mounted) setState(() => _armedHomeButton = false);
       });
       return;

@@ -1,6 +1,7 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../services/accessibility_settings.dart';
 import '../../services/ble_service.dart';
 import '../../services/device_mapping_service.dart';
 import '../../services/active_device_service.dart';
@@ -88,8 +89,8 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
     super.dispose();
   }
 
-  // 물리 동작 전 4초 dead-man 확인 패턴.
-  // 첫 탭: TTS 안내 + arm. 두 번째 탭: 실행. 4초 초과: 자동 취소.
+  // 물리 동작 전 dead-man 확인 패턴.
+  // 첫 탭: TTS 안내 + arm. 두 번째 탭: 실행. 20초 초과: 자동 취소 (WCAG 2.2.1 통일).
   Future<void> _armAndRun({
     required String id,
     required String guide,
@@ -98,7 +99,7 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
     if (_armedAction != id) {
       _armTimer?.cancel();
       setState(() => _armedAction = id);
-      _armTimer = Timer(const Duration(seconds: 15), () {
+      _armTimer = Timer(kDoubleTapArmTimeout, () {
         if (!mounted) return;
         setState(() => _armedAction = null);
       });

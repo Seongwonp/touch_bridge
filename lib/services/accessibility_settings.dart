@@ -1,6 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// 이중 탭 확인(armed) 자동 해제 시간 — WCAG 2.2.1에 맞춰 앱 전체 20초 통일.
+///
+/// 화면마다 리터럴로 두면 드리프트가 생긴다(과거 15초/20초 혼재 사고 —
+/// "20초 통일"이라는 대외 주장이 코드로 반증 가능한 상태였음).
+/// 새 arm 타이머는 반드시 이 상수를 사용할 것.
+const Duration kDoubleTapArmTimeout = Duration(seconds: 20);
+
 class AccessibilitySettings extends ChangeNotifier {
   AccessibilitySettings._();
   static final AccessibilitySettings instance = AccessibilitySettings._();

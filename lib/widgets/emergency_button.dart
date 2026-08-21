@@ -1,7 +1,8 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../services/accessibility_settings.dart';
 import '../services/tts_service.dart';
 
 class EmergencyButton extends StatefulWidget {
@@ -36,7 +37,8 @@ class _EmergencyButtonState extends State<EmergencyButton> {
       HapticFeedback.heavyImpact();
 
       _confirmResetTimer?.cancel();
-      _confirmResetTimer = Timer(const Duration(seconds: 15), () {
+      // WCAG 2.2.1: 이중 탭 대기(armed)는 앱 전체 20초로 통일.
+      _confirmResetTimer = Timer(kDoubleTapArmTimeout, () {
         if (!mounted) {
           return;
         }

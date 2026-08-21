@@ -1,9 +1,10 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:io';
 import 'dart:math' show max;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../../models/command_result.dart';
+import '../../services/accessibility_settings.dart';
 import '../../services/ble_service.dart';
 import '../../services/command_feedback_service.dart';
 import '../../services/device_mapping_service.dart';
@@ -124,7 +125,8 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
       setState(() => _armedButtonId = btId);
       FeedbackService.instance.vibrateSuccess();
       _armResetTimer?.cancel();
-      _armResetTimer = Timer(const Duration(seconds: 15), () {
+      // WCAG 2.2.1: 이중 탭 대기(armed)는 앱 전체 20초로 통일.
+      _armResetTimer = Timer(kDoubleTapArmTimeout, () {
         if (mounted) setState(() => _armedButtonId = null);
       });
       // arm 안내는 스크린리더가 자동으로 읽어주지 않으므로 result 명시.
