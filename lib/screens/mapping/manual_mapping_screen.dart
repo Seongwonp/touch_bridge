@@ -149,7 +149,12 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
       final hr = int.tryParse(_hrCtrl.text) ?? 0;
       final hc = int.tryParse(_hcCtrl.text) ?? 0;
 
-      final newProfile = DeviceMappingProfile(
+      // 기존 프로필에 그리드 값만 병합한다. 새 프로필로 덮어쓰면 사진 매핑이
+      // 만들어 둔 buttonMap/buttonPositions/라벨/모션 파라미터/이미지가 재보정
+      // 한 번에 전부 소실된다(과거 데이터 손실 버그).
+      final existing = await DeviceMappingService.instance.load(deviceId);
+      final merge = DeviceMappingService.mergeGridUpdate(
+        existing: existing,
         rows: rows,
         cols: cols,
         originX: ox,
@@ -158,10 +163,23 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
         pitchY: py,
         homeRow: hr,
         homeCol: hc,
-        buttonMap: const {}, // 수동 매핑에서는 그리드 기반 기본 매핑 사용
       );
 
-      await DeviceMappingService.instance.save(deviceId, newProfile);
+      await DeviceMappingService.instance.save(deviceId, merge.profile);
+
+      if (merge.droppedButtonIds.isNotEmpty && mounted) {
+        // 그리드 축소로 제거된 버튼은 반드시 고지한다 — 침묵 삭제 금지.
+        final droppedCount = merge.droppedButtonIds.length;
+        _tts.speak(
+          '그리드가 줄어 기존 버튼 $droppedCount개가 범위를 벗어나 제거되었습니다. '
+          '해당 버튼은 사진 매핑에서 다시 등록해 주세요.',
+          source: 'ManualMappingScreen',
+          priority: TtsPriority.result,
+        );
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('그리드 축소로 버튼 $droppedCount개 제거됨')),
+        );
+      }
 
       final ok = await BleService.instance.sendSetGrid(
         rows: rows,
@@ -176,7 +194,7 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
       if (!mounted) return;
 
       if (ok) {
-        _tts.speak('그리드 설정이 하드웨어로 전송되었습니다.');
+        _tts.speak('그리드 설정이 하드웨어로 전송되었습니다.', priority: TtsPriority.result);
         if (widget.showCompletionCheck) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute<void>(
@@ -192,7 +210,7 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
           context,
         ).showSnackBar(const SnackBar(content: Text('BLE 전송 성공')));
       } else {
-        _tts.speak('BLE 전송에 실패했습니다.');
+        _tts.speak('BLE 전송에 실패했습니다.', priority: TtsPriority.result);
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('BLE 전송 실패')));

@@ -455,3 +455,29 @@
 - Z축 복구 회귀 테스트 6건 추가 (`test/services/mapping_execution_service_test.dart`):
   pressPhysical/pressButton 각각 하강 후 실패 시 복구 시퀀스 전송 검증,
   복구 실패 시 "눌린 채 멈춤" 경고 문구 검증, 하강 전 실패 시 복구 미전송 검증.
+- 검증: `flutter analyze` 신규 이슈 0건, `flutter test` 178/178 통과.
+
+---
+
+## 2026-08-21 — [P0-4] 수동 매핑 병합 저장 — 사진 매핑 파괴 버그 수정 (리뷰 후속 4단계)
+
+### 배경 (전면 리뷰에서 발견된 데이터 손실 버그)
+- `manual_mapping_screen._saveAndUpload`가 `buttonMap: const {}`로 **새 프로필을
+  만들어 그대로 저장**했다. 보호자가 좌표 재보정 용도로 이 화면에서 저장 한 번을
+  누르면 사진 매핑이 만든 buttonMap · buttonPositions · customLabels · 모션
+  파라미터(travelHeightZ 등) · imagePath가 전부 기본값으로 소실됐다.
+
+### 수정 내용
+- `DeviceMappingService.mergeGridUpdate()` 신설 (순수 함수, 테스트 가능):
+  그리드 값(행/열/원점/간격/홈 위치)만 갱신하고 사진 매핑 산출물은 보존한다.
+- 그리드가 **줄어** 새 범위를 벗어나게 된 버튼은 잘못된 물리 좌표로 눌리는 것을
+  막기 위해 제거하되, 제거 목록을 반환해 화면이 TTS(result 우선순위)+스낵바로
+  반드시 고지한다 — 침묵 삭제 금지. 제거된 버튼의 위치/라벨도 함께 정리(고아
+  데이터 방지).
+- `manual_mapping_screen`은 기존 프로필 load → 병합 → save 흐름으로 변경.
+  BLE 전송 결과 TTS 2곳에 result 우선순위 명시(1단계 계약 후속).
+
+### 테스트
+- 병합 회귀 테스트 3건 추가 (`test/services/device_mapping_service_test.dart`):
+  사진 매핑 데이터 보존(각 필드 전수 검증) / 그리드 축소 시 범위 밖 버튼 제거·보고 /
+  그리드 확대 시 무손실.

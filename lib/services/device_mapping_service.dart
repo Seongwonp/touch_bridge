@@ -190,6 +190,68 @@ class DeviceMappingService {
     await prefs.setString(_profileKey(deviceId), jsonEncode(profile.toJson()));
   }
 
+  /// 좌표(그리드) 수동 설정을 기존 프로필에 **병합**한다.
+  ///
+  /// 수동 매핑 화면은 행/열/원점/간격/홈 위치만 편집하는데, 이전 구현은 빈
+  /// 프로필을 새로 만들어 저장해서 사진 매핑이 만들어 둔 buttonMap ·
+  /// buttonPositions · customLabels · 모션 파라미터 · imagePath가 재보정 한
+  /// 번에 전부 소실됐다(데이터 손실 버그). 이 함수는 그리드 값만 갱신하고
+  /// 나머지는 보존한다.
+  ///
+  /// 그리드가 줄어 새 범위(rows×cols)를 벗어나게 된 버튼은 잘못된 물리
+  /// 좌표로 눌리는 것을 막기 위해 제거하고, 제거된 ID 목록을 함께 반환한다 —
+  /// 호출부는 이를 사용자에게 반드시 고지해야 한다.
+  static ({DeviceMappingProfile profile, List<String> droppedButtonIds})
+  mergeGridUpdate({
+    required DeviceMappingProfile existing,
+    required int rows,
+    required int cols,
+    required double originX,
+    required double originY,
+    required double pitchX,
+    required double pitchY,
+    required int homeRow,
+    required int homeCol,
+  }) {
+    final keptButtons = <String, ({int row, int col})>{};
+    final dropped = <String>[];
+    for (final e in existing.buttonMap.entries) {
+      if (e.value.row < rows && e.value.col < cols) {
+        keptButtons[e.key] = e.value;
+      } else {
+        dropped.add(e.key);
+      }
+    }
+    dropped.sort();
+
+    final merged = DeviceMappingProfile(
+      rows: rows,
+      cols: cols,
+      originX: originX,
+      originY: originY,
+      pitchX: pitchX,
+      pitchY: pitchY,
+      homeRow: homeRow,
+      homeCol: homeCol,
+      buttonMap: keptButtons,
+      buttonPositions: {
+        for (final e in existing.buttonPositions.entries)
+          if (!dropped.contains(e.key)) e.key: e.value,
+      },
+      customLabels: {
+        for (final e in existing.customLabels.entries)
+          if (!dropped.contains(e.key)) e.key: e.value,
+      },
+      travelHeightZ: existing.travelHeightZ,
+      pressDepthZ: existing.pressDepthZ,
+      travelFeed: existing.travelFeed,
+      pressFeed: existing.pressFeed,
+      dwellSeconds: existing.dwellSeconds,
+      imagePath: existing.imagePath,
+    );
+    return (profile: merged, droppedButtonIds: dropped);
+  }
+
   /// [load]는 저장된 게 없어도 [DeviceMappingProfile.defaultGrid]를 돌려주므로
   /// "정말 한 번이라도 저장됐는지"를 구분할 때는 이 메서드를 써야 한다.
   /// 사진 매핑(buttonMap 있음)과 좌표 매핑(그리드만 있음) 모두 저장 시점에
