@@ -1,5 +1,9 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:nfc_manager/nfc_manager.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../services/tts_service.dart';
@@ -83,9 +87,21 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
     });
 
     if (devices.isEmpty) {
-      _tts.speak('주변에 연결 가능한 기기가 없습니다.', source: 'DeviceConnectScreen');
+      _tts.speak(
+        '주변에 연결 가능한 기기가 없습니다.',
+        source: 'DeviceConnectScreen',
+        priority: TtsPriority.result,
+      );
       return;
     }
+
+    // 기기를 찾은 경우에도 안내한다 — 이전에는 목록 시트가 무음으로 열려
+    // 전맹 사용자가 검색 후 침묵 상태에 놓였다.
+    _tts.speak(
+      '기기 ${devices.length}개를 찾았습니다. 목록에서 선택하세요.',
+      source: 'DeviceConnectScreen',
+      priority: TtsPriority.result,
+    );
 
     final selected = await showModalBottomSheet<BleDeviceInfo>(
       context: context,
@@ -205,11 +221,133 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
     }
   }
 
+  // NFC 세션 상태 — 중복 시작 방지 및 타임아웃 정리에 사용한다.
+  bool _nfcSessionActive = false;
+  Timer? _nfcTimeoutTimer;
+
+  /// NFC 태그에서 기기 코드를 읽어 등록한다.
+  ///
+  /// 이전 구현은 3초 기다렸다가 무조건 "찾을 수 없습니다"를 말하는 가짜였다.
+  /// 시각장애인 사용자에게 NFC는 카메라 조준이 필요한 QR보다 훨씬 적합한
+  /// 방식이므로(갖다 대면 끝) 실제 nfc_manager 세션으로 교체했다.
+  /// 태그 페이로드는 QR/코드 입력과 동일하게 기기 코드 문자열로 취급한다.
   Future<void> _onNfcTagTap() async {
-    _tts.speak('NFC 태그를 휴대폰 뒷면에 가까이 대주세요.');
-    // NFC 연동 로직 (NfcManager 등을 사용)
-    await Future.delayed(const Duration(seconds: 3));
-    _tts.speak('NFC 태그를 찾을 수 없습니다.');
+    if (kIsWeb ||
+        (defaultTargetPlatform != TargetPlatform.android &&
+            defaultTargetPlatform != TargetPlatform.iOS)) {
+      _tts.speak(
+        '이 기기에서는 NFC를 사용할 수 없습니다. 블루투스 허브 연결이나 기기 코드 입력을 이용해 주세요.',
+        source: 'DeviceConnectScreen',
+        priority: TtsPriority.result,
+      );
+      return;
+    }
+
+    var available = false;
+    try {
+      available = await NfcManager.instance.isAvailable();
+    } catch (_) {
+      available = false;
+    }
+    if (!available) {
+      _tts.speak(
+        '이 휴대폰에서 NFC가 꺼져 있거나 지원되지 않습니다. 블루투스 허브 연결이나 기기 코드 입력을 이용해 주세요.',
+        source: 'DeviceConnectScreen',
+        priority: TtsPriority.result,
+      );
+      return;
+    }
+
+    if (_nfcSessionActive) return;
+    _nfcSessionActive = true;
+    setState(() => _statusMessage = 'NFC 태그를 기다리는 중...');
+    _tts.speak(
+      'NFC 태그를 휴대폰 뒷면에 가까이 대주세요.',
+      source: 'DeviceConnectScreen',
+      priority: TtsPriority.result,
+    );
+
+    // 태그가 끝내 안 닿으면 세션을 정리하고 정직하게 안내한다.
+    _nfcTimeoutTimer?.cancel();
+    _nfcTimeoutTimer = Timer(const Duration(seconds: 15), () async {
+      if (!_nfcSessionActive) return;
+      await _stopNfcSession();
+      if (!mounted) return;
+      setState(() => _statusMessage = 'NFC 태그를 찾지 못했습니다.');
+      _tts.speak(
+        '태그를 찾지 못했습니다. 태그 위치를 확인하고 다시 시도해 주세요.',
+        source: 'DeviceConnectScreen',
+        priority: TtsPriority.result,
+      );
+    });
+
+    try {
+      await NfcManager.instance.startSession(
+        onDiscovered: (NfcTag tag) async {
+          _nfcTimeoutTimer?.cancel();
+          final text = _readNfcText(tag);
+          await _stopNfcSession();
+          if (!mounted) return;
+          if (text == null || text.trim().isEmpty) {
+            setState(() => _statusMessage = '태그에 기기 정보가 없습니다.');
+            _tts.speak(
+              '태그를 읽었지만 기기 정보가 없습니다. 태그가 맞는지 확인해 주세요.',
+              source: 'DeviceConnectScreen',
+              priority: TtsPriority.result,
+            );
+            return;
+          }
+          setState(() => _statusMessage = '태그 인식 완료');
+          await _processCloudDeviceId(text.trim());
+        },
+      );
+    } catch (_) {
+      _nfcTimeoutTimer?.cancel();
+      await _stopNfcSession();
+      if (!mounted) return;
+      _tts.speak(
+        'NFC 읽기에 실패했습니다. 다시 시도해 주세요.',
+        source: 'DeviceConnectScreen',
+        priority: TtsPriority.result,
+      );
+    }
+  }
+
+  Future<void> _stopNfcSession() async {
+    _nfcSessionActive = false;
+    try {
+      await NfcManager.instance.stopSession();
+    } catch (_) {
+      // 세션이 이미 닫혔거나 플랫폼이 지원하지 않는 경우 — 무시.
+    }
+  }
+
+  /// NDEF 텍스트 레코드에서 기기 코드 문자열을 추출한다.
+  /// 텍스트 레코드가 없으면 첫 레코드 페이로드를 UTF-8로 시도한다.
+  String? _readNfcText(NfcTag tag) {
+    final ndef = Ndef.from(tag);
+    final records = ndef?.cachedMessage?.records ?? const [];
+    for (final r in records) {
+      final isWellKnownText =
+          r.typeNameFormat == NdefTypeNameFormat.nfcWellknown &&
+          r.type.length == 1 &&
+          r.type.first == 0x54; // 'T'
+      if (!isWellKnownText) continue;
+      final payload = r.payload;
+      if (payload.isEmpty) continue;
+      // 텍스트 레코드 규격: [상태 바이트(하위 6비트=언어코드 길이)][언어코드][본문]
+      final langLen = payload.first & 0x3F;
+      if (payload.length <= 1 + langLen) continue;
+      return utf8.decode(payload.sublist(1 + langLen), allowMalformed: true);
+    }
+    if (records.isNotEmpty) {
+      try {
+        return utf8.decode(records.first.payload, allowMalformed: true);
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
   }
 
   String _newDeviceId(String prefix) {
@@ -293,6 +431,10 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
   void dispose() {
     // TtsService는 앱 전역 싱글톤 큐라 여기서 stop()을 부르면 다음 화면이
     // 막 넣은 안내까지 지워버린다(화면 전환 시 안내가 잘리는 문제).
+    _nfcTimeoutTimer?.cancel();
+    if (_nfcSessionActive) {
+      _stopNfcSession();
+    }
     super.dispose();
   }
 

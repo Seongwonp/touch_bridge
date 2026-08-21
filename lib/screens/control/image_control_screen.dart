@@ -11,6 +11,7 @@ import '../../services/tts_service.dart';
 import '../../services/feedback_service.dart';
 import '../../services/mapping_coordinate_service.dart';
 import '../../services/mapping_execution_service.dart';
+import '../../services/microwave_command_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../../theme/app_colors.dart';
@@ -41,6 +42,11 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
   // 2단계 탭(첫 탭 안내 → 둘째 탭 실행) 상태
   String? _armedButtonId;
   Timer? _armResetTimer;
+
+  // 이 세션에서 누른 시간 프리셋 버튼(10초/30초/1분/5분)의 누적 초.
+  // 시작 버튼을 누르면 이 값으로만 카운트다운을 연다 — 알 수 없는 시간을
+  // 고정 30초로 가정하고 "끝났다"고 거짓 안내하던 문제의 수정.
+  int _accumulatedSeconds = 0;
 
   @override
   void initState() {
@@ -165,16 +171,42 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
     );
     if (!result.ok) return;
 
-    // 만약 시작 버튼(BT-05)이라면 비상 정지 화면으로 이동 (예시 로직)
-    if (btId == 'BT-05' && mounted) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => EmergencyStopScreen(
-            deviceName: widget.deviceName,
-            initialSeconds: 30, // 기본 30초
+    // 시간 프리셋 버튼(기본 라벨 그대로일 때만 — 보호자가 라벨을 바꿨다면
+    // 다른 기기의 다른 기능일 수 있으므로 시간으로 누적하지 않는다).
+    final isTimePreset =
+        MicrowaveCommandService.buttonSeconds.containsKey(btId) &&
+        label == MicrowaveCommandService.buttonLabel[btId];
+    if (isTimePreset) {
+      _accumulatedSeconds += MicrowaveCommandService.buttonSeconds[btId]!;
+    }
+    if (label.contains('취소')) {
+      _accumulatedSeconds = 0;
+    }
+
+    // 시작 버튼: 누적된 시간이 있을 때만 실제 시간으로 카운트다운을 연다.
+    // (이전에는 무조건 30초 고정 타이머를 돌린 뒤 "작동이 끝났습니다"라고
+    // 거짓 안내했다 — 실제 기기는 계속 돌고 있을 수 있는 상태였다.)
+    if (btId == 'BT-05' && label == '시작' && mounted) {
+      final seconds = _accumulatedSeconds;
+      _accumulatedSeconds = 0;
+      if (seconds > 0) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => EmergencyStopScreen(
+              deviceName: widget.deviceName,
+              initialSeconds: seconds,
+            ),
           ),
-        ),
-      );
+        );
+      } else {
+        // 간편 코스 화면과 같은 정직한 안내 패턴.
+        _tts.speak(
+          '시작 명령을 보냈습니다. 설정된 시간을 알 수 없어 타이머는 표시하지 않습니다. '
+          '멈추려면 비상 정지를 사용하세요.',
+          interrupt: true,
+          priority: TtsPriority.result,
+        );
+      }
     }
   }
 

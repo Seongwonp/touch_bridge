@@ -40,7 +40,8 @@ google_generative_ai   — Gemini AI 음성 명령 파싱 + Vision 버튼 매핑
 flutter_dotenv         — API 키 환경 변수 관리
 shared_preferences     — 설정·기기목록·버튼매핑 영속화
 image_picker           — 카메라/갤러리 이미지 선택
-mobile_scanner 6.x     — QR 코드 실시간 스캔 (Android/iOS)
+nfc_manager 3.x        — NFC 태그 기기 등록 (QR보다 시각장애인에게 적합)
+url_launcher 6.x       — 비상 연락처 전화 연결 (tel:)
 http                   — HTTP 통신 (추후 사용)
 path_provider          — 파일 경로 (추후 사용)
 ```
@@ -71,7 +72,7 @@ lib/
 │   │                                       # jog_control_panel
 │   ├── connection/
 │   │   ├── device_connect_screen.dart     # 기기 연결 (QR/BLE/NFC)
-│   │   └── qr_scan_screen.dart            # QR 코드 실시간 스캔 (mobile_scanner)
+│   │   └── qr_scan_screen.dart            # QR 스캔 (현재 비활성 — 정직한 안내 화면)
 │   └── mapping/
 │       ├── photo_mapping_screen.dart      # 유동 rows×cols 버튼 매핑 (기기별 저장)
 │       ├── manual_mapping_screen.dart
@@ -300,7 +301,9 @@ BLE 연동 구현 파일: `lib/services/ble_service.dart`
 - [x] 비상 정지 화면 (3초 홀드 + 음성)
 - [x] 설정 화면 (접근성, 음성 안내, 가디언 모드)
 - [x] 기기 연결 화면 (QR/BLE/NFC UI)
-- [x] QR 스캔 실제 구현 (mobile_scanner, Android/iOS)
+- [ ] QR 스캔 재활성화 (mobile_scanner 의존성 제거로 현재 비활성 — 안내 화면으로 대체)
+- [x] NFC 태그 기기 등록 (nfc_manager — NDEF 텍스트 → 기기 코드)
+- [x] 비상 연락처 실제 전화 연결 (url_launcher tel: — 다이얼러 프리필, 발신은 사용자 확정)
 - [x] 사진 매핑 화면 (Gemini Vision + 유동 rows×cols 그리드)
 - [x] Semantics 접근성 태그 전체 적용 (WCAG 2.2 AA/AAA, KS X 3253 준수)
 - [x] SharedPreferences 설정·기기목록·버튼매핑 영속화

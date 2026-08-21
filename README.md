@@ -89,7 +89,8 @@ Touch Bridge는 **교체가 아닌 부착**으로 기존 가전을 그대로 접
 | TTS | `flutter_tts` | ^4.2.5 |
 | AI (NLU + Vision) | `google_generative_ai` (백엔드 프록시) | ^0.2.3 |
 | BLE 통신 | `flutter_blue_plus` | ^1.x |
-| QR 스캔 | `mobile_scanner` | ^6.x |
+| NFC 태그 | `nfc_manager` | ^3.3.0 |
+| 전화 연결 | `url_launcher` | ^6.3.1 |
 | 사진 선택 | `image_picker` | ^1.1.2 |
 | 설정 저장 | `shared_preferences` | ^2.3.2 |
 | 환경 변수 | `flutter_dotenv` | ^5.2.1 |
@@ -274,7 +275,9 @@ G0 Z5 F200
 - [x] BLE 연동 1차 (`flutter_blue_plus`: 스캔/연결/명령 전송)
 - [x] immutable `deviceId` 기반 기기 관리 + 기존 name 기반 매핑 자동 마이그레이션
 - [x] API 키 클라이언트 분리 (앱→백엔드 프록시, Gemini 키 서버 보관)
-- [x] QR 스캔 (`mobile_scanner`)
+- [x] NFC 태그 기기 등록 (`nfc_manager` — 시각장애인에게 QR보다 적합한 비시각 방식)
+- [x] 비상 연락처 실제 전화 연결 (`url_launcher` tel:)
+- [ ] QR 스캔 재활성화 (`mobile_scanner` 의존성 제거로 현재 비활성 — 화면은 정직한 안내로 대체)
 - [x] 버튼 매핑 데이터 영속화
 - [x] 기기 목록 동적 관리
 - [x] 디자인 토큰 확장(보조 강조색/그라디언트) + 공용 위젯·핵심 화면 비주얼 리뉴얼 (2026-06-27)

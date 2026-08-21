@@ -511,7 +511,46 @@
   message(BT-xx 포함) 대신 userMessage/라벨을 읽어주도록 변경 + result 우선순위.
 
 ### 테스트
-- 신규 `test/screens/mapping/photo_mapping_view_model_test.dart` 12건:
-  셀 충돌 검출 4건 / save 충돌 차단 1건 / AI 방어 7건 (문자열 좌표, 부분 실패,
+- 신규 `test/screens/mapping/photo_mapping_view_model_test.dart` 13건:
+  셀 충돌 검출 4건 / save 충돌 차단 1건 / AI 방어 8건 (문자열 좌표, 부분 실패,
   전체 실패 시 보존, 빈 응답 보존, 9개 상한, 그리드 클램프, id 보정·중복 제거).
   — 리뷰에서 "치명적 무테스트 영역"으로 지적된 PhotoMappingViewModel 첫 테스트.
+- 검증: `flutter analyze` 신규 이슈 0건, `flutter test` 194/194 통과.
+
+---
+
+## 2026-08-21 — [P0-6] 가짜 동작 3종 제거/실구현 (리뷰 후속 6단계)
+
+### 배경 (전면 리뷰에서 발견된 신뢰 붕괴 패턴)
+시각장애인 사용자에게 "말은 하는데 실제로는 아무것도 하지 않는" UI는 최악의
+패턴이다. 리뷰에서 3건 발견:
+1. 설정의 비상 연락처 "전화 걸기"가 `_tts.speak('연결합니다.')` 한 줄로 끝 — 발신 없음.
+2. NFC가 3초 기다렸다가 무조건 "찾을 수 없습니다"를 말하는 가짜 (nfc_manager는
+   이미 의존성에 있었음).
+3. 이미지 제어의 시작 버튼이 무조건 30초 고정 카운트다운 후 "작동이 끝났습니다"
+   라고 거짓 안내 — 실제 기기는 계속 돌고 있을 수 있음.
+추가로 QR 스캔 화면이 무음 스텁인데 문서는 "실제 구현(mobile_scanner)"이라고 주장.
+
+### 수정 내용
+- **전화 걸기 실구현** (`settings_screen.dart` + `url_launcher` 의존성 추가):
+  tel: 스킴으로 다이얼러를 번호 프리필 상태로 열고, 실제 발신은 사용자가 통화
+  버튼으로 확정(오발신 방지 — 이중 확인 원칙과 일치). 번호 미등록/발신 불가
+  환경도 result 우선순위로 정직 안내.
+- **NFC 실구현** (`device_connect_screen.dart`): nfc_manager 세션으로 NDEF 텍스트
+  레코드에서 기기 코드를 읽어 QR/코드 입력과 동일 경로(`_processCloudDeviceId`)로
+  등록. 미지원 플랫폼/NFC 꺼짐/15초 타임아웃/빈 태그 각각 정직한 안내 + 대안 유도.
+  Android `NFC` 권한, iOS `NFCReaderUsageDescription` 추가 (iOS는 Xcode에서
+  Near Field Communication Tag Reading capability 활성화 필요 — 미활성 시
+  isAvailable=false로 안전 폴백).
+- **가짜 30초 타이머 제거** (`image_control_screen.dart`): 세션 중 누른 시간
+  프리셋(10초/30초/1분/5분, 기본 라벨일 때만) 누적으로 실제 카운트다운을 열고,
+  누적이 없으면 간편 코스와 동일한 정직 안내("시간을 알 수 없어 타이머는 표시하지
+  않습니다. 멈추려면 비상 정지를 사용하세요"). 취소 라벨 누름 시 누적 리셋.
+- **QR 스텁 정직화** (`qr_scan_screen.dart`): 무음 스텁 → TTS 안내 + 대안 경로
+  유도 화면. README/CLAUDE.md의 "QR 실제 구현" 허위 서술을 현재 상태로 정정.
+- **보너스**: BLE 스캔에서 기기를 찾았을 때도 개수 안내 추가(기존엔 목록 시트가
+  무음으로 열림), NFC 세션 dispose 정리.
+
+### 참고
+- NFC/전화는 실기기 검증 필요(에뮬레이터/PC에서는 폴백 경로만 확인 가능).
+  NFC 태그는 NDEF 텍스트 레코드에 기기 코드를 쓰면 됨.

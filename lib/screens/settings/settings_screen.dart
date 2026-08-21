@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/accessibility_settings.dart';
 import '../../services/tts_service.dart';
 import '../../widgets/responsive_scale.dart';
@@ -57,6 +58,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // TtsService는 앱 전역 싱글톤 큐라 여기서 stop()을 부르면 다음 화면이
     // 막 넣은 안내까지 지워버린다(화면 전환 시 안내가 잘리는 문제).
     super.dispose();
+  }
+
+  /// 비상 연락처에 실제로 전화 앱을 연다.
+  ///
+  /// 이전 구현은 TTS로 "연결합니다"라고 말만 하고 아무것도 하지 않는 가짜
+  /// 동작이었다 — 비상 상황에서 최악의 신뢰 붕괴 패턴이라 실구현으로 교체.
+  /// tel: 스킴은 다이얼러를 번호가 입력된 상태로 열고, 실제 발신은 사용자가
+  /// 통화 버튼으로 확정한다(오발신 방지 — 이중 확인 원칙과 일치).
+  Future<void> _callEmergencyContact() async {
+    final phone = _contactPhone.replaceAll(RegExp(r'[^0-9+]'), '');
+    if (phone.isEmpty) {
+      _tts.speak(
+        '등록된 전화번호가 없습니다. 연락처를 먼저 편집해 주세요.',
+        source: 'SettingsScreen',
+        priority: TtsPriority.result,
+      );
+      return;
+    }
+    final uri = Uri(scheme: 'tel', path: phone);
+    var opened = false;
+    try {
+      opened = await launchUrl(uri);
+    } catch (_) {
+      opened = false;
+    }
+    _tts.speak(
+      opened
+          ? '$_contactName 번호로 전화 앱을 열었습니다. 통화 버튼을 눌러 연결하세요.'
+          : '이 기기에서는 전화를 걸 수 없습니다. 다른 기기에서 $_contactPhone로 연락해 주세요.',
+      source: 'SettingsScreen',
+      priority: TtsPriority.result,
+      interrupt: true,
+    );
   }
 
   void _showContactEditDialog() {
@@ -357,8 +391,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       : ContactRow(
                           name: _contactName,
                           phone: _contactPhone,
-                          onCall: () =>
-                              _tts.speak('연결합니다.', source: 'SettingsScreen'),
+                          onCall: _callEmergencyContact,
                           onEdit: _showContactEditDialog,
                         ),
                 ),
