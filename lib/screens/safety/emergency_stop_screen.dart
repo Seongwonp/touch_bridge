@@ -1,16 +1,15 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/active_device_service.dart';
 import '../../services/ble_service.dart';
 import '../../services/emergency_intent.dart';
 import '../../services/feedback_service.dart';
+import '../../services/speech_session_service.dart';
 import '../../services/timer_service.dart';
 import '../../services/tts_service.dart';
 import '../../services/accessibility_experiment_service.dart';
-import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
@@ -33,7 +32,9 @@ class EmergencyStopScreen extends StatefulWidget {
 class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     with SingleTickerProviderStateMixin {
   final TtsService _tts = TtsService();
-  final SpeechToText _speech = SpeechToText();
+  // 공용 STT 세션: 화면별 SpeechToText 개별 초기화는 패키지 싱글톤 특성상
+  // 콜백이 최초 1회만 등록돼 "멈춰" 재청취 루프가 조용히 죽는 문제가 있었다.
+  final SpeechSessionService _speechSession = SpeechSessionService.instance;
 
   late final AnimationController _holdController;
   final CountdownService _timerService = CountdownService();
@@ -68,34 +69,41 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   }
 
   Future<void> _initSpeech() async {
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) return;
-    try {
-      _speechEnabled = await _speech.initialize(
+    // 이 화면이 스택 최상단인 동안만 이벤트를 받는다(공용 세션의 스택 구조).
+    _speechSession.attach(
+      SpeechClient(
+        name: 'EmergencyStopScreen',
         onStatus: (status) {
           if (status == 'notListening' || status == 'done') {
             if (mounted && _secondsLeft > 0) _startListening();
           }
         },
-        onError: (errorNotification) {
+        onError: (_) {
           if (mounted) setState(() => _speechEnabled = false);
         },
-      );
+      ),
+    );
+    try {
+      _speechEnabled = await _speechSession.initialize();
       if (_speechEnabled) _startListening();
     } catch (_) {}
   }
 
   void _startListening() async {
-    if (!_speechEnabled || _speech.isListening || _isStartingListening) return;
+    if (!_speechEnabled ||
+        _speechSession.isListening ||
+        _isStartingListening) {
+      return;
+    }
     _isStartingListening = true;
     try {
-      await _speech.listen(
+      await _speechSession.listen(
         onResult: (result) {
           final words = result.recognizedWords;
           if (EmergencyIntent.matches(words)) {
             _onHoldCompleted();
           }
         },
-        listenOptions: SpeechListenOptions(localeId: 'ko_KR'),
       );
     } catch (_) {
       // ignore
@@ -182,7 +190,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     setState(() {
       _isHolding = false;
     });
-    _speech.stop();
+    _speechSession.stop();
     _timerService.stop();
     await AccessibilityExperimentService.instance.recordEmergencyStop();
     HapticFeedback.heavyImpact();
@@ -244,7 +252,9 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     // 이 화면 자신의 대기 항목만 취소한다. 화면 전환 후 다음 화면의 안내를
     // 날리지 않기 위해 stop() 대신 cancelSource를 쓴다.
     _tts.cancelSource('EmergencyStopScreen');
-    _speech.stop();
+    // 공용 세션 스택에서 빠져 이전 화면이 STT 이벤트를 이어받게 한다.
+    _speechSession.detach('EmergencyStopScreen');
+    _speechSession.stop();
     super.dispose();
   }
 

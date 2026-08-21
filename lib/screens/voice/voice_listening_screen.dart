@@ -1,10 +1,11 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../services/speech_session_service.dart';
 import '../../services/tts_service.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
@@ -59,7 +60,10 @@ class VoiceListeningScreen extends StatefulWidget {
 class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   final TtsService _tts = TtsService();
   final math.Random _random = math.Random();
-  final SpeechToText _speech = SpeechToText();
+  // 공용 STT 세션: 화면별 개별 초기화는 패키지 싱글톤 특성상 콜백이 최초
+  // 1회만 등록돼, 다른 화면(비상 정지)의 이벤트를 이 화면이 받거나 그 반대의
+  // 오염이 있었다. 이벤트는 스택 최상단 화면에만 전달된다.
+  final SpeechSessionService _speechSession = SpeechSessionService.instance;
 
   bool _isRecording = false;
   bool _isProcessing = false;
@@ -131,7 +135,9 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     _actionResetTimer?.cancel();
     // TtsService는 앱 전역 싱글톤 큐라 여기서 stop()을 부르면 다음 화면이
     // 막 넣은 안내까지 지워버린다(화면 전환 시 안내가 잘리는 문제).
-    _speech.stop();
+    // 공용 STT 세션 스택에서도 빠져 이전 화면이 이벤트를 이어받게 한다.
+    _speechSession.detach('VoiceListeningScreen');
+    _speechSession.stop();
     super.dispose();
   }
 
@@ -142,33 +148,37 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       }
       return;
     }
-    _speechEnabled = await _speech.initialize(
-      onStatus: (status) {
-        if (!mounted) return;
-        if (status == 'listening') {
-          setState(() {
-            _isRecording = true;
-            _statusMessage = '듣고 있습니다.';
-          });
-          return;
-        }
-        if ((status == 'done' || status == 'notListening') && _isRecording) {
-          _onSttNaturalEnd();
-        }
-      },
-      onError: (errorNotification) {
-        if (mounted) {
-          _speak('음성 인식에 실패했습니다. 마이크 버튼을 다시 눌러주세요.');
-          setState(() {
-            _statusMessage = '음성 인식 실패';
-            _isProcessing = false;
-            _isRecording = false;
-          });
-          _stopWaveAnimation();
-          _recordingTimeoutTimer?.cancel();
-        }
-      },
+    _speechSession.attach(
+      SpeechClient(
+        name: 'VoiceListeningScreen',
+        onStatus: (status) {
+          if (!mounted) return;
+          if (status == 'listening') {
+            setState(() {
+              _isRecording = true;
+              _statusMessage = '듣고 있습니다.';
+            });
+            return;
+          }
+          if ((status == 'done' || status == 'notListening') && _isRecording) {
+            _onSttNaturalEnd();
+          }
+        },
+        onError: (_) {
+          if (mounted) {
+            _speak('음성 인식에 실패했습니다. 마이크 버튼을 다시 눌러주세요.');
+            setState(() {
+              _statusMessage = '음성 인식 실패';
+              _isProcessing = false;
+              _isRecording = false;
+            });
+            _stopWaveAnimation();
+            _recordingTimeoutTimer?.cancel();
+          }
+        },
+      ),
     );
+    _speechEnabled = await _speechSession.initialize();
     if (_speechEnabled) {
       await _speak('음성 명령입니다. 마이크 버튼을 눌러 명령하세요.');
       // autoStart가 아닐 때만 예시를 낭독한다 — 자동 녹음 시작 흐름과 충돌을 막기 위함.
@@ -220,7 +230,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       }
 
       AppLogger.info('voice.silence_timer.no_input');
-      _speech.stop();
+      _speechSession.stop();
       _recordingTimeoutTimer?.cancel();
       _stopWaveAnimation();
       setState(() {
@@ -299,7 +309,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     }
 
     if (_isRecording) {
-      _speech.stop();
+      _speechSession.stop();
       _recordingTimeoutTimer?.cancel();
       setState(() {
         _isRecording = false;
@@ -323,8 +333,8 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       // 이전 녹음의 신뢰도가 다음 녹음 게이트에 재사용되는 것을 막는다.
       _lastConfidence = SpeechRecognitionWords.missingConfidence;
       try {
-        if (_speech.isListening) {
-          await _speech.stop();
+        if (_speechSession.isListening) {
+          await _speechSession.stop();
         }
         if (mounted) {
           setState(() {
@@ -332,7 +342,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
             _statusMessage = '듣고 있습니다.';
           });
         }
-        await _speech.listen(
+        await _speechSession.listen(
           onResult: (result) {
             if (mounted) {
               setState(() {
@@ -356,7 +366,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         );
 
         await Future<void>.delayed(const Duration(milliseconds: 200));
-        if (_speech.isListening || _isRecording) {
+        if (_speechSession.isListening || _isRecording) {
           _startWaveAnimation();
           FeedbackService.instance.playDing(); // "띵" 소리 추가
           FeedbackService.instance.vibrateSuccess(); // 짧은 진동 추가
@@ -1070,7 +1080,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
                           scale: rs,
                           onMicTap: _handleMicTap,
                           onCancelRecording: () {
-                            _speech.stop();
+                            _speechSession.stop();
                             _recordingTimeoutTimer?.cancel();
                             _stopWaveAnimation();
                             setState(() {

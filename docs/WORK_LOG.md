@@ -653,3 +653,33 @@
 ### 테스트
 - `ble_command_queue_test.dart` 신설 4건: 순서 보장 / 예외 후 큐 지속 /
   다중 결과 반환 / sendRawWithResponse 오버라이드 경로.
+- 검증: `flutter analyze` 신규 이슈 0건, `flutter test` 208/208 통과.
+
+---
+
+## 2026-08-21 — [P1-9] STT 싱글톤 이중 초기화 해소 — 공용 음성 세션 (리뷰 후속 10단계)
+
+### 배경 (전면 리뷰에서 발견된 신뢰성 결함)
+- `speech_to_text`의 `SpeechToText`는 패키지 차원의 싱글톤이며 `initialize()`
+  콜백은 **최초 1회만** 등록된다. VoiceListeningScreen과 EmergencyStopScreen이
+  각자 초기화해서:
+  (a) 나중에 초기화한 화면의 onStatus/onError가 등록되지 않아 **비상 화면의
+      "멈춰" 음성 재청취 루프가 조용히 죽을 수 있었고** (3초 홀드만 남는 상태),
+  (b) 스택 아래 깔린 voice 화면의 onStatus가 비상 화면의 listen 이벤트를 받아
+      `_isRecording` 상태가 오염되고 엉뚱한 발화("말씀이 들리지 않았습니다")가
+      나올 수 있었다.
+
+### 수정 내용
+- `services/speech_session_service.dart` 신설:
+  - 초기화는 한 번만 수행(멱등), macOS TCC 가드도 이곳으로 일원화.
+  - 화면은 `attach(SpeechClient)`/`detach(name)`로 콜백을 등록/해제하고,
+    이벤트는 **가장 나중에 attach한 화면(스택 최상단)** 에만 전달된다 —
+    push/pop 내비게이션과 자연스럽게 맞는 구조. detach 시 이전 화면이 이어받음.
+- 두 화면을 공용 세션으로 이전: listen/stop/isListening 전부 서비스 경유,
+  dispose에서 detach. 비상 화면의 "멈춰" 감지가 화면 진입 순서와 무관하게
+  동작하게 됨.
+
+### 테스트
+- `speech_session_service_test.dart` 신설 6건: 최상단 전달 / detach 후 승계 /
+  재attach 시 최상단 승격(중복 없음) / 중간 detach / 무소유 시 무예외 /
+  에러 이벤트 위임.
