@@ -90,7 +90,7 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: const TopAppBar(title: 'Touch Bridge'),
+      appBar: const TopAppBar(title: 'Touch Bridge', showEmergency: false),
       body: Stack(
         children: [
           // Background Glows (장식 효과, 상호작용 없음)

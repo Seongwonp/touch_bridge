@@ -80,6 +80,15 @@ class TtsService {
   @visibleForTesting
   bool? screenReaderOverrideForTest;
 
+  /// 위젯 테스트 전용: TTS 엔진(플랫폼 채널) 호출을 완전히 생략한다.
+  ///
+  /// testWidgets의 FakeAsync 환경에서는 flutter_tts 채널 호출이 영원히
+  /// 완료되지 않아, speak()를 await하는 위젯 로직(예: 전역 비상 버튼)이
+  /// 멈춘다. 이 플래그가 켜지면 큐 계약(우선순위/억제/기록)은 그대로 두고
+  /// 엔진 호출만 즉시 완료로 처리한다.
+  @visibleForTesting
+  bool disableEngineForTest = false;
+
   /// VoiceOver/TalkBack 등 스크린리더가 활성인지.
   bool get _screenReaderActive =>
       screenReaderOverrideForTest ??
@@ -139,7 +148,7 @@ class TtsService {
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) return;
 
     try {
-      await _init;
+      if (!disableEngineForTest) await _init;
       final message = _toConcise(text);
       if (message.isEmpty) return;
 
@@ -186,9 +195,11 @@ class TtsService {
         // 낮은 우선순위 대기건 제거 후 맨 앞에 넣고, 현재 발화를 중단해 즉시 진행.
         _queue.removeWhere((q) => q.priority.index < pr.index);
         _queue.insert(0, utterance);
-        try {
-          await _tts.stop();
-        } catch (_) {}
+        if (!disableEngineForTest) {
+          try {
+            await _tts.stop();
+          } catch (_) {}
+        }
         _completeCurrent();
       } else {
         // navigation은 최신 화면 안내 하나만 유지.
@@ -228,6 +239,10 @@ class TtsService {
         // "다시 말해줘" 대상이 아니다.
         if (u.priority.index >= TtsPriority.result.index) {
           _lastSpokenText = u.text;
+        }
+        if (disableEngineForTest) {
+          // 엔진 없이 즉시 완료 — 큐 순서/기록 계약만 유지.
+          continue;
         }
         _speakCompleter = Completer<void>();
         // fire-and-forget이므로 실패가 unhandled Future error로 새지 않게
@@ -275,9 +290,11 @@ class TtsService {
   /// TTS 정지 및 대기열 비우기(명시적 중단).
   Future<void> stop() async {
     _queue.clear();
-    try {
-      await _tts.stop();
-    } catch (_) {}
+    if (!disableEngineForTest) {
+      try {
+        await _tts.stop();
+      } catch (_) {}
+    }
     _completeCurrent();
     _lastSpokenText = '';
     _lastSpokenAt = DateTime.fromMillisecondsSinceEpoch(0);

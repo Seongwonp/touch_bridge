@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../services/active_device_service.dart';
-import '../../services/ble_service.dart';
-import '../../services/emergency_intent.dart';
+import '../../services/emergency_stop_service.dart';
 import '../../services/feedback_service.dart';
 import '../../services/tts_service.dart';
 import '../../theme/app_colors.dart';
@@ -44,45 +42,16 @@ class _EmergencyAccessScreenState extends State<EmergencyAccessScreen> {
     setState(() => _isStopping = true);
     FeedbackService.instance.vibrateError();
 
-    final connectedBleId = BleService.instance.connectedDeviceId;
-    final activeBleId = ActiveDeviceService.instance.getActiveBleId();
-    final targetId = connectedBleId.isNotEmpty ? connectedBleId : activeBleId;
-
-    if (targetId == null || targetId.isEmpty) {
-      FeedbackService.instance.playFailure();
-      // 비상 경로의 실패 안내는 스크린리더 활성 시에도 반드시 들려야 하므로
-      // emergency 우선순위를 명시한다(TtsService 억제 계약 참조).
-      await _tts.speak(
-        '연결된 기기가 없습니다. 기기 전원을 확인해 주세요.',
-        priority: TtsPriority.emergency,
-        interrupt: true,
-      );
-      if (mounted) setState(() => _isStopping = false);
-      return;
-    }
-
     await _tts.speak(
       '즉시 중단합니다.',
       priority: TtsPriority.emergency,
       interrupt: true,
     );
-    if (!BleService.instance.isConnected) {
-      final connected = await BleService.instance.ensureConnected(targetId);
-      if (!connected) {
-        FeedbackService.instance.playFailure();
-        await _tts.speak(
-          '기기에 연결하지 못했습니다. 기기 전원을 확인해 주세요.',
-          priority: TtsPriority.emergency,
-          interrupt: true,
-        );
-        if (mounted) setState(() => _isStopping = false);
-        return;
-      }
-    }
 
-    // 전송 성공만으로 "완료"라고 말하지 않는다. ACK 결과로 문구를 분기한다.
-    final ack = await BleService.instance.sendEmergencyStop(targetId);
-    final outcome = EmergencyStopOutcome.fromAck(ack);
+    // 대상 결정 → 재연결 → STOP 전송 → ACK 해석은 EmergencyStopService가
+    // 단일하게 책임진다(과거 3개 화면 복제 로직 통합).
+    // 전송 성공만으로 "완료"라고 말하지 않는다 — outcome이 문구를 분기한다.
+    final outcome = await EmergencyStopService.instance.stopActiveDevice();
     if (outcome.acknowledged) {
       FeedbackService.instance.playSuccess();
     } else {
@@ -109,7 +78,7 @@ class _EmergencyAccessScreenState extends State<EmergencyAccessScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: const TopAppBar(title: '비상 정지'),
+      appBar: const TopAppBar(title: '비상 정지', showEmergency: false),
       body: SafeArea(
         child: Padding(
           padding: EdgeInsets.all(24 * rs),

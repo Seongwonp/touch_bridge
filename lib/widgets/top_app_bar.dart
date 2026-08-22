@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'global_emergency_action.dart';
 import 'responsive_scale.dart';
 import '../services/active_device_service.dart';
 import '../services/ble_service.dart';
@@ -10,11 +11,19 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.title,
     this.showBack = false,
     this.actions,
+    this.showEmergency = true,
   });
 
   final String title;
   final bool showBack;
   final List<Widget>? actions;
+
+  /// 전역 비상 정지 버튼 노출 여부.
+  ///
+  /// 기본 true — 어떤 화면에서든 두 번 탭이면 즉시 중단할 수 있어야 한다
+  /// (기존에는 비상 탭까지 다단계 이동이 필요했다). 비상 정지 자체를 다루는
+  /// 화면(비상 탭·카운트다운·완료 화면)만 중복을 피해 끈다.
+  final bool showEmergency;
 
   @override
   Size get preferredSize => const Size.fromHeight(86);
@@ -51,7 +60,10 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
                   ),
                 ),
               ),
-              actions: actions?.map((a) => Padding(
+              actions: [
+                ...?actions,
+                if (showEmergency) const GlobalEmergencyAction(),
+              ].map((a) => Padding(
                     padding: EdgeInsets.only(right: 8 * rs),
                     child: a,
                   )).toList(),

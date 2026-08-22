@@ -19,6 +19,7 @@ import '../../services/ai_backend_service.dart';
 import '../../services/active_device_service.dart';
 import '../../services/ble_service.dart';
 import '../../services/emergency_intent.dart';
+import '../../services/emergency_stop_service.dart';
 import '../../services/help_intent.dart';
 import '../../services/microwave_command_service.dart';
 import '../../services/washing_machine_command_service.dart';
@@ -674,24 +675,9 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   /// 실제 하드웨어에 정지 명령을 보내고, 확인 결과에 따라 안내를 분기한다.
   Future<void> _handleEmergencyStop() async {
     FeedbackService.instance.vibrateError();
-    final targetId = BleService.instance.connectedDeviceId.isNotEmpty
-        ? BleService.instance.connectedDeviceId
-        : (ActiveDeviceService.instance.getActiveBleId() ?? '');
-
-    EmergencyStopOutcome outcome;
-    if (targetId.isEmpty) {
-      outcome = const EmergencyStopOutcome(
-        acknowledged: false,
-        sent: false,
-        message: '연결된 기기가 없습니다. 기기 전원을 확인해 주세요.',
-      );
-    } else {
-      if (!BleService.instance.isConnected) {
-        await BleService.instance.ensureConnected(targetId);
-      }
-      final ack = await BleService.instance.sendEmergencyStop(targetId);
-      outcome = EmergencyStopOutcome.fromAck(ack);
-    }
+    // 대상 결정 → 재연결 → STOP 전송 → ACK 해석은 EmergencyStopService가
+    // 단일하게 책임진다(과거 3개 화면 복제 로직 통합).
+    final outcome = await EmergencyStopService.instance.stopActiveDevice();
 
     if (outcome.acknowledged) {
       FeedbackService.instance.playSuccess();

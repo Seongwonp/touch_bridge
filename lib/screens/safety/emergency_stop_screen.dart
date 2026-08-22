@@ -2,9 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../services/active_device_service.dart';
-import '../../services/ble_service.dart';
 import '../../services/emergency_intent.dart';
+import '../../services/emergency_stop_service.dart';
 import '../../services/feedback_service.dart';
 import '../../services/speech_session_service.dart';
 import '../../services/timer_service.dart';
@@ -225,24 +224,10 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     }
   }
 
-  Future<EmergencyStopOutcome> _sendStop() async {
-    final connectedId = BleService.instance.connectedDeviceId;
-    final targetId = connectedId.isNotEmpty
-        ? connectedId
-        : (ActiveDeviceService.instance.getActiveBleId() ?? '');
-    if (targetId.isEmpty) {
-      return const EmergencyStopOutcome(
-        acknowledged: false,
-        sent: false,
-        message: '연결된 기기가 없습니다. 기기 전원을 확인해 주세요.',
-      );
-    }
-    if (!BleService.instance.isConnected) {
-      await BleService.instance.ensureConnected(targetId);
-    }
-    final ack = await BleService.instance.sendEmergencyStop(targetId);
-    return EmergencyStopOutcome.fromAck(ack);
-  }
+  // 대상 결정 → 재연결 → STOP 전송 → ACK 해석은 EmergencyStopService가
+  // 단일하게 책임진다(과거 3개 화면 복제 로직 통합).
+  Future<EmergencyStopOutcome> _sendStop() =>
+      EmergencyStopService.instance.stopActiveDevice();
 
   @override
   void dispose() {
@@ -264,7 +249,12 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
 
     return Scaffold(
       backgroundColor: const Color(0xFF041329),
-      appBar: TopAppBar(title: '${widget.deviceName} 작동 중', showBack: true),
+      appBar: TopAppBar(
+        title: '${widget.deviceName} 작동 중',
+        showBack: true,
+        // 화면 중앙에 전용 비상 정지 버튼이 있으므로 앱바 중복 노출은 끈다.
+        showEmergency: false,
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(

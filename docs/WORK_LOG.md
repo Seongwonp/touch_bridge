@@ -838,3 +838,36 @@
    우선순위로 승격(1회뿐인 핵심 안내, 홈 navigation 안내에 대체되지 않음).
 6. **ble_log_screen 구독 누수**: logStream 구독을 저장/취소하지 않아 화면을
    여닫을 때마다 리스너가 누적되던 문제 수정 (+ScrollController dispose).
+- 검증: `flutter analyze` 신규 이슈 0건, `flutter test` 224/224 통과.
+
+---
+
+## 2026-08-22 — [기능 A-1] 전역 비상 정지 버튼
+
+### 배경 (전면 리뷰 지적: 비상 정지 도달성)
+- 비상 탭은 메인 내비게이션에만 있어, 이미지 제어·숫자 패드·간편 코스 같은
+  push된 화면에서 기기를 멈추려면 "뒤로가기 → 비상 탭 이중 탭 → 비상 버튼
+  이중 탭"의 다단계가 필요했다. 위험 상황에서 이 다단계는 시각장애인에게 치명적.
+
+### 구현
+- `EmergencyStopService` 신설 — 대상 결정(연결 기기 우선→활성 기기) → 재연결 →
+  STOP 전송 → ACK 해석의 단일 창구. 3개 화면(비상 탭/카운트다운/음성)에 복제돼
+  있던 동일 로직을 이 서비스로 통합(정지 경로는 안전 직결이라 사본 금지).
+- `GlobalEmergencyAction` 위젯 신설 — `TopAppBar`에 기본 상주하는 빨간 비상
+  버튼. 이중 탭 패턴(20초 arm, 백그라운드 전환 시 해제), 모든 발화 emergency
+  우선순위, armed 상태 Semantics value/hint/liveRegion 병행 노출, 48dp 터치 타겟.
+  ACK 확인 시에만 완료 화면 이동(거짓 완료 금지).
+- `TopAppBar.showEmergency`(기본 true) — 비상 계열 3화면(비상 탭/카운트다운/완료)만
+  중복 노출 방지를 위해 끔. **이제 어떤 화면에서든 상단 두 번 탭이면 즉시 중단.**
+
+### 테스트 인프라 발견/개선
+- testWidgets(FakeAsync) 환경에서 flutter_tts 플랫폼 채널 호출이 영원히 완료되지
+  않아 speak()를 await하는 위젯 로직이 멈추는 문제 발견 →
+  `TtsService.disableEngineForTest` 도입(큐 계약은 유지, 엔진 호출만 생략).
+  이후 위젯 테스트에서 TTS 의존 화면을 테스트할 수 있는 기반.
+
+### 테스트
+- EmergencyStopService 2건(기기 없음 정직 실패 / 연결 실패 시 acknowledged=false),
+  GlobalEmergencyAction 위젯 4건(기본 노출 / showEmergency:false 미노출 /
+  첫 탭 arm만 / 둘째 탭 실행 후 미확인이면 완료 화면 미이동 + 버튼 잠김 해제).
+- 검증: `flutter analyze` 신규 이슈 0건, `flutter test` 230/230 통과.
