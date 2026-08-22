@@ -9,6 +9,7 @@ import 'ble_log_screen.dart';
 import 'developer_console_screen.dart';
 import 'device_management_screen.dart';
 import '../connection/device_connect_screen.dart';
+import '../practice/practice_screen.dart';
 import '../voice/voice_listening_screen.dart';
 import '../../theme/app_colors.dart';
 import 'widgets/settings_form_widgets.dart';
@@ -260,6 +261,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     setState(() => _highContrastEnabled = v);
                     AccessibilitySettings.instance.setHighContrastEnabled(v);
                   },
+                ),
+              ],
+            ),
+            SizedBox(height: ResponsiveScale.v(context, 24)),
+            SectionLabel(icon: Icons.school_rounded, label: '연습'),
+            SizedBox(height: ResponsiveScale.v(context, 10)),
+            SettingsCard(
+              children: [
+                NavRow(
+                  icon: Icons.sports_esports_rounded,
+                  title: '연습 모드',
+                  subtitle: '실행 없이 이중 탭·비상 정지·음성 명령을 연습',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const PracticeScreen()),
+                  ),
                 ),
               ],
             ),
