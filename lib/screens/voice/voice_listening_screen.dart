@@ -26,6 +26,7 @@ import '../../services/washing_machine_command_service.dart';
 import '../../services/ac_command_service.dart';
 import '../../services/appliance_command_router.dart';
 import '../../services/replay_intent.dart';
+import '../../services/status_intent.dart';
 import '../../services/device_mapping_service.dart';
 import '../../services/feedback_service.dart';
 import '../../services/voice_device_resolver.dart';
@@ -495,6 +496,24 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         _isProcessing = false;
       });
       await _speak(HelpIntent.buildResponse(), interrupt: true);
+      return;
+    }
+
+    // "얼마나 남았어?", "지금 뭐 해?" 류 상태 질의도 AI 없이 즉시 답한다.
+    // 확인 대기 컨텍스트(_pendingCommandData 등)는 지우지 않는다 — 상태를
+    // 물어본 뒤 이어서 예/아니오로 답할 수 있어야 한다.
+    if (StatusIntent.matches(text)) {
+      AppLogger.info('voice.status_intercept', {'requestId': requestId});
+      final response = StatusIntent.buildResponse();
+      setState(() {
+        _statusMessage = response;
+        _isProcessing = false;
+      });
+      await _speak(response, interrupt: true, priority: TtsPriority.result);
+      // 확인 질문에 답하던 중이었다면 다시 들을 수 있게 마이크를 연다.
+      if (_pendingCommandData != null || _pendingLowConfidenceText != null) {
+        _restartListeningAfterPrompt();
+      }
       return;
     }
 

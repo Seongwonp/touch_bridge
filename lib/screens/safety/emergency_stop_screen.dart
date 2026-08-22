@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/emergency_intent.dart';
 import '../../services/emergency_stop_service.dart';
+import '../../services/run_status_service.dart';
+import '../../services/status_intent.dart';
 import '../../services/feedback_service.dart';
 import '../../services/speech_session_service.dart';
 import '../../services/timer_service.dart';
@@ -54,6 +56,12 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   void initState() {
     super.initState();
     _secondsLeft = widget.initialSeconds;
+    // 다른 화면(음성 명령 등)에서 "얼마나 남았어?"에 답할 수 있도록
+    // 실행 상태를 전역 저장소에 보고한다.
+    RunStatusService.instance.start(
+      deviceName: widget.deviceName,
+      seconds: _secondsLeft,
+    );
     _holdController =
         AnimationController(vsync: this, duration: const Duration(seconds: 3))
           ..addStatusListener((status) {
@@ -101,6 +109,12 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
           final words = result.recognizedWords;
           if (EmergencyIntent.matches(words)) {
             _onHoldCompleted();
+            return;
+          }
+          // 카운트다운 중 "얼마나 남았어?"에도 즉시 답한다 —
+          // 화면을 볼 수 없는 사용자의 핵심 안심 장치.
+          if (result.finalResult && StatusIntent.matches(words)) {
+            _speak(StatusIntent.buildResponse(), priority: TtsPriority.result);
           }
         },
       );
@@ -126,12 +140,14 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     _timerService.start(
       _secondsLeft,
       onTick: (seconds) {
+        RunStatusService.instance.tick(seconds);
         if (mounted) {
           setState(() => _secondsLeft = seconds);
           _maybeAnnounceMilestone(seconds);
         }
       },
       onFinished: () {
+        RunStatusService.instance.stop();
         if (mounted) {
           AccessibilityExperimentService.instance.recordTaskCompleted();
 
@@ -191,6 +207,9 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     });
     _speechSession.stop();
     _timerService.stop();
+    // 카운트다운 추적이 끝났다 — 정지 확인 여부와 무관하게 앱은 더 이상
+    // 남은 시간을 모르므로 "작동 중"으로 답하지 않는 것이 정직하다.
+    RunStatusService.instance.stop();
     await AccessibilityExperimentService.instance.recordEmergencyStop();
     HapticFeedback.heavyImpact();
 
@@ -232,6 +251,9 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   @override
   void dispose() {
     _timerService.stop();
+    // 화면 이탈 후에는 남은 시간을 추적하지 못한다 — 상태 질의가 옛 값으로
+    // "작동 중"이라 답하지 않게 정리한다.
+    RunStatusService.instance.stop();
     _holdHapticTimer?.cancel();
     _holdController.dispose();
     // 이 화면 자신의 대기 항목만 취소한다. 화면 전환 후 다음 화면의 안내를
