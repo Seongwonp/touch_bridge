@@ -319,6 +319,10 @@ class _PracticeScreenState extends State<PracticeScreen>
               ),
             ),
             _successBadge(rs, _voiceSuccessCount),
+            SizedBox(height: 28 * rs),
+            _lessonHeader(rs, '4. 소리·진동 배우기', '앱이 쓰는 신호를 눌러서 들어보세요.'),
+            SizedBox(height: 10 * rs),
+            ..._signalCards(rs),
             SizedBox(height: 24 * rs),
           ],
         ),
@@ -471,6 +475,105 @@ class _PracticeScreenState extends State<PracticeScreen>
           ),
         ),
       );
+
+  // ── 레슨 4: 소리·진동 어휘 ──────────────────────────────────────────────
+  //
+  // 앱은 "전송 ≠ 확인"을 소리·진동으로 구분해 전달한다. 각 신호가 어떤 뜻인지
+  // 미리 익혀두면 소음 환경에서 TTS를 놓쳐도 상태를 알 수 있다(멀티모달 원칙).
+
+  List<({String title, String meaning, Future<void> Function() play})>
+      get _signals => [
+            (
+              title: '받았어요 (띵)',
+              meaning: '명령을 알아들었을 때 나는 소리예요.',
+              play: () => FeedbackService.instance.playReceived(),
+            ),
+            (
+              title: '보냈어요',
+              meaning: '기기로 명령을 보냈을 때예요. 아직 기기 확인 전이라 "완료"는 아니에요.',
+              play: () => FeedbackService.instance.signalSent(),
+            ),
+            (
+              title: '확인됐어요',
+              meaning: '기기가 동작을 확인했을 때의 성공 신호예요.',
+              play: () => FeedbackService.instance.signalSuccess(),
+            ),
+            (
+              title: '실패했어요',
+              meaning: '명령이 실패했을 때예요. 안내 음성을 함께 들려드려요.',
+              play: () => FeedbackService.instance.signalFailure(),
+            ),
+          ];
+
+  List<Widget> _signalCards(double rs) => [
+        for (final signal in _signals)
+          Padding(
+            padding: EdgeInsets.only(bottom: 10 * rs),
+            child: Semantics(
+              button: true,
+              label: '${signal.title} 신호 들어보기',
+              hint: signal.meaning,
+              child: InkWell(
+                onTap: () async {
+                  await signal.play();
+                  await _tts.speak(
+                    '${signal.title}. ${signal.meaning}',
+                    source: 'PracticeScreen',
+                    priority: TtsPriority.result,
+                    interrupt: true,
+                  );
+                },
+                borderRadius: BorderRadius.circular(14 * rs),
+                child: Container(
+                  constraints: const BoxConstraints(minHeight: 64),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 16 * rs,
+                    vertical: 12 * rs,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceElevated,
+                    borderRadius: BorderRadius.circular(14 * rs),
+                    border: Border.all(color: AppColors.borderDefault),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.volume_up_rounded,
+                        color: AppColors.secondary,
+                        size: 24,
+                      ),
+                      SizedBox(width: 12 * rs),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              signal.title,
+                              style: TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 16 * rs,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            SizedBox(height: 2 * rs),
+                            Text(
+                              signal.meaning,
+                              style: TextStyle(
+                                color: AppColors.textTertiary,
+                                fontSize: 12.5 * rs,
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ];
 
   Widget _voicePracticeButton(double rs) => Semantics(
         button: true,

@@ -102,5 +102,30 @@ void main() {
 
       expect(find.text('음성 인식 사용 불가'), findsOneWidget);
     });
+
+    testWidgets('소리·진동 배우기: 4개 신호 카드가 있고 탭하면 예외 없이 재생·설명한다',
+        (tester) async {
+      await pumpPractice(tester);
+
+      // ListView는 화면 밖 항목을 아직 빌드하지 않는다 — 마지막 카드까지 스크롤.
+      final scrollable = find.byType(Scrollable).first;
+      await tester.scrollUntilVisible(
+        find.text('실패했어요'),
+        300,
+        scrollable: scrollable,
+      );
+
+      for (final title in ['받았어요 (띵)', '보냈어요', '확인됐어요', '실패했어요']) {
+        expect(find.text(title), findsOneWidget, reason: title);
+      }
+
+      // "보냈어요 ≠ 완료" 구분 학습이 카드 설명에 담겨야 한다 (전송≠확인 원칙).
+      expect(find.textContaining('"완료"는 아니에요'), findsOneWidget);
+
+      await tester.tap(find.text('보냈어요'));
+      await tester.pump(const Duration(milliseconds: 300));
+      // 예외 없이 처리됐으면 화면이 그대로 살아있다.
+      expect(find.text('4. 소리·진동 배우기'), findsOneWidget);
+    });
   });
 }
