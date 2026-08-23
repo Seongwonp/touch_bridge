@@ -37,6 +37,53 @@ class _DeviceManagementScreenState extends State<DeviceManagementScreen> {
     await HomeDeviceStore.saveDevices(_devices);
   }
 
+  /// 별명 편집 — "우리집 세탁기"처럼 사용자가 실제로 부르는 이름을 등록하면
+  /// 음성 명령에서 기기 이름과 동급으로 매칭된다 (VoiceDeviceResolver).
+  Future<void> _showAliasDialog(int index) async {
+    final device = _devices[index];
+    final current = (device['aliases'] as List?)?.whereType<String>() ?? [];
+    final controller = TextEditingController(text: current.join(', '));
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceElevated,
+        title: Text(
+          '${device['name']} 별명',
+          style: const TextStyle(color: Colors.white),
+        ),
+        content: TextField(
+          controller: controller,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: '예) 우리집 세탁기, 큰 세탁기 (쉼표로 구분)',
+            hintStyle: TextStyle(color: Colors.white30),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('저장'),
+          ),
+        ],
+      ),
+    );
+    if (saved != true) return;
+
+    final aliases = controller.text
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    setState(() => _devices[index]['aliases'] = aliases);
+    await HomeDeviceStore.saveDevices(_devices);
+  }
+
   Future<void> _showPairDialog(int index) async {
     showModalBottomSheet(
       context: context,
@@ -238,6 +285,44 @@ class _DeviceManagementScreenState extends State<DeviceManagementScreen> {
                                 size: 20,
                               ),
                             ),
+                        ],
+                      ),
+                      SizedBox(height: 8 * rs),
+                      Text(
+                        '음성 별명:',
+                        style: TextStyle(
+                          color: Colors.white54,
+                          fontSize: 13 * rs,
+                        ),
+                      ),
+                      SizedBox(height: 4 * rs),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              ((device['aliases'] as List?)
+                                          ?.whereType<String>()
+                                          .join(', ') ??
+                                      '')
+                                      .isEmpty
+                                  ? '별명 없음 — 평소 부르는 이름을 등록하세요'
+                                  : (device['aliases'] as List)
+                                      .whereType<String>()
+                                      .join(', '),
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 14 * rs,
+                              ),
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: () => _showAliasDialog(index),
+                            icon: const Icon(Icons.edit_rounded, size: 16),
+                            label: const Text('편집'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppColors.primary,
+                            ),
+                          ),
                         ],
                       ),
                     ],

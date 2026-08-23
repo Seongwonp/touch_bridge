@@ -2,6 +2,63 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:touch_bridge/services/voice_device_resolver.dart';
 
 void main() {
+  group('별명(aliases) 매칭', () {
+    const washerWithAlias = RegisteredVoiceDevice(
+      id: 'washer-1',
+      name: '세탁기',
+      aliases: ['우리집 세탁기', '큰 세탁기'],
+    );
+    const microwavePlain = RegisteredVoiceDevice(
+      id: 'microwave-1',
+      name: '전자레인지',
+    );
+
+    test('별명으로 불러도 해당 기기를 선택하고 별명을 명령에서 제거한다', () {
+      final result = VoiceDeviceResolver.resolve(
+        text: '우리집 세탁기 표준 코스 시작',
+        devices: const [washerWithAlias, microwavePlain],
+      );
+
+      expect(result.device?.id, 'washer-1');
+      expect(result.commandText, '표준 코스 시작');
+      expect(result.needsClarification, isFalse);
+    });
+
+    test('두 번째 별명도 동일하게 동작한다', () {
+      final result = VoiceDeviceResolver.resolve(
+        text: '큰 세탁기 시작',
+        devices: const [washerWithAlias, microwavePlain],
+      );
+
+      expect(result.device?.id, 'washer-1');
+      expect(result.commandText, '시작');
+    });
+
+    test('서로 다른 기기가 이름/별명으로 함께 언급되면 되묻는다', () {
+      final result = VoiceDeviceResolver.resolve(
+        text: '우리집 세탁기랑 전자레인지 시작',
+        devices: const [washerWithAlias, microwavePlain],
+      );
+
+      expect(result.needsClarification, isTrue);
+    });
+
+    test('별명이 없는 기존 기기 JSON도 안전하게 파싱된다', () {
+      final device = RegisteredVoiceDevice.fromJson({
+        'id': 'x',
+        'name': '기기',
+      });
+      expect(device.aliases, isEmpty);
+
+      final withAliases = RegisteredVoiceDevice.fromJson({
+        'id': 'y',
+        'name': '기기',
+        'aliases': ['별명1', 2, null, '별명2'], // 이물질 섞인 리스트
+      });
+      expect(withAliases.aliases, ['별명1', '별명2']);
+    });
+  });
+
   const microwave = RegisteredVoiceDevice(
     id: 'microwave-1',
     name: '전자레인지',

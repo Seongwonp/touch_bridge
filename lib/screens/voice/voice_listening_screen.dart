@@ -25,6 +25,8 @@ import '../../services/microwave_command_service.dart';
 import '../../services/washing_machine_command_service.dart';
 import '../../services/ac_command_service.dart';
 import '../../services/appliance_command_router.dart';
+import '../../services/last_command_service.dart';
+import '../../services/repeat_intent.dart';
 import '../../services/replay_intent.dart';
 import '../../services/status_intent.dart';
 import '../../services/device_mapping_service.dart';
@@ -528,6 +530,58 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       return;
     }
 
+    // "아까 그거 다시" — 마지막 전송 성공 명령의 재실행 요청.
+    // 물리 동작으로 이어지므로 바로 실행하지 않고 반드시 확인 질문을 거친다:
+    // 기존 _pendingCommandData + 예/아니오 흐름을 그대로 재사용한다.
+    // (판별 순서: Replay("다시 말해줘"=안내 재생) 먼저, Repeat 나중 — 토큰 비겹침)
+    if (RepeatIntent.matches(text)) {
+      AppLogger.info('voice.repeat_intercept', {'requestId': requestId});
+      final last = await LastCommandService.instance.load();
+      if (last == null) {
+        const msg = '다시 실행할 최근 명령이 없어요. 새 명령을 말씀해 주세요.';
+        setState(() {
+          _statusMessage = msg;
+          _isProcessing = false;
+        });
+        await _speak(msg, interrupt: true, priority: TtsPriority.result);
+        return;
+      }
+
+      // 마지막 명령의 기기가 아직 등록되어 있는지 확인하고 활성화한다.
+      final devices = await HomeDeviceStore.loadDevices();
+      final match =
+          devices.where((d) => d['id'] == last.deviceId).toList();
+      if (match.isEmpty) {
+        final msg = '마지막 명령의 기기 ${last.deviceName}가 더 이상 등록되어 있지 않아요.';
+        setState(() {
+          _statusMessage = msg;
+          _isProcessing = false;
+        });
+        await _speak(msg, interrupt: true, priority: TtsPriority.result);
+        return;
+      }
+      final device = match.first;
+      await ActiveDeviceService.instance.setActiveDevice(
+        deviceId: last.deviceId,
+        deviceName: last.deviceName,
+        bleId: device['bleId'] as String?,
+        bleName: device['bleName'] as String?,
+        deviceType: device['deviceType'] as String?,
+      );
+
+      _pendingCommandData = Map<String, dynamic>.from(last.data);
+      final question =
+          '마지막 명령은 ${last.deviceName}, ${last.description} 이에요. '
+          '다시 실행할까요? 맞으면 예라고 말씀해 주세요.';
+      setState(() {
+        _statusMessage = question;
+        _isProcessing = false;
+      });
+      await _speak(question, interrupt: true, priority: TtsPriority.result);
+      _restartListeningAfterPrompt();
+      return;
+    }
+
     // 낮은 신뢰도로 확인을 요청했던 문장에 대한 예/아니오 응답 처리.
     // 부엌 소음(후드·전자레인지 등)으로 오인식된 문장을 그대로 실행하지
     // 않기 위한 안전장치 — _pendingCommandData(이미 파싱된 명령 확인)와는
@@ -797,6 +851,20 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     return true;
   }
 
+  /// 전송에 성공한 물리 명령을 "아까 그거 다시" 재실행용으로 기록한다.
+  void _recordLastCommand(Map<String, dynamic> data, String description) {
+    final deviceId = ActiveDeviceService.instance.getActiveDeviceId() ?? '';
+    if (deviceId.isEmpty) return;
+    unawaited(
+      LastCommandService.instance.record(
+        data: data,
+        deviceId: deviceId,
+        deviceName: ActiveDeviceService.instance.getActiveDeviceName() ?? '기기',
+        description: description,
+      ),
+    );
+  }
+
   Future<void> _handleCommand(
     Map<String, dynamic> data, {
     required String recognizedText,
@@ -830,6 +898,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         _consecutiveFailures = 0;
         // "성공"이 아니라 "전송됨"이다: BLE write 성공일 뿐 GRBL 확인이 아니다.
         FeedbackService.instance.signalSent();
+        _recordLastCommand(data, message.isNotEmpty ? message : '버튼 실행');
         // _statusMessage 갱신 → liveRegion이 스크린리더 채널로 결과를 전달한다.
         // (주의: interrupt:true만으로는 스크린리더 활성 시 TTS가 억제되므로,
         // 이 liveRegion 갱신이 스크린리더 사용자용 주 채널이다.)
@@ -885,6 +954,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
             ? confirmationMessage
             : message;
         final finalMsg = spokenMessage.isNotEmpty ? spokenMessage : '시작할게요.';
+        _recordLastCommand(data, finalMsg);
         setState(() => _statusMessage = finalMsg);
         await _speak(finalMsg, interrupt: true);
 
@@ -919,6 +989,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         final washerMsg = message.isNotEmpty
             ? message
             : WashingMachineCommandService.buildCommandsLabel(commands);
+        _recordLastCommand(data, washerMsg);
         setState(() => _statusMessage = washerMsg);
         await _speak(washerMsg, interrupt: true);
         return;
@@ -941,6 +1012,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         final acMsg = message.isNotEmpty
             ? message
             : AcCommandService.buildCommandsLabel(commands);
+        _recordLastCommand(data, acMsg);
         setState(() => _statusMessage = acMsg);
         await _speak(acMsg, interrupt: true);
         return;
