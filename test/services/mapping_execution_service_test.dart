@@ -5,6 +5,53 @@ import 'package:touch_bridge/services/device_mapping_service.dart';
 import 'package:touch_bridge/services/mapping_execution_service.dart';
 
 void main() {
+  group('MappingExecutionService.resolveMachinePosition', () {
+    test('버튼별 실제 mm 좌표가 있으면 그리드 좌표보다 우선한다', () {
+      const profile = DeviceMappingProfile(
+        rows: 3,
+        cols: 3,
+        originX: 10,
+        originY: 20,
+        pitchX: 30,
+        pitchY: 40,
+        buttonMap: {'BT-05': (row: 2, col: 2)},
+        buttonMachinePositions: {'BT-05': (xMm: 17.25, yMm: 83.75)},
+      );
+
+      final position = MappingExecutionService.instance.resolveMachinePosition(
+        profile: profile,
+        buttonId: 'BT-05',
+        row: 2,
+        col: 2,
+      );
+
+      expect(position.x, 17.25);
+      expect(position.y, 83.75);
+    });
+
+    test('실제 mm 좌표가 없으면 기존 그리드 계산으로 폴백한다', () {
+      const profile = DeviceMappingProfile(
+        rows: 3,
+        cols: 3,
+        originX: 10,
+        originY: 20,
+        pitchX: 30,
+        pitchY: 40,
+        buttonMap: {'BT-05': (row: 2, col: 2)},
+      );
+
+      final position = MappingExecutionService.instance.resolveMachinePosition(
+        profile: profile,
+        buttonId: 'BT-05',
+        row: 2,
+        col: 2,
+      );
+
+      expect(position.x, 70);
+      expect(position.y, 100);
+    });
+  });
+
   group('MappingExecutionService.resolveButton', () {
     test('저장된 buttonMap 좌표를 우선 사용한다', () {
       const profile = DeviceMappingProfile(
@@ -187,7 +234,9 @@ void main() {
         return false; // 모든 호출 실패
       });
 
-      final result = await MappingExecutionService.instance.pressPhysical('BT-01');
+      final result = await MappingExecutionService.instance.pressPhysical(
+        'BT-01',
+      );
 
       expect(result.ok, isFalse);
       expect(callCount, 1, reason: '첫 sendRaw 실패 후 이후 명령이 전송되어선 안 된다');
@@ -200,7 +249,9 @@ void main() {
         return callCount < 2; // 두 번째 호출부터 실패
       });
 
-      final result = await MappingExecutionService.instance.pressPhysical('BT-01');
+      final result = await MappingExecutionService.instance.pressPhysical(
+        'BT-01',
+      );
 
       expect(result.ok, isFalse);
       expect(callCount, 2, reason: '두 번째 실패 후 세 번째 이후 명령이 전송되어선 안 된다');
@@ -209,7 +260,9 @@ void main() {
     test('모든 sendRaw 성공 시 ok=true를 반환한다', () async {
       BleService.instance.setSendRawOverride((_) async => true);
 
-      final result = await MappingExecutionService.instance.pressPhysical('BT-01');
+      final result = await MappingExecutionService.instance.pressPhysical(
+        'BT-01',
+      );
 
       expect(result.ok, isTrue);
     });
@@ -226,18 +279,18 @@ void main() {
         return !cmd.startsWith('G4'); // 터치 유지 명령만 실패
       });
 
-      final result =
-          await MappingExecutionService.instance.pressPhysical('BT-01');
+      final result = await MappingExecutionService.instance.pressPhysical(
+        'BT-01',
+      );
 
       expect(result.ok, isFalse);
       // 실패 지점 이후 best-effort 복구: 상대 상승 → 절대 모드 복귀.
       final failIdx = sent.indexWhere((c) => c.startsWith('G4'));
       expect(failIdx, greaterThan(0));
-      expect(
-        sent.sublist(failIdx + 1),
-        ['G1 Z1.0 F150', 'G90'],
-        reason: 'Z 하강 후 실패하면 반드시 복구 시퀀스가 전송되어야 한다',
-      );
+      expect(sent.sublist(failIdx + 1), [
+        'G1 Z1.0 F150',
+        'G90',
+      ], reason: 'Z 하강 후 실패하면 반드시 복구 시퀀스가 전송되어야 한다');
       // 복구에 성공했으므로 "눌린 채 멈춤" 경고가 아니라 일반 재시도 안내여야 한다.
       expect(result.userMessage, isNot(contains('누른 채')));
     });
@@ -249,8 +302,9 @@ void main() {
         return !failFrom; // G4부터 이후 전부(복구 포함) 실패
       });
 
-      final result =
-          await MappingExecutionService.instance.pressPhysical('BT-01');
+      final result = await MappingExecutionService.instance.pressPhysical(
+        'BT-01',
+      );
 
       expect(result.ok, isFalse);
       expect(result.userMessage, contains('누른 채'));
@@ -266,8 +320,9 @@ void main() {
         return callCount < 4; // 4번째(G1 X.. Y.. 이동)에서 실패 — 아직 Z는 위
       });
 
-      final result =
-          await MappingExecutionService.instance.pressPhysical('BT-01');
+      final result = await MappingExecutionService.instance.pressPhysical(
+        'BT-01',
+      );
 
       expect(result.ok, isFalse);
       expect(callCount, 4, reason: 'Z 하강 전 실패에는 복구 전송이 없어야 한다');
@@ -302,11 +357,10 @@ void main() {
 
       expect(result.ok, isFalse);
       final failIdx = sent.indexWhere((c) => c.startsWith('G4'));
-      expect(
-        sent.sublist(failIdx + 1),
-        ['G90', 'G0 Z5 F200'],
-        reason: '프로필 경로도 Z 하강 후 실패 시 안전 높이 복구를 전송해야 한다',
-      );
+      expect(sent.sublist(failIdx + 1), [
+        'G90',
+        'G0 Z5 F200',
+      ], reason: '프로필 경로도 Z 하강 후 실패 시 안전 높이 복구를 전송해야 한다');
       expect(result.userMessage, isNot(contains('누른 채')));
     });
 

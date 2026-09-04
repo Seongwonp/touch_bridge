@@ -445,7 +445,7 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: const TopAppBar(title: 'Touch Bridge'),
+      appBar: const TopAppBar(title: '설치 모드 · 기기 연결'),
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(

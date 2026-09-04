@@ -286,7 +286,9 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: TopAppBar(
-        title: widget.showCompletionCheck ? '좌표로 설정하기' : '수동 매핑 및 좌표 설정',
+        title: widget.showCompletionCheck
+            ? '설치 모드 · 좌표 설정'
+            : '설치 모드 · 수동 매핑',
       ),
       body: SingleChildScrollView(
         padding: EdgeInsets.all(20 * rs),

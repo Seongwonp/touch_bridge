@@ -32,6 +32,14 @@ class BleService {
   final _logController = StreamController<String>.broadcast();
   Stream<String> get logStream => _logController.stream;
 
+  /// ESP32 notify 원문 스트림.
+  ///
+  /// 기존 [_responseWaiter]는 레거시 명령의 "첫 응답 한 줄" 계약을 유지한다.
+  /// v2 모션 프로토콜은 한 명령에서 RECEIVED -> MOVING -> COMPLETED처럼 여러
+  /// 상태를 보내므로 이 broadcast 스트림에서 commandId가 같은 응답만 추적한다.
+  final _responseController = StreamController<String>.broadcast();
+  Stream<String> get responseStream => _responseController.stream;
+
   final _connectionStateController =
       StreamController<BluetoothConnectionState>.broadcast();
   Stream<BluetoothConnectionState> get connectionStateStream =>
@@ -85,6 +93,7 @@ class BleService {
   Future<List<BleDeviceInfo>> Function(Duration timeout)? _scanOverride;
   Future<bool> Function(String deviceId)? _connectOverride;
   Future<bool> Function(String command)? _sendRawOverride;
+  Future<String> Function(String deviceId)? _priorityStopOverride;
 
   // Security/session — challenge-response 인증은 BleSecuritySession에 위임
   late final BleSecuritySession _security;
@@ -324,6 +333,7 @@ class BleService {
         }
 
         _addLog('RECV: ${_normalizeHardwareLog(res)}');
+        _responseController.add(res);
         // isCompleted 체크: 빠른 연속 알림이 오면 이미 완료된 Completer에
         // 다시 complete를 시도해 StateError가 발생하므로 반드시 가드한다.
         if (_responseWaiter != null && !_responseWaiter!.isCompleted) {
@@ -410,7 +420,9 @@ class BleService {
     _isReconnecting = true;
     // 지수 백오프: 1<<1=2초, 1<<2=4초, 1<<3=8초
     final delaySeconds = 1 << _reconnectAttempt;
-    _addLog('자동 재연결 예약 ($_reconnectAttempt/$_maxReconnectAttempts, ${delaySeconds}초 후)');
+    _addLog(
+      '자동 재연결 예약 ($_reconnectAttempt/$_maxReconnectAttempts, $delaySeconds초 후)',
+    );
     AppLogger.info('ble.reconnect.scheduled', {
       'attempt': _reconnectAttempt,
       'delay_s': delaySeconds,
@@ -490,6 +502,37 @@ class BleService {
         return 'ERROR:TIMEOUT';
       } finally {
         _responseWaiter = null; // 다음 명령을 방해하지 않도록 반드시 정리
+      }
+    });
+  }
+
+  /// v2 JSON 명령을 전송만 한다. 상태 완료 여부는 [responseStream]에서
+  /// 동일한 commandId를 추적하는 상위 모션 계층이 판단한다.
+  Future<bool> sendProtocolPayload(Map<String, dynamic> payload) async {
+    if (_demoMode) {
+      _addLog('DEMO SEND_V2: ${payload['action']}');
+      return true;
+    }
+    final c = _commandCharacteristic;
+    if (c == null) return false;
+
+    final action = payload['action'] as String?;
+    if (action == null || !_nonAuthActions.contains(action)) {
+      final authorized = await _security.ensureAuthenticated(
+        sendAndWaitAck: _sendAndWaitAck,
+      );
+      if (!authorized) return false;
+    }
+
+    final json = jsonEncode(payload);
+    return _withCommandLock(() async {
+      _addLog('SEND_V2: $json');
+      try {
+        await c.write(utf8.encode(json), withoutResponse: false);
+        return true;
+      } catch (e) {
+        _addLog('v2 전송 오류: $e');
+        return false;
       }
     });
   }
@@ -707,10 +750,69 @@ class BleService {
   /// 호출부는 이 값을 [EmergencyStopOutcome.fromAck]로 해석해 사용자에게
   /// 정직한 상태(멈춤 확인 vs 전송만 됨 vs 실패)를 안내해야 한다.
   Future<String> sendEmergencyStop(String deviceId) async {
-    return _sendAndWaitAck({
+    if (_priorityStopOverride != null) {
+      return _priorityStopOverride!(deviceId);
+    }
+    if (_demoMode) {
+      _addLog('DEMO PRIORITY STOP: $deviceId');
+      return 'OK';
+    }
+    final c = _commandCharacteristic;
+    if (c == null) return 'ERROR:NOT_CONNECTED';
+
+    final commandId =
+        'stop-${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}';
+    final payload = {
+      'version': HardwareProtocol.motionProtocolVersion,
+      'commandId': commandId,
       'action': HardwareProtocol.actionStop,
       'deviceId': deviceId,
-    }, timeout: const Duration(seconds: 1));
+    };
+
+    // 진행 중인 일반 명령의 ACK 대기를 즉시 해제한다. 정지 명령은 일반 큐의
+    // tail을 기다리지 않고 바로 쓰며, 별도 구독으로 자기 commandId 응답만 본다.
+    // 레거시 펌웨어의 OK/STOPPED도 호환하되 v2 JSON이면 commandId 일치를 강제한다.
+    if (_responseWaiter != null && !_responseWaiter!.isCompleted) {
+      _responseWaiter!.complete('ERROR:INTERRUPTED_BY_EMERGENCY_STOP');
+    }
+
+    final ack = Completer<String>();
+    late final StreamSubscription<String> sub;
+    sub = responseStream.listen((raw) {
+      if (ack.isCompleted) return;
+      final trimmed = raw.trim();
+      try {
+        final decoded = jsonDecode(trimmed);
+        if (decoded is! Map<String, dynamic> ||
+            decoded['commandId'] != commandId) {
+          return;
+        }
+        final state = decoded['state']?.toString().toUpperCase();
+        if (state == 'STOPPED' || state == 'COMPLETED') {
+          ack.complete('STOPPED');
+        } else if (state?.startsWith('ERROR_') ?? false) {
+          ack.complete('ERROR:${state!.substring('ERROR_'.length)}');
+        }
+      } catch (_) {
+        final upper = trimmed.toUpperCase();
+        if (upper == 'OK' ||
+            upper.contains('STOPPED') ||
+            upper.contains('EMERGENCY_STOP')) {
+          ack.complete(trimmed);
+        }
+      }
+    });
+
+    try {
+      _addLog('SEND_PRIORITY_STOP: ${jsonEncode(payload)}');
+      await c.write(utf8.encode(jsonEncode(payload)), withoutResponse: false);
+      return await ack.future.timeout(const Duration(seconds: 1));
+    } catch (e) {
+      _addLog('비상 정지 전송/응답 오류: $e');
+      return e is TimeoutException ? 'ERROR:TIMEOUT' : 'ERROR:WRITE_FAILED';
+    } finally {
+      await sub.cancel();
+    }
   }
 
   /// Provision a device pairing key. The secret is stored in platform-secure storage
@@ -745,6 +847,11 @@ class BleService {
     _sendRawOverride = fn;
   }
 
+  @visibleForTesting
+  void setPriorityStopOverride(Future<String> Function(String deviceId)? fn) {
+    _priorityStopOverride = fn;
+  }
+
   /// 명령 직렬화 큐 검증용 — 실제 전송 없이 큐 순서/예외 격리를 테스트한다.
   @visibleForTesting
   Future<T> runInCommandQueueForTest<T>(Future<T> Function() body) =>
@@ -774,6 +881,7 @@ class BleService {
     _reconnectAttempt = 0;
     _isReconnecting = false;
   }
+
   // ─────────────────────────────────────────────────────────────────────────
 }
 

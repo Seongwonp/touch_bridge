@@ -1,10 +1,16 @@
 class HardwareProtocol {
   HardwareProtocol._();
 
+  static const int motionProtocolVersion = 2;
+
   static const String serviceUuid = '0000FFE0-0000-1000-8000-00805F9B34FB';
-  static const String characteristicUuid = '0000FFE1-0000-1000-8000-00805F9B34FB';
+  static const String characteristicUuid =
+      '0000FFE1-0000-1000-8000-00805F9B34FB';
 
   static const String actionPress = 'press';
+  static const String actionMoveOnly = 'move_only';
+  static const String actionStatus = 'status';
+  static const String actionHome = 'home';
   static const String actionStop = 'stop';
   static const String actionSetGrid = 'set_grid';
   static const String actionSetServo = 'set_servo';

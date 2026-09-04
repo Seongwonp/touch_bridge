@@ -1,6 +1,10 @@
 # Touch Bridge — DAguirreAg 기반 소형 프레임 재설계안
 
 > 작성일: 2026-07-21
+> **레거시 설계 기록:** 이 문서는 NK1704S/TB6600/GRBL 3축 구안을 비교·검토한 자료입니다.
+> 2026-09-04 이후 현행 구현 기준은 [XY_SWITCHBOT_SOFTWARE_PLAN.md](XY_SWITCHBOT_SOFTWARE_PLAN.md)의
+> FIT0482 X/Y + 스위치봇 구조이며, 아래 BOM과 결선은 제작 지시로 사용하지 않습니다.
+>
 > 베이스: [DAguirreAg/CNC-pen-plotter](https://github.com/DAguirreAg/CNC-pen-plotter) (GitHub, 네이티브 GRBL)
 > 목표: 이 XY 플로터를 Touch Bridge용 **소형 XYZ 정면-누름 갠트리**로 개조하는 실행 스펙.
 > 관련: [HARDWARE_FRAME_MODEL_RESEARCH.md](HARDWARE_FRAME_MODEL_RESEARCH.md), [HARDWARE_MIGRATION_PLAN.md](HARDWARE_MIGRATION_PLAN.md), [HARDWARE_TASKS.md](HARDWARE_TASKS.md)

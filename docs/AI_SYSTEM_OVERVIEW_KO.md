@@ -1,5 +1,6 @@
 ﻿> [최신화 주석 2026-08-21] 3장의 하드웨어 3단계 전략(키캡/SG90/CoreXY)은 **폐기된 구버전**입니다.
-> 현행 하드웨어는 NK1704S+TB6600+Arduino Uno GRBL XYZ 갠트리 — docs/HARDWARE_MIGRATION_PLAN.md 참조.
+> **레거시 설명 포함:** 현행 전환 방향은 FIT0482 X/Y + ESP32 PID + 스위치봇이며
+> [XY_SWITCHBOT_SOFTWARE_PLAN.md](XY_SWITCHBOT_SOFTWARE_PLAN.md)를 기준으로 합니다.
 > 4~6장(프로토콜, AI 논리 ID 원칙, 가변 그리드)은 현행과 일치합니다.
 
 # Touch Bridge: AI 시스템 통합 가이드 (AI System Overview)

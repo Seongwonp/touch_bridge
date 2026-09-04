@@ -24,7 +24,12 @@ void main() {
 
   group('MicrowaveCommandService.calculateSeconds', () {
     test('버튼 시퀀스에서 총 시간을 계산한다', () {
-      final seconds = MicrowaveCommandService.calculateSeconds(['BT-03', 'BT-03', 'BT-02', 'BT-05']);
+      final seconds = MicrowaveCommandService.calculateSeconds([
+        'BT-03',
+        'BT-03',
+        'BT-02',
+        'BT-05',
+      ]);
       expect(seconds, 150);
     });
 
@@ -75,10 +80,16 @@ void main() {
       // 카운트다운 화면이 즉시 완료로 보이는 버그를 막기 위해 최소 10초로 올린다.
       for (final t in [1, 2, 3, 4]) {
         final r = MicrowaveCommandService.buildStartSequence(t);
-        expect(r.actualSeconds, 10,
-            reason: '${t}초 입력이 0초로 반올림되는 버그 — 최소 10초여야 한다');
-        expect(r.buttons.length, greaterThan(1),
-            reason: '시작 버튼(BT-05)만 눌리면 안 된다');
+        expect(
+          r.actualSeconds,
+          10,
+          reason: '$t초 입력이 0초로 반올림되는 버그 — 최소 10초여야 한다',
+        );
+        expect(
+          r.buttons.length,
+          greaterThan(1),
+          reason: '시작 버튼(BT-05)만 눌리면 안 된다',
+        );
         expect(r.buttons.last, 'BT-05');
       }
     });
@@ -86,7 +97,7 @@ void main() {
     test('5~9초 입력은 이미 10초로 올림됨을 확인한다', () {
       for (final t in [5, 6, 7, 8, 9]) {
         final r = MicrowaveCommandService.buildStartSequence(t);
-        expect(r.actualSeconds, 10, reason: '${t}초');
+        expect(r.actualSeconds, 10, reason: '$t초');
       }
     });
   });

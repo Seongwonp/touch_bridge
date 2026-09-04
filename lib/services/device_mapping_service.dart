@@ -2,8 +2,102 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'app_logger.dart';
+
+const int currentMappingSchemaVersion = 3;
+
+class PanelCalibrationPoint {
+  const PanelCalibrationPoint({
+    required this.imageX,
+    required this.imageY,
+    required this.machineXmm,
+    required this.machineYmm,
+  });
+
+  final double imageX;
+  final double imageY;
+  final double machineXmm;
+  final double machineYmm;
+
+  Map<String, dynamic> toJson() => {
+    'imageX': imageX,
+    'imageY': imageY,
+    'machineXmm': machineXmm,
+    'machineYmm': machineYmm,
+  };
+
+  static PanelCalibrationPoint? tryFromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final json = Map<String, dynamic>.from(raw);
+    final values = [
+      json['imageX'],
+      json['imageY'],
+      json['machineXmm'],
+      json['machineYmm'],
+    ];
+    if (values.any((value) => value is! num)) return null;
+    final point = PanelCalibrationPoint(
+      imageX: (values[0] as num).toDouble(),
+      imageY: (values[1] as num).toDouble(),
+      machineXmm: (values[2] as num).toDouble(),
+      machineYmm: (values[3] as num).toDouble(),
+    );
+    if (!point.imageX.isFinite ||
+        !point.imageY.isFinite ||
+        !point.machineXmm.isFinite ||
+        !point.machineYmm.isFinite) {
+      return null;
+    }
+    return point;
+  }
+}
+
+class PanelCalibration {
+  const PanelCalibration({
+    required this.corners,
+    required this.imageFingerprint,
+    this.minimumButtonSpacingMm = 2.0,
+  });
+
+  /// 반드시 좌상단, 우상단, 우하단, 좌하단 순서의 네 점이다.
+  final List<PanelCalibrationPoint> corners;
+  final String imageFingerprint;
+  final double minimumButtonSpacingMm;
+
+  bool get isComplete => corners.length == 4;
+
+  Map<String, dynamic> toJson() => {
+    'corners': [for (final corner in corners) corner.toJson()],
+    'imageFingerprint': imageFingerprint,
+    'minimumButtonSpacingMm': minimumButtonSpacingMm,
+  };
+
+  static PanelCalibration? tryFromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final json = Map<String, dynamic>.from(raw);
+    final rawCorners = json['corners'];
+    if (rawCorners is! List) return null;
+    final corners = rawCorners
+        .map(PanelCalibrationPoint.tryFromJson)
+        .whereType<PanelCalibrationPoint>()
+        .toList(growable: false);
+    if (corners.length != 4) return null;
+    final fingerprint = json['imageFingerprint'];
+    final rawSpacing = json['minimumButtonSpacingMm'];
+    if (fingerprint is! String || fingerprint.isEmpty) return null;
+    final spacing = rawSpacing is num ? rawSpacing.toDouble() : 2.0;
+    if (!spacing.isFinite || spacing <= 0) return null;
+    return PanelCalibration(
+      corners: corners,
+      imageFingerprint: fingerprint,
+      minimumButtonSpacingMm: spacing,
+    );
+  }
+}
+
 class DeviceMappingProfile {
   const DeviceMappingProfile({
+    this.schemaVersion = currentMappingSchemaVersion,
     required this.rows,
     required this.cols,
     required this.originX,
@@ -12,6 +106,8 @@ class DeviceMappingProfile {
     required this.pitchY,
     required this.buttonMap,
     this.buttonPositions = const {},
+    this.buttonMachinePositions = const {},
+    this.panelCalibration,
     this.customLabels = const {},
     this.homeRow = 0,
     this.homeCol = 0,
@@ -23,6 +119,7 @@ class DeviceMappingProfile {
     this.imagePath,
   });
 
+  final int schemaVersion;
   final int rows;
   final int cols;
   final double originX;
@@ -30,7 +127,16 @@ class DeviceMappingProfile {
   final double pitchX;
   final double pitchY;
   final Map<String, ({int row, int col})> buttonMap;
+
+  /// 사진상 정규화 좌표(0~1). 편집 UI에 사용하며 물리 이동 좌표가 아니다.
   final Map<String, ({double x, double y})> buttonPositions;
+
+  /// 캘리브레이션을 거친 실제 장치 좌표(mm).
+  ///
+  /// 값이 있으면 실행 계층은 rows/cols 기반 좌표보다 이 값을 우선한다.
+  /// 기존 프로필은 이 필드가 없으므로 종전 그리드 계산으로 자동 폴백한다.
+  final Map<String, ({double xMm, double yMm})> buttonMachinePositions;
+  final PanelCalibration? panelCalibration;
   final Map<String, String> customLabels;
   final int homeRow;
   final int homeCol;
@@ -42,6 +148,7 @@ class DeviceMappingProfile {
   final String? imagePath;
 
   Map<String, dynamic> toJson() => {
+    'schemaVersion': currentMappingSchemaVersion,
     'grid': {
       'rows': rows,
       'cols': cols,
@@ -58,6 +165,11 @@ class DeviceMappingProfile {
       for (final e in buttonPositions.entries)
         e.key: {'x': e.value.x, 'y': e.value.y},
     },
+    'buttonMachinePositions': {
+      for (final e in buttonMachinePositions.entries)
+        e.key: {'xMm': e.value.xMm, 'yMm': e.value.yMm},
+    },
+    'panelCalibration': panelCalibration?.toJson(),
     'customLabels': customLabels,
     'homePosition': {'row': homeRow, 'col': homeCol},
     'motion': {
@@ -75,6 +187,11 @@ class DeviceMappingProfile {
     final buttonRaw = (j['buttonMap'] as Map<String, dynamic>? ?? const {});
     final positionRaw =
         (j['buttonPositions'] as Map<String, dynamic>? ?? const {});
+    final machinePositionRaw =
+        (j['buttonMachinePositions'] as Map<String, dynamic>? ?? const {});
+    final panelCalibration = PanelCalibration.tryFromJson(
+      j['panelCalibration'],
+    );
     final labelsRaw = (j['customLabels'] as Map<String, dynamic>? ?? const {});
     final homePos = (j['homePosition'] as Map<String, dynamic>? ?? const {});
     final motion = (j['motion'] as Map<String, dynamic>? ?? const {});
@@ -97,6 +214,20 @@ class DeviceMappingProfile {
       );
     }
 
+    final machinePositions = <String, ({double xMm, double yMm})>{};
+    for (final e in machinePositionRaw.entries) {
+      if (e.value is! Map) continue;
+      final v = Map<String, dynamic>.from(e.value as Map);
+      final rawX = v['xMm'];
+      final rawY = v['yMm'];
+      final xMm = rawX is num ? rawX.toDouble() : null;
+      final yMm = rawY is num ? rawY.toDouble() : null;
+      if (xMm == null || yMm == null || !xMm.isFinite || !yMm.isFinite) {
+        continue;
+      }
+      machinePositions[e.key] = (xMm: xMm, yMm: yMm);
+    }
+
     final rows = (grid['rows'] as num?)?.toInt() ?? 3;
     final cols = (grid['cols'] as num?)?.toInt() ?? 3;
     final migratedPositions = positions.isNotEmpty
@@ -110,6 +241,7 @@ class DeviceMappingProfile {
           };
 
     return DeviceMappingProfile(
+      schemaVersion: currentMappingSchemaVersion,
       rows: rows,
       cols: cols,
       originX: (grid['originX'] as num?)?.toDouble() ?? 0,
@@ -118,6 +250,8 @@ class DeviceMappingProfile {
       pitchY: (grid['pitchY'] as num?)?.toDouble() ?? 1,
       buttonMap: map,
       buttonPositions: migratedPositions,
+      buttonMachinePositions: machinePositions,
+      panelCalibration: panelCalibration,
       customLabels: labelsRaw.cast<String, String>(),
       homeRow: (homePos['row'] as num?)?.toInt() ?? 0,
       homeCol: (homePos['col'] as num?)?.toInt() ?? 0,
@@ -140,6 +274,7 @@ class DeviceMappingProfile {
         pitchY: 1,
         buttonMap: const {},
         buttonPositions: const {},
+        buttonMachinePositions: const {},
         homeRow: 0,
         homeCol: 0,
       );
@@ -156,9 +291,22 @@ class DeviceMappingService {
     final prefs = await SharedPreferences.getInstance();
     final profileRaw = prefs.getString(_profileKey(deviceId));
     if (profileRaw != null) {
-      return DeviceMappingProfile.fromJson(
-        jsonDecode(profileRaw) as Map<String, dynamic>,
-      );
+      final json = jsonDecode(profileRaw) as Map<String, dynamic>;
+      final sourceVersion = (json['schemaVersion'] as num?)?.toInt() ?? 1;
+      final profile = DeviceMappingProfile.fromJson(json);
+      if (sourceVersion < currentMappingSchemaVersion) {
+        await prefs.setString(
+          _profileKey(deviceId),
+          jsonEncode(profile.toJson()),
+        );
+        AppLogger.info('mapping.profile_migrated', {
+          'device_id': deviceId,
+          'from_version': sourceVersion,
+          'to_version': currentMappingSchemaVersion,
+          'button_count': profile.buttonMap.length,
+        });
+      }
+      return profile;
     }
 
     final legacyGrid = prefs.getString(_legacyGridKey(deviceId));
@@ -171,7 +319,7 @@ class DeviceMappingService {
         if (bt == null) continue;
         map[bt] = (row: i ~/ 3, col: i % 3);
       }
-      return DeviceMappingProfile(
+      final profile = DeviceMappingProfile(
         rows: 3,
         cols: 3,
         originX: 0,
@@ -180,6 +328,16 @@ class DeviceMappingService {
         pitchY: 1,
         buttonMap: map,
       );
+      await prefs.setString(
+        _profileKey(deviceId),
+        jsonEncode(profile.toJson()),
+      );
+      AppLogger.info('mapping.legacy_grid_migrated', {
+        'device_id': deviceId,
+        'to_version': currentMappingSchemaVersion,
+        'button_count': profile.buttonMap.length,
+      });
+      return profile;
     }
 
     return DeviceMappingProfile.defaultGrid();
@@ -238,6 +396,11 @@ class DeviceMappingService {
         for (final e in existing.buttonPositions.entries)
           if (!dropped.contains(e.key)) e.key: e.value,
       },
+      buttonMachinePositions: {
+        for (final e in existing.buttonMachinePositions.entries)
+          if (!dropped.contains(e.key)) e.key: e.value,
+      },
+      panelCalibration: existing.panelCalibration,
       customLabels: {
         for (final e in existing.customLabels.entries)
           if (!dropped.contains(e.key)) e.key: e.value,
@@ -251,6 +414,32 @@ class DeviceMappingService {
     );
     return (profile: merged, droppedButtonIds: dropped);
   }
+
+  /// 사진 파일이 바뀌거나 프레임을 다시 설치한 경우 실제 mm 좌표를 폐기한다.
+  /// 사진상의 버튼·라벨은 재검토에 쓸 수 있으므로 그대로 보존한다.
+  static DeviceMappingProfile invalidatePanelCalibration(
+    DeviceMappingProfile existing,
+  ) => DeviceMappingProfile(
+    rows: existing.rows,
+    cols: existing.cols,
+    originX: existing.originX,
+    originY: existing.originY,
+    pitchX: existing.pitchX,
+    pitchY: existing.pitchY,
+    buttonMap: existing.buttonMap,
+    buttonPositions: existing.buttonPositions,
+    buttonMachinePositions: const {},
+    panelCalibration: null,
+    customLabels: existing.customLabels,
+    homeRow: existing.homeRow,
+    homeCol: existing.homeCol,
+    travelHeightZ: existing.travelHeightZ,
+    pressDepthZ: existing.pressDepthZ,
+    travelFeed: existing.travelFeed,
+    pressFeed: existing.pressFeed,
+    dwellSeconds: existing.dwellSeconds,
+    imagePath: existing.imagePath,
+  );
 
   /// [load]는 저장된 게 없어도 [DeviceMappingProfile.defaultGrid]를 돌려주므로
   /// "정말 한 번이라도 저장됐는지"를 구분할 때는 이 메서드를 써야 한다.

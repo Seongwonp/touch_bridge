@@ -1,5 +1,9 @@
 # Touch Bridge — 하드웨어 프레임 / 3D 모델 리서치
 
+> **레거시 리서치 기록:** 이 문서는 NK1704S/TB6600/GRBL 3축 후보를 평가한 당시 자료입니다.
+> 현행 기준은 [XY_SWITCHBOT_SOFTWARE_PLAN.md](XY_SWITCHBOT_SOFTWARE_PLAN.md)의
+> FIT0482 X/Y + 스위치봇 구조이며, 아래 순위·BOM을 현재 권고로 해석하지 않습니다.
+>
 > 작성일: 2026-07-21
 > 목적: NK1704S(NEMA17/42mm급) 3축 + TB6600 3개 + Arduino Uno GRBL + ESP32 브릿지 구조에
 > 재활용할 수 있는 "다운로드 가능한 3D 프레임/모듈 자료"를 조사하고, Touch Bridge 제약 기준으로

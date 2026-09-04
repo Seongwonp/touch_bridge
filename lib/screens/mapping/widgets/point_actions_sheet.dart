@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import '../../../theme/app_colors.dart';
 
-/// 매핑된 버튼 마커를 탭했을 때 뜨는 액션 시트 (테스트 터치 / 이름 변경 / 삭제).
+/// 매핑된 버튼 마커를 탭했을 때 뜨는 액션 시트.
 Future<void> showPointActionsSheet({
   required BuildContext context,
   required String label,
   required double scale,
+  required VoidCallback onMoveOnly,
   required VoidCallback onTestTouch,
   required VoidCallback onRename,
+  required VoidCallback onNudge,
   required VoidCallback onDelete,
 }) {
   return showModalBottomSheet<void>(
@@ -33,8 +35,26 @@ Future<void> showPointActionsSheet({
             ),
             SizedBox(height: 16 * scale),
             _PointActionTile(
+              icon: Icons.open_with_rounded,
+              label: '위치 미세 조정',
+              scale: scale,
+              onTap: () {
+                Navigator.pop(ctx);
+                onNudge();
+              },
+            ),
+            _PointActionTile(
+              icon: Icons.my_location_rounded,
+              label: '위치만 확인 (누르지 않음)',
+              scale: scale,
+              onTap: () {
+                Navigator.pop(ctx);
+                onMoveOnly();
+              },
+            ),
+            _PointActionTile(
               icon: Icons.touch_app_rounded,
-              label: '테스트 터치',
+              label: '실제 누름 테스트',
               scale: scale,
               onTap: () {
                 Navigator.pop(ctx);

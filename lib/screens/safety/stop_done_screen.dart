@@ -1,9 +1,13 @@
 ﻿import 'package:flutter/material.dart';
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../../services/accessibility_settings.dart';
+import '../../services/accessibility_confirmation_policy.dart';
+import '../../services/app_logger.dart';
 import '../../services/tts_service.dart';
 import '../../theme/app_colors.dart';
 
@@ -41,12 +45,27 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
   }
 
   Future<void> _goHome() async {
-    await _tts.speak('홈 화면으로 돌아갑니다.');
+    unawaited(_tts.speak('홈 화면으로 돌아갑니다.'));
     if (!mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   Future<void> _onHomeButtonTap() async {
+    final screenReaderActive =
+        MediaQuery.maybeOf(context)?.accessibleNavigation ??
+        AccessibilitySettings.isScreenReaderActive;
+    if (!AccessibilityConfirmationPolicy.requiresAppConfirmation(
+      kind: ConfirmationActionKind.navigation,
+      screenReaderActive: screenReaderActive,
+    )) {
+      AppLogger.info('accessibility.navigation_confirmation_skipped', {
+        'destination': 'home',
+        'reason': 'screen_reader_active',
+      });
+      HapticFeedback.lightImpact();
+      await _goHome();
+      return;
+    }
     if (!_armedHomeButton) {
       setState(() => _armedHomeButton = true);
       HapticFeedback.mediumImpact();

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:touch_bridge/services/device_mapping_service.dart';
@@ -20,6 +22,36 @@ void main() {
         'BT-02': (x: 0.42, y: 0.84),
         'BT-05': (x: 0.51, y: 0.31),
       },
+      buttonMachinePositions: {'BT-02': (xMm: 42.5, yMm: 18.25)},
+      panelCalibration: PanelCalibration(
+        imageFingerprint: 'panel-fingerprint',
+        corners: [
+          PanelCalibrationPoint(
+            imageX: 0.1,
+            imageY: 0.1,
+            machineXmm: 0,
+            machineYmm: 0,
+          ),
+          PanelCalibrationPoint(
+            imageX: 0.9,
+            imageY: 0.1,
+            machineXmm: 100,
+            machineYmm: 0,
+          ),
+          PanelCalibrationPoint(
+            imageX: 0.9,
+            imageY: 0.9,
+            machineXmm: 100,
+            machineYmm: 60,
+          ),
+          PanelCalibrationPoint(
+            imageX: 0.1,
+            imageY: 0.9,
+            machineXmm: 0,
+            machineYmm: 60,
+          ),
+        ],
+      ),
       customLabels: {'BT-02': '30초', 'BT-05': '시작'},
       imagePath: '/tmp/panel.jpg',
     );
@@ -27,6 +59,7 @@ void main() {
     await DeviceMappingService.instance.save('device-a', profile);
     final loaded = await DeviceMappingService.instance.load('device-a');
 
+    expect(loaded.schemaVersion, currentMappingSchemaVersion);
     expect(loaded.rows, 4);
     expect(loaded.cols, 3);
     expect(loaded.originX, 2.0);
@@ -37,6 +70,9 @@ void main() {
     expect(loaded.buttonMap['BT-05'], (row: 0, col: 0));
     expect(loaded.buttonPositions['BT-02'], (x: 0.42, y: 0.84));
     expect(loaded.buttonPositions['BT-05'], (x: 0.51, y: 0.31));
+    expect(loaded.buttonMachinePositions['BT-02'], (xMm: 42.5, yMm: 18.25));
+    expect(loaded.panelCalibration?.imageFingerprint, 'panel-fingerprint');
+    expect(loaded.panelCalibration?.corners.length, 4);
     expect(loaded.customLabels['BT-05'], '시작');
     expect(loaded.imagePath, '/tmp/panel.jpg');
   });
@@ -61,6 +97,42 @@ void main() {
     expect(loaded.buttonPositions['BT-01']?.y, closeTo(1 / 6, 0.0001));
     expect(loaded.buttonPositions['BT-09']?.x, closeTo(5 / 6, 0.0001));
     expect(loaded.buttonPositions['BT-09']?.y, closeTo(5 / 6, 0.0001));
+    expect(loaded.schemaVersion, currentMappingSchemaVersion);
+  });
+
+  test('손상된 실제 mm 좌표 항목은 전체 프로필을 깨뜨리지 않고 건너뛴다', () {
+    final loaded = DeviceMappingProfile.fromJson({
+      'schemaVersion': currentMappingSchemaVersion,
+      'grid': {'rows': 3, 'cols': 3},
+      'buttonMap': {
+        'BT-01': {'row': 0, 'col': 0},
+      },
+      'buttonMachinePositions': {
+        'BT-01': {'xMm': 12.5, 'yMm': 8.0},
+        'BT-02': 'broken',
+        'BT-03': {'xMm': 'not-a-number', 'yMm': 3},
+      },
+    });
+
+    expect(loaded.buttonMachinePositions, {'BT-01': (xMm: 12.5, yMm: 8.0)});
+  });
+
+  test('버전 없는 저장 프로필은 최신 스키마로 다시 저장한다', () async {
+    SharedPreferences.setMockInitialValues({
+      'mapping_profile_legacy': jsonEncode({
+        'grid': {'rows': 2, 'cols': 2},
+        'buttonMap': {
+          'BT-01': {'row': 0, 'col': 0},
+        },
+      }),
+    });
+
+    final loaded = await DeviceMappingService.instance.load('legacy');
+    final prefs = await SharedPreferences.getInstance();
+    final stored = jsonDecode(prefs.getString('mapping_profile_legacy')!);
+
+    expect(loaded.schemaVersion, currentMappingSchemaVersion);
+    expect(stored['schemaVersion'], currentMappingSchemaVersion);
   });
 
   group('DeviceMappingService.mergeGridUpdate (수동 매핑 병합 저장)', () {

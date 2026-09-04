@@ -8,15 +8,23 @@
 
 ## 왜 이 문제인가
 
-> 시각장애인의 **77.1%**가 키오스크·가전 편의 기능 미비로 이용에 어려움을 겪고 있습니다. (보건복지부 2024)
+> 2024년 장애인차별금지법 이행 실태조사에서 시각장애인 응답자의
+> **77.1%**가 편의 기능 미비·부족으로 키오스크 이용에 어려움을 겪었다고
+> 답했습니다. ([보건복지부 자료 KDI 보관본](https://eiec.kdi.re.kr/policy/materialView.do?num=269629))
 
-국내 시각장애 등록 인구는 약 **24만 7천 명**. 이들이 마주하는 전자레인지·세탁기·인덕션 등 평면 터치패널 가전은 버튼 위치를 손끝으로 더듬을 수 없습니다.
+국내 등록 시각장애인은 약 **24만 7천 명**입니다
+([보건복지부 2024년 등록장애인 현황](https://www.mohw.go.kr/board.es?mid=a10503000000&bid=0027&list_no=1485363&act=view)).
+전자레인지·세탁기·인덕션 등의 평면 터치패널은 버튼 위치를 촉각만으로
+구분하기 어렵습니다.
 
 - **기존 대안의 한계**: LG·삼성의 점자 스티커·음성 매뉴얼은 여전히 *정확한 위치를 사용자가 직접 터치*해야 합니다.  
 - **스마트홈 가전 교체**: 비용이 크고, 이미 집에 있는 가전은 그대로 못 씁니다.
 
 Touch Bridge는 **교체가 아닌 부착**으로 기존 가전을 그대로 접근성 있게 만듭니다.  
-물리 터치 대행 방식은 UIST 2023 BrushLens 연구에서 오터치율 **73.9% 감소** 효과가 확인된 접근법입니다.
+물리 터치 대행 방식은 UIST 2023
+[BrushLens 원 연구](https://dl.acm.org/doi/10.1145/3586183.3606730)에서도
+검토된 접근법입니다. 논문의 실험 결과는 Touch Bridge의 실기 성능을 의미하지
+않으며, 본 프로젝트 수치는 별도 반복 시험으로 검증합니다.
 
 ---
 
@@ -69,12 +77,13 @@ Touch Bridge는 **교체가 아닌 부착**으로 기존 가전을 그대로 접
 - 대기(armed) 시간 **20초** (WCAG 2.2.1 준수)
 
 ### 사용자 / 보호자 모드 분리
-- **사용자 모드** (기본): 홈·비상 정지·설정만 노출 — 시각장애인이 실수로 설정을 깰 수 없음
-- **보호자 모드**: 기기 추가·연결·매핑 화면 활성화 — 가족·시설 관리자가 초기 설정 시에만 켜는 구조
+- **사용자 모드** (기본): 일상 조작은 홈·비상 정지·설정에 집중하되, 독립 설치가 필요한 사용자는 홈의 명시적 진입점에서 기기를 추가할 수 있음
+- **보호자 모드**: 기기 관리 탭과 연결·매핑 도구를 추가 노출 — 가족·시설 관리자의 초기 설정과 유지보수에 적합
 
 ### Gemini Vision 버튼 자동 매핑
 - 가전기기 사진 촬영 → Gemini Vision API로 버튼 위치 인식
-- 유동 그리드(rows×cols) 자동 생성 → 수동 편집 가능 (기본 fallback은 3×3)
+- 버튼 중심 정규화 좌표를 생성하고, 네 모서리 캘리브레이션으로 실제 X/Y mm 좌표로 변환
+- 드래그 외에도 상·하·좌·우 미세 조정 버튼으로 위치를 수정하고 한 점씩 검증 가능
 - 기기별 독립 저장 (deviceId 기반)
 
 ### 설정 영속화
@@ -87,15 +96,15 @@ Touch Bridge는 **교체가 아닌 부착**으로 기존 가전을 그대로 접
 | 분류 | 패키지 | 버전 |
 |------|--------|------|
 | 프레임워크 | Flutter / Dart | 3.x / 3.x |
-| 음성 인식 | `speech_to_text` | ^7.3.0 |
+| 음성 인식 | `speech_to_text` | ^7.4.0 |
 | TTS | `flutter_tts` | ^4.2.5 |
-| AI (NLU + Vision) | `google_generative_ai` (백엔드 프록시) | ^0.2.3 |
-| BLE 통신 | `flutter_blue_plus` | ^1.x |
+| AI (NLU + Vision) | `google_generative_ai` (백엔드 프록시) | ^0.2.0 |
+| BLE 통신 | `flutter_blue_plus` | ^1.35.5 |
 | NFC 태그 | `nfc_manager` | ^3.3.0 |
 | 전화 연결 | `url_launcher` | ^6.3.1 |
 | 사진 선택 | `image_picker` | ^1.1.2 |
 | 설정 저장 | `shared_preferences` | ^2.3.2 |
-| 환경 변수 | `flutter_dotenv` | ^5.2.1 |
+| 환경 변수 | `flutter_dotenv` | ^5.1.0 |
 
 ---
 
@@ -245,30 +254,32 @@ lib/
 
 ## 하드웨어 연동
 
-현재 하드웨어 방향은 기존 28BYJ-48 기반 프로토타입에서 **NK1704S 42각 스텝모터 3개 + TB6600 3개 + Arduino Uno GRBL + ESP32 브릿지** 구조로 전환하는 것입니다. 상세 기준은 [`docs/HARDWARE_MIGRATION_PLAN.md`](docs/HARDWARE_MIGRATION_PLAN.md)를 따릅니다.
+현재 하드웨어 방향은 소형화를 위해 **FIT0482 엔코더 DC 기어모터 2개(X/Y) + ESP32 폐루프 PID + 스위치봇 누름부**로 전환하는 것입니다. 상세 구현 순서는 [`docs/XY_SWITCHBOT_SOFTWARE_PLAN.md`](docs/XY_SWITCHBOT_SOFTWARE_PLAN.md)를 따릅니다.
 
 **현재 구성:**
-- X/Y/Z: `NK1704S` 42각 스텝모터 3개
-- 드라이버: `TB6600` 3개
-- 제어: `Arduino Uno + GRBL`
-- 통신: 앱 → BLE(향후 Wi-Fi 검토) → ESP32 → UART → Arduino Uno GRBL
-- 전원: 모터는 12V 배럴잭 별도 전원, MCU 전원과 분리, 공통 GND 유지
+- X/Y: `FIT0482` 6V 310RPM 50:1 엔코더 DC 기어모터 2개
+- 제어: ESP32가 엔코더 피드백을 받아 축별 위치 PID 수행
+- 원점: X/Y 리미트 스위치; 홈 완료 전 이동 금지
+- 누름: 별도 Z축 대신 스위치봇 사용
+- 통신: 앱 → BLE/Wi-Fi → ESP32
+- 전원: 모터 전원과 MCU 전원 분리, 공통 GND 유지
 
 **권장 실행 흐름:**
 - AI는 물리 좌표를 만들지 않고 논리 버튼 ID(`BT-xx`)만 반환합니다.
-- 앱은 저장된 `DeviceMappingProfile`로 `BT-xx → row/col → X/Y mm → Z 누름 G-code`를 생성합니다.
-- ESP32는 raw G-code를 Arduino Uno GRBL로 전달합니다.
-- `BTN_n`, `SET_GRID`, `PRESS x y`는 레거시/호환 경로로만 유지합니다.
+- 사진 분석은 버튼 중심의 정규화 좌표와 신뢰도만 만들고, 보호자 캘리브레이션을 거쳐 X/Y mm로 확정합니다.
+- 앱은 `BT-xx → buttonMachinePositions → X/Y 목표 mm`를 전달합니다.
+- ESP32는 목표 위치 오차가 허용 범위 안에 들어온 뒤에만 스위치봇을 작동시키고 완료 상태를 회신합니다.
+- 현재 앱의 GRBL XYZ G-code와 `BTN_n`, `SET_GRID`, `PRESS x y`는 v2 펌웨어 확정 전까지 레거시 호환 경로로만 유지합니다.
 
-**예시 G-code 시퀀스:**
-```gcode
-G90
-G21
-G0 Z5 F200
-G0 X120 Y80 F1200
-G1 Z-2 F200
-G4 P0.2
-G0 Z5 F200
+**v2 명령 예시(초안):**
+```json
+{
+  "version": 2,
+  "commandId": "uuid",
+  "action": "move_and_press",
+  "target": {"xMm": 42.5, "yMm": 18.25},
+  "pressActuator": "switchbot"
+}
 ```
 
 ---
@@ -308,7 +319,7 @@ G0 Z5 F200
   - NAVIGATE 음성 액션 구현 (설정·기기 연결·버튼 매핑 화면 이동)
   - 세탁기·에어컨 음성 명령 BLE 전송 연결 (`ApplianceCommandRouter`)
   - 첫 방문 예시 명령어 자동 낭독, 첫 실행 AlertDialog 온보딩
-  - 단위 테스트 160개+ (BLE 재연결 16 + 가전 라우터 25 + 색상 대비 + STT 타임아웃)
+  - 당시 단위 테스트 160개+ (BLE 재연결 16 + 가전 라우터 25 + 색상 대비 + STT 타임아웃)
 - [x] **전면 리뷰 후속 안정화 15단계 (2026-08-20~21)** — 상세: [`docs/WORK_LOG.md`](docs/WORK_LOG.md)
   - 스크린리더 TTS 억제 계약 확정(비상·결과 안내 항상 재생), 확인 질문 후 자동 재청취
   - Z축 하강 후 실패 시 자동 복구, 매핑 셀 충돌 검출·저장 차단, 수동 매핑 병합 저장
@@ -316,10 +327,16 @@ G0 Z5 F200
   - BLE 명령 직렬화 큐 + 응답 waiter 선등록, 연결/끊김 이벤트 신뢰성, 물리 동작 인증 게이트
   - 공용 STT 세션(화면 간 이벤트 오염 방지), 백엔드 API 키·레이트리밋·AI 응답 스키마 검증
   - 이중 탭 타임아웃 20초 단일 상수화, 문서 계보 복구(HARDWARE_MIGRATION_PLAN 등)
-  - 단위 테스트 224개로 확장 (보안 세션·명령 큐·Z 복구·셀 충돌·매처 등 무테스트 영역 해소)
+  - 당시 단위 테스트 224개로 확장 (보안 세션·명령 큐·Z 복구·셀 충돌·매처 등 무테스트 영역 해소)
+- [x] **FIT0482 X/Y + 스위치봇 소프트웨어 M1~M5 (2026-09-04)** — 버튼별 실제
+  mm 좌표와 4점 투영 보정, ESP32 모션 v2 상태 머신, 원점/위치 토큰 안전 게이트,
+  한 점씩 검증·실측 오차 기록, 촬영 전 방향 안내, 드래그 대체 미세 조정 버튼,
+  화면읽기 단순 내비게이션 확인 최적화. 상세:
+  [`docs/XY_SWITCHBOT_SOFTWARE_PLAN.md`](docs/XY_SWITCHBOT_SOFTWARE_PLAN.md)
+- [ ] ESP32 모션 v2 펌웨어 구현 및 FIT0482 실기 PID/ACK 검증
+- [ ] 전맹·저시력 참여자를 분리한 실제 과업 평가
 - [ ] BLE 실기기 E2E 검증 (sendPress / sendEmergencyStop ACK)
-- [ ] GRBL `ok/error/ALARM` 응답을 한국어 TTS로 번역
-- [ ] 기기별 X/Y 오프셋 캘리브레이션 UI
+- [x] 기기별 4점 X/Y 투영 캘리브레이션 UI와 버튼별 실제 mm 저장
 
 ---
 
@@ -333,6 +350,9 @@ G0 Z5 F200
 - [3분 데모 스크립트](docs/DEMO_SCRIPT_3MIN.md)
 - [재현 가이드/런북](docs/REPRO_RUNBOOK.md)
 - [접근성 지침·법률 조사 (WCAG 2.2 / KS X 3253 / 장애인차별금지법)](docs/ACCESSIBILITY_GUIDELINES_RESEARCH.md)
+- [2026-09-04 근거자료 출처 감사](docs/SOURCE_AUDIT_2026-09-04.md)
+- [시각장애인 당사자 검증 계획/기록 양식](docs/USER_VALIDATION_PLAN.md)
+- [FIT0482 X/Y + 스위치봇 소프트웨어 계획](docs/XY_SWITCHBOT_SOFTWARE_PLAN.md)
 - [앱-하드웨어 연동 계약서 (BLE/Wi-Fi, XYZ G-code, 레거시 명령)](docs/HW_APP_INTEGRATION_CONTRACT_KO.md)
 - [하드웨어 마이그레이션 계획서](docs/HARDWARE_MIGRATION_PLAN.md)
 - [하드웨어 작업 및 안전 체크리스트](docs/HARDWARE_TASKS.md)
@@ -345,8 +365,10 @@ flutter analyze
 flutter test
 ```
 
-- 단위 테스트 **224개**: 명령 규칙, 시간 계산, 좌표 매핑, BLE 재연결·명령 큐, 보안 세션(HMAC),
-  Z축 복구, 셀 충돌 검출, 매핑 병합 저장, TTS 억제 계약, 긍/부정 매처, 가전 라우터, 색상 대비(WCAG), STT 타임아웃
+- Flutter 자동 테스트 **306개**: 명령 규칙, 시간 계산, 실제 mm 좌표·4점 보정,
+  ESP32 모션 v2 상태 머신, 안전 검증 기록, BLE 재연결·명령 큐, 보안 세션(HMAC),
+  Z축 복구, 셀 충돌 검출, TTS 억제 계약, 화면읽기 내비게이션, 촬영 안내,
+  드래그 대체 조그, 색상 대비(WCAG), STT 타임아웃
 - 위젯 테스트: 홈 화면 스모크, BLE 연결 흐름, 하단 내비게이션 모드 전환
 
 ## 접근성 실험 지표
@@ -366,11 +388,10 @@ flutter test
 하드웨어는 프로토타입 수준에서 동작하지만, 설치·운영 전 반드시 물리적 안전 조치를 수행해야 합니다. 자세한 체크리스트와 회로 권장 사항은 `docs/HARDWARE_TASKS.md`를 먼저 확인하세요.
 
 간단히 확인해야 할 항목:
-- TB6600 3개의 DIP 전류 설정이 NK1704S 정격 이내인지 확인
-- 12V 모터 전원과 로직 전원(Uno/ESP32) 분리
-- ESP32(3.3V) ↔ Arduino(5V) UART 라인 레벨시프터 적용
-- 공통 GND 연결 확인
-- 리미트 스위치와 `$H` homing 확인
+- FIT0482 X/Y 모터 2개의 실측 정지전류를 기준으로 H-브리지와 전류 제한을 선정
+- 6V 모터 전원과 ESP32 로직 전원을 분리하고 공통 GND 연결
+- 엔코더 A/B상 방향·카운트와 X/Y 리미트 스위치의 fail-safe 동작 확인
+- 홈 완료 전 이동 금지, 허용 오차 밖에서는 스위치봇 누름 금지 확인
 - 적정 퓨즈 장착
 - 하드웨어 비상정지(E‑STOP) 회로 구성(필수)
 

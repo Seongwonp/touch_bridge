@@ -12,6 +12,8 @@ import 'settings/device_management_screen.dart';
 import '../services/tts_service.dart';
 import '../services/accessibility_settings.dart';
 import '../services/feedback_service.dart';
+import '../services/accessibility_confirmation_policy.dart';
+import '../services/app_logger.dart';
 import '../widgets/responsive_scale.dart';
 import '../../theme/app_colors.dart';
 
@@ -189,6 +191,34 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       await _tts.speak(
         destinations[index].guide,
         source: 'MainNavigationScreen',
+      );
+      return;
+    }
+
+    final screenReaderActive =
+        MediaQuery.maybeOf(context)?.accessibleNavigation ??
+        AccessibilitySettings.isScreenReaderActive;
+    final needsConfirmation =
+        AccessibilityConfirmationPolicy.requiresAppConfirmation(
+          kind: ConfirmationActionKind.navigation,
+          screenReaderActive: screenReaderActive,
+        );
+    if (!needsConfirmation) {
+      AppLogger.info('accessibility.navigation_confirmation_skipped', {
+        'destination': destinations[index].label,
+        'reason': 'screen_reader_active',
+      });
+      _navResetTimer?.cancel();
+      setState(() {
+        _currentIndex = index;
+        _armedNavIndex = null;
+      });
+      await _tts.stop();
+      FeedbackService.instance.vibrateSuccess();
+      await _tts.speak(
+        '${destinations[index].label} 이동. ${destinations[index].guide}',
+        source: 'MainNavigationScreen',
+        priority: TtsPriority.result,
       );
       return;
     }

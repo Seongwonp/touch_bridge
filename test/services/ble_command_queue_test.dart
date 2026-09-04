@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:touch_bridge/services/ble_service.dart';
 
@@ -24,8 +26,10 @@ void main() {
       });
 
       await Future.wait([first, second]);
-      expect(order, ['first', 'second'],
-          reason: '늦게 들어온 짧은 작업이 먼저 실행되면 직렬화가 깨진 것');
+      expect(order, [
+        'first',
+        'second',
+      ], reason: '늦게 들어온 짧은 작업이 먼저 실행되면 직렬화가 깨진 것');
     });
 
     test('앞선 명령이 예외로 끝나도 다음 명령은 실행된다', () async {
@@ -60,6 +64,30 @@ void main() {
 
       BleService.instance.setSendRawOverride((_) async => false);
       expect(await BleService.instance.sendRawWithResponse('\$\$'), isNull);
+    });
+  });
+
+  group('비상 정지 우선 경로', () {
+    tearDown(() => BleService.instance.setPriorityStopOverride(null));
+
+    test('일반 명령 큐가 막혀 있어도 비상 정지는 기다리지 않는다', () async {
+      final ble = BleService.instance;
+      final releaseNormalCommand = Completer<void>();
+      final normalStarted = Completer<void>();
+      final normal = ble.runInCommandQueueForTest(() async {
+        normalStarted.complete();
+        await releaseNormalCommand.future;
+      });
+      await normalStarted.future;
+
+      ble.setPriorityStopOverride((_) async => 'STOPPED');
+      final stop = await ble
+          .sendEmergencyStop('device-1')
+          .timeout(const Duration(milliseconds: 100));
+
+      expect(stop, 'STOPPED');
+      releaseNormalCommand.complete();
+      await normal;
     });
   });
 }

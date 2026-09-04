@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../services/device_mapping_service.dart';
@@ -7,9 +8,12 @@ import '../../services/tts_service.dart';
 import '../../services/ble_service.dart';
 import '../../services/microwave_command_service.dart';
 import '../../services/device_service.dart';
-import '../../services/mapping_coordinate_service.dart';
-import '../../services/mapping_execution_service.dart';
+import '../../services/mapping_calibration_service.dart';
 import '../../services/home_device_store.dart';
+import '../../services/app_logger.dart';
+import '../../services/mapping_verification_service.dart';
+import '../../services/motion_controller.dart';
+import '../../services/feedback_service.dart';
 
 class ButtonPoint {
   final String id;
@@ -17,6 +21,30 @@ class ButtonPoint {
   final String label;
 
   ButtonPoint({required this.id, required this.position, required this.label});
+}
+
+class PointVerificationExecution {
+  const PointVerificationExecution({
+    required this.ok,
+    required this.message,
+    required this.buttonId,
+    required this.label,
+    required this.mode,
+    this.targetXmm,
+    this.targetYmm,
+    this.controllerErrorMm,
+    this.failure,
+  });
+
+  final bool ok;
+  final String message;
+  final String buttonId;
+  final String label;
+  final MappingVerificationMode mode;
+  final double? targetXmm;
+  final double? targetYmm;
+  final double? controllerErrorMm;
+  final String? failure;
 }
 
 class PhotoMappingViewModel extends ChangeNotifier {
@@ -28,14 +56,20 @@ class PhotoMappingViewModel extends ChangeNotifier {
   final String? bleName;
 
   final List<ButtonPoint> _points = [];
-  Offset? _redMarkerPosition;
+  final List<Offset> _calibrationCorners = [];
+  PanelCalibration? _panelCalibration;
+  String? _imageFingerprint;
+  int _calibrationRevision = 0;
   bool _isAiAnalyzing = false;
   bool _isUploading = false;
   int _mappingRows = 3;
   int _mappingCols = 3;
+  List<MappingVerificationRecord> _verificationRecords = const [];
 
   final DeviceService _deviceService = MockDeviceService();
   final TtsService _tts = TtsService();
+  late final MotionController _motionController;
+  late final SafePressCoordinator _safePressCoordinator;
 
   PhotoMappingViewModel({
     required this.deviceId,
@@ -44,26 +78,73 @@ class PhotoMappingViewModel extends ChangeNotifier {
     this.imagePath,
     this.bleId,
     this.bleName,
-  });
+    MotionTransport? motionTransport,
+  }) {
+    final transport = motionTransport ?? BleMotionTransport();
+    _motionController = Esp32MotionController(transport: transport);
+    _safePressCoordinator = SafePressCoordinator(
+      motionController: _motionController,
+      pressActuator: Esp32SwitchBotActuator(transport: transport),
+    );
+  }
 
   List<ButtonPoint> get points => _points;
-  Offset? get redMarkerPosition => _redMarkerPosition;
+  List<Offset> get calibrationCorners => List.unmodifiable(_calibrationCorners);
+  bool get hasPanelCalibration => _panelCalibration?.isComplete ?? false;
+  bool get needsCalibrationDimensions =>
+      _calibrationCorners.length == 4 && !hasPanelCalibration;
+  int get calibrationCornerCount => _calibrationCorners.length;
   bool get isAiAnalyzing => _isAiAnalyzing;
   bool get isUploading => _isUploading;
-
-  set redMarkerPosition(Offset? value) {
-    _redMarkerPosition = value;
-    notifyListeners();
+  bool get isMotionHomed => _motionController.isHomed;
+  List<MappingVerificationRecord> get verificationRecords =>
+      List.unmodifiable(_verificationRecords);
+  String get verificationSummary {
+    if (_verificationRecords.isEmpty) return '아직 저장된 위치 검증 결과가 없습니다.';
+    final passed = _verificationRecords
+        .where((record) => record.passesTolerance(0.7))
+        .length;
+    final latest = _verificationRecords.last;
+    final radial = latest.measuredRadialErrorMm;
+    final error = radial == null ? '' : ' · 실측 ${radial.toStringAsFixed(2)}mm';
+    return '검증 ${_verificationRecords.length}회 중 통과 $passed회 · '
+        '최근 ${latest.label}$error';
   }
 
   Future<void> initialize() async {
+    _imageFingerprint = await _computeImageFingerprint();
     await _loadProfileOnly();
+    _verificationRecords = await MappingVerificationService.instance.load(
+      deviceId,
+    );
+    notifyListeners();
     await _initHardwareConnection();
   }
 
   Future<void> _loadProfileOnly() async {
     try {
       final profile = await DeviceMappingService.instance.load(deviceId);
+      final calibration = profile.panelCalibration;
+      if (calibration != null &&
+          calibration.imageFingerprint == _imageFingerprint) {
+        _panelCalibration = calibration;
+        _calibrationCorners
+          ..clear()
+          ..addAll(
+            calibration.corners.map(
+              (corner) => Offset(corner.imageX, corner.imageY),
+            ),
+          );
+      } else if (calibration != null) {
+        final invalidated = DeviceMappingService.invalidatePanelCalibration(
+          profile,
+        );
+        await DeviceMappingService.instance.save(deviceId, invalidated);
+        AppLogger.warn('mapping.calibration_invalidated', {
+          'device_id': deviceId,
+          'reason': 'image_fingerprint_changed',
+        });
+      }
       _mappingRows = profile.rows;
       _mappingCols = profile.cols;
       if (profile.buttonMap.isNotEmpty) {
@@ -92,16 +173,42 @@ class PhotoMappingViewModel extends ChangeNotifier {
     }
   }
 
+  Future<String> _computeImageFingerprint() async {
+    final path = imagePath;
+    if (path == null || path.isEmpty) return 'no-image';
+    if (path.startsWith('http')) return 'url:$path';
+    try {
+      final stat = await File(path).stat();
+      return '$path|${stat.size}|${stat.modified.millisecondsSinceEpoch}';
+    } catch (_) {
+      return 'path:$path';
+    }
+  }
+
   Future<void> _initHardwareConnection() async {
     await Future.delayed(const Duration(milliseconds: 1500));
     await _deviceService.connect(deviceId);
   }
 
-  void addPoint(Offset relativePosition) {
-    if (_redMarkerPosition == null) {
-      _redMarkerPosition = relativePosition;
-      _tts.speak('기준점이 설정되었습니다. 이제 가전제품의 버튼들을 하나씩 터치하여 위치를 지정하세요.');
-    } else if (_points.length < 9) {
+  /// 이미지 탭을 처리한다. 네 번째 모서리가 등록되면 true를 반환해 화면이
+  /// 실제 패널 크기 입력 창을 열 수 있게 한다.
+  bool addPoint(Offset relativePosition) {
+    if (!hasPanelCalibration) {
+      if (_calibrationCorners.length < 4) {
+        _calibrationCorners.add(relativePosition);
+        const names = ['좌상단', '우상단', '우하단', '좌하단'];
+        final selected = names[_calibrationCorners.length - 1];
+        final next = _calibrationCorners.length < 4
+            ? ' 다음은 ${names[_calibrationCorners.length]} 모서리를 터치하세요.'
+            : ' 이제 실제 패널 크기를 입력하세요.';
+        _tts.speak('$selected 모서리가 설정되었습니다.$next');
+        notifyListeners();
+        return _calibrationCorners.length == 4;
+      }
+      _tts.speak('실제 패널 크기를 먼저 입력해 주세요.');
+      return false;
+    }
+    if (_points.length < maxAiButtons) {
       final btId = _nextButtonId();
       _points.add(
         ButtonPoint(
@@ -114,6 +221,200 @@ class PhotoMappingViewModel extends ChangeNotifier {
       );
     }
     notifyListeners();
+    return false;
+  }
+
+  void updateCalibrationCorner(int index, Offset position) {
+    if (index < 0 || index >= _calibrationCorners.length) return;
+    final hadCalibration = _panelCalibration != null;
+    _calibrationCorners[index] = position;
+    _panelCalibration = null;
+    if (hadCalibration) {
+      final revision = ++_calibrationRevision;
+      unawaited(_invalidateSavedCalibration('corner_moved', revision));
+    }
+    notifyListeners();
+  }
+
+  Future<void> nudgeCalibrationCorner(int index, Offset delta) async {
+    if (index < 0 || index >= _calibrationCorners.length) return;
+    final current = _calibrationCorners[index];
+    updateCalibrationCorner(
+      index,
+      Offset(
+        (current.dx + delta.dx).clamp(0.0, 1.0),
+        (current.dy + delta.dy).clamp(0.0, 1.0),
+      ),
+    );
+    AppLogger.info('mapping.calibration_corner_nudged', {
+      'device_id': deviceId,
+      'corner_index': index,
+      'delta_x': delta.dx,
+      'delta_y': delta.dy,
+    });
+    await _announceNudge(_cornerName(index), delta);
+  }
+
+  Future<void> nudgePoint(int index, Offset delta) async {
+    if (index < 0 || index >= _points.length) return;
+    final point = _points[index];
+    _points[index] = ButtonPoint(
+      id: point.id,
+      label: point.label,
+      position: Offset(
+        (point.position.dx + delta.dx).clamp(0.0, 1.0),
+        (point.position.dy + delta.dy).clamp(0.0, 1.0),
+      ),
+    );
+    notifyListeners();
+    AppLogger.info('mapping.button_position_nudged', {
+      'device_id': deviceId,
+      'button_id': point.id,
+      'delta_x': delta.dx,
+      'delta_y': delta.dy,
+    });
+    await _announceNudge(point.label, delta);
+  }
+
+  String _cornerName(int index) => const ['좌상단', '우상단', '우하단', '좌하단'][index];
+
+  Future<void> _announceNudge(String label, Offset delta) async {
+    final direction = delta.dx < 0
+        ? '왼쪽'
+        : delta.dx > 0
+        ? '오른쪽'
+        : delta.dy < 0
+        ? '위쪽'
+        : '아래쪽';
+    FeedbackService.instance.vibrateSuccess();
+    await _tts.speak('$label 위치를 $direction 방향으로 0.5퍼센트 이동했습니다.');
+  }
+
+  void restartCalibration() {
+    final hadCalibration = _panelCalibration != null;
+    _calibrationCorners.clear();
+    _panelCalibration = null;
+    if (hadCalibration) {
+      final revision = ++_calibrationRevision;
+      unawaited(_invalidateSavedCalibration('calibration_restarted', revision));
+    }
+    notifyListeners();
+    _tts.speak('패널 보정을 다시 시작합니다. 좌상단 모서리를 터치하세요.');
+  }
+
+  Future<String> completeRectangularCalibration({
+    required double originXmm,
+    required double originYmm,
+    required double widthMm,
+    required double heightMm,
+  }) async {
+    if (_calibrationCorners.length != 4) {
+      return '사진에서 패널 모서리 네 점을 먼저 지정해 주세요.';
+    }
+    final values = [originXmm, originYmm, widthMm, heightMm];
+    if (values.any((value) => !value.isFinite) ||
+        originXmm < 0 ||
+        originYmm < 0 ||
+        widthMm <= 0 ||
+        heightMm <= 0 ||
+        originXmm + widthMm > 2000 ||
+        originYmm + heightMm > 2000) {
+      return '원점은 0 이상이어야 하며 패널 끝 좌표는 2000mm 이하여야 합니다.';
+    }
+    _imageFingerprint ??= await _computeImageFingerprint();
+    final machineCorners = [
+      (x: originXmm, y: originYmm),
+      (x: originXmm + widthMm, y: originYmm),
+      (x: originXmm + widthMm, y: originYmm + heightMm),
+      (x: originXmm, y: originYmm + heightMm),
+    ];
+    final calibration = PanelCalibration(
+      imageFingerprint: _imageFingerprint!,
+      corners: [
+        for (var i = 0; i < 4; i++)
+          PanelCalibrationPoint(
+            imageX: _calibrationCorners[i].dx,
+            imageY: _calibrationCorners[i].dy,
+            machineXmm: machineCorners[i].x,
+            machineYmm: machineCorners[i].y,
+          ),
+      ],
+    );
+    final validation = MappingCalibrationService.calculate(
+      calibration: calibration,
+      buttonPositions: {
+        for (final point in _points)
+          point.id: (x: point.position.dx, y: point.position.dy),
+      },
+    );
+    if (!validation.isValid) {
+      return _userFacingCalibrationErrors(validation.errors);
+    }
+    _panelCalibration = calibration;
+    _calibrationRevision++;
+    notifyListeners();
+    await _tts.speak('패널 보정이 완료되었습니다. 이제 버튼 중심을 지정하세요.');
+    return '패널 보정 완료';
+  }
+
+  Future<void> _invalidateSavedCalibration(String reason, int revision) async {
+    final existing = await DeviceMappingService.instance.load(deviceId);
+    if (revision != _calibrationRevision) return;
+    if (existing.panelCalibration == null &&
+        existing.buttonMachinePositions.isEmpty) {
+      return;
+    }
+    await DeviceMappingService.instance.save(
+      deviceId,
+      DeviceMappingService.invalidatePanelCalibration(existing),
+    );
+    AppLogger.warn('mapping.calibration_invalidated', {
+      'device_id': deviceId,
+      'reason': reason,
+    });
+  }
+
+  Future<void> announcePointTestConfirmation(
+    int index, {
+    bool moveOnly = false,
+  }) async {
+    if (index < 0 || index >= _points.length) return;
+    await _tts.speak(
+      moveOnly
+          ? '${_points[index].label} 위치로 누르지 않고 이동합니다. 주변을 확인한 뒤 실행하세요.'
+          : '${_points[index].label} 위치에서 실제 누름 테스트를 준비합니다. '
+                '주변에 손이나 물건이 없는지 확인한 뒤 실행 버튼을 누르세요.',
+      priority: TtsPriority.result,
+    );
+  }
+
+  Future<String> homeMotion() async {
+    final outcome = await _motionController.home(deviceId: deviceId);
+    notifyListeners();
+    await _tts.speak(outcome.message, priority: TtsPriority.result);
+    return outcome.message;
+  }
+
+  Future<void> announceHomeConfirmation() => _tts.speak(
+    '원점 설정 버튼입니다. 한 번 더 누르면 장치가 리미트 스위치 방향으로 이동합니다.',
+    priority: TtsPriority.result,
+  );
+
+  Future<void> announceHighRiskConfirmation(int index) async {
+    if (index < 0 || index >= _points.length) return;
+    await _tts.speak(
+      '${_points[index].label} 버튼은 실제 기기를 작동시키거나 상태를 바꿀 수 있습니다. '
+      '실제 누름 허용 버튼을 선택해야 실행됩니다.',
+      priority: TtsPriority.result,
+    );
+  }
+
+  String _userFacingCalibrationErrors(List<String> errors) {
+    var message = errors.join(' ');
+    for (final point in _points) {
+      message = message.replaceAll(point.id, point.label);
+    }
+    return message;
   }
 
   String _nextButtonId() {
@@ -160,131 +461,157 @@ class PhotoMappingViewModel extends ChangeNotifier {
     return btId;
   }
 
-  Future<String> testPoint(int index) async {
+  Future<PointVerificationExecution> movePointOnly(int index) =>
+      _executePoint(index, MappingVerificationMode.moveOnly);
+
+  Future<PointVerificationExecution> testPointDetailed(int index) =>
+      _executePoint(index, MappingVerificationMode.press);
+
+  /// 기존 호출부 호환용. 새 UI는 좌표와 엔코더 오차를 받기 위해
+  /// [testPointDetailed]을 사용한다.
+  Future<String> testPoint(int index) async =>
+      (await testPointDetailed(index)).message;
+
+  Future<PointVerificationExecution> _executePoint(
+    int index,
+    MappingVerificationMode mode,
+  ) async {
     if (index < 0 || index >= _points.length) {
-      return '테스트할 버튼을 찾지 못했습니다.';
-    }
-    if (!BleService.instance.isConnected) {
-      await _tts.speak('기기가 연결되어 있지 않습니다. 기기 전원과 연결 상태를 확인한 뒤 다시 시도해 주세요.');
-      return 'BLE 미연결';
+      return PointVerificationExecution(
+        ok: false,
+        message: '테스트할 버튼을 찾지 못했습니다.',
+        buttonId: '',
+        label: '알 수 없는 버튼',
+        mode: mode,
+        failure: MotionFailure.invalidTarget.name,
+      );
     }
 
     final point = _points[index];
-    final profile = await DeviceMappingService.instance.load(deviceId);
-    final pointProfile = DeviceMappingProfile(
-      rows: _mappingRows,
-      cols: _mappingCols,
-      originX: profile.originX,
-      originY: profile.originY,
-      pitchX: profile.pitchX,
-      pitchY: profile.pitchY,
-      buttonMap: {
-        point.id: (
-          row: (point.position.dy * _mappingRows).floor().clamp(
-            0,
-            _mappingRows - 1,
-          ),
-          col: (point.position.dx * _mappingCols).floor().clamp(
-            0,
-            _mappingCols - 1,
-          ),
-        ),
-      },
+    final calibration = _panelCalibration;
+    if (calibration == null) {
+      const message = '실제 좌표 보정을 완료한 뒤 버튼을 테스트해 주세요.';
+      await _tts.speak(message);
+      return PointVerificationExecution(
+        ok: false,
+        message: message,
+        buttonId: point.id,
+        label: point.label,
+        mode: mode,
+        failure: MotionFailure.invalidTarget.name,
+      );
+    }
+    final calibrated = MappingCalibrationService.calculate(
+      calibration: calibration,
       buttonPositions: {point.id: (x: point.position.dx, y: point.position.dy)},
-      customLabels: {point.id: point.label},
-      imagePath: imagePath,
     );
-    final result = await MappingExecutionService.instance.pressButton(
-      deviceId: deviceId,
-      profile: pointProfile,
+    if (!calibrated.isValid) {
+      final message = _userFacingCalibrationErrors(calibrated.errors);
+      await _tts.speak(message);
+      return PointVerificationExecution(
+        ok: false,
+        message: message,
+        buttonId: point.id,
+        label: point.label,
+        mode: mode,
+        failure: MotionFailure.invalidTarget.name,
+      );
+    }
+
+    final target = calibrated.machinePositions[point.id]!;
+    final outcome = mode == MappingVerificationMode.moveOnly
+        ? await _motionController.moveTo(
+            deviceId: deviceId,
+            xMm: target.xMm,
+            yMm: target.yMm,
+            toleranceMm: 0.7,
+          )
+        : await _safePressCoordinator.moveAndPress(
+            deviceId: deviceId,
+            xMm: target.xMm,
+            yMm: target.yMm,
+            toleranceMm: 0.7,
+          );
+    notifyListeners();
+
+    final message = outcome.ok
+        ? mode == MappingVerificationMode.moveOnly
+              ? '${point.label} 위치 도착이 확인되었습니다. 실제 버튼 중심과 맞는지 확인해 주세요.'
+              : '${point.label} 버튼 누름이 확인되었습니다.'
+        : outcome.message;
+    await _tts.speak(message, priority: TtsPriority.result);
+    final execution = PointVerificationExecution(
+      ok: outcome.ok,
+      message: message,
       buttonId: point.id,
+      label: point.label,
+      mode: mode,
+      targetXmm: target.xMm,
+      targetYmm: target.yMm,
+      controllerErrorMm: outcome.positionErrorMm,
+      failure: outcome.ok ? null : outcome.failure.name,
     );
-
-    if (result.ok) {
-      await _tts.speak('${point.label} 위치를 테스트합니다.', priority: TtsPriority.result);
-      return '${point.label} 테스트 명령 전송';
-    }
-    // message는 BT-xx 등 내부 용어가 섞인 개발자용 문구다 — 사용자에게는
-    // userMessage(기술용어 비노출 원칙)를 읽어준다.
-    await _tts.speak(result.userMessage, priority: TtsPriority.result);
-    return result.userMessage;
+    if (!execution.ok) await _recordFailedExecution(execution);
+    return execution;
   }
 
-  Future<String> testAllPoints() async {
-    if (_points.isEmpty) return '테스트할 버튼이 없습니다.';
-    if (!BleService.instance.isConnected) {
-      await _tts.speak('기기가 연결되어 있지 않습니다. 기기 전원과 연결 상태를 확인한 뒤 다시 시도해 주세요.');
-      return 'BLE 미연결';
+  Future<MappingVerificationRecord?> recordVerification({
+    required PointVerificationExecution execution,
+    required bool passed,
+    double? measuredErrorXmm,
+    double? measuredErrorYmm,
+    String? note,
+  }) async {
+    if (execution.targetXmm == null || execution.targetYmm == null) return null;
+    final hasX = measuredErrorXmm != null;
+    final hasY = measuredErrorYmm != null;
+    if (hasX != hasY ||
+        (measuredErrorXmm != null && !measuredErrorXmm.isFinite) ||
+        (measuredErrorYmm != null && !measuredErrorYmm.isFinite)) {
+      throw ArgumentError('실측 X/Y 오차는 둘 다 유한한 숫자로 입력해야 합니다.');
     }
-
-    final baseProfile = await DeviceMappingService.instance.load(deviceId);
-    final map = <String, ({int row, int col})>{};
-    final positions = <String, ({double x, double y})>{};
-    final labels = <String, String>{};
-    final usedIds = <String>{};
-
-    for (final point in _points) {
-      final btId = _buttonIdForPoint(point, usedIds: usedIds);
-      if (btId == null) continue;
-      usedIds.add(btId);
-      map[btId] = (
-        row: (point.position.dy * _mappingRows).floor().clamp(
-          0,
-          _mappingRows - 1,
-        ),
-        col: (point.position.dx * _mappingCols).floor().clamp(
-          0,
-          _mappingCols - 1,
-        ),
-      );
-      positions[btId] = (
-        x: point.position.dx.clamp(0.0, 1.0),
-        y: point.position.dy.clamp(0.0, 1.0),
-      );
-      labels[btId] = point.label;
-    }
-
-    final testProfile = DeviceMappingProfile(
-      rows: _mappingRows,
-      cols: _mappingCols,
-      originX: baseProfile.originX,
-      originY: baseProfile.originY,
-      pitchX: baseProfile.pitchX,
-      pitchY: baseProfile.pitchY,
-      buttonMap: map,
-      buttonPositions: positions,
-      customLabels: labels,
-      imagePath: imagePath,
+    final record = MappingVerificationRecord(
+      id: 'verify-${DateTime.now().microsecondsSinceEpoch}',
+      buttonId: execution.buttonId,
+      label: execution.label,
+      mode: execution.mode,
+      targetXmm: execution.targetXmm!,
+      targetYmm: execution.targetYmm!,
+      executionOk: execution.ok,
+      userPassed: passed,
+      controllerErrorMm: execution.controllerErrorMm,
+      measuredErrorXmm: measuredErrorXmm,
+      measuredErrorYmm: measuredErrorYmm,
+      failure: execution.failure,
+      note: note?.trim(),
+      createdAt: DateTime.now(),
     );
-
-    await _tts.speak('전체 버튼 테스트를 시작합니다.');
-    final results = await MappingExecutionService.instance.testAllButtons(
-      deviceId: deviceId,
-      profile: testProfile,
-    );
-    MappingExecutionResult? failed;
-    for (final result in results) {
-      if (!result.ok) {
-        failed = result;
-        break;
-      }
-    }
-    if (failed != null) {
-      // 내부 ID(BT-xx) 대신 사용자가 붙인 라벨로 안내한다.
-      final failedLabel = labels[failed.buttonId] ?? '해당';
-      await _tts.speak(
-        '테스트에 실패했습니다. $failedLabel 버튼 위치를 다시 조정하세요.',
-        priority: TtsPriority.result,
+    await MappingVerificationService.instance.add(deviceId, record);
+    _verificationRecords = [..._verificationRecords, record];
+    if (_verificationRecords.length >
+        MappingVerificationService.maxRecordsPerDevice) {
+      _verificationRecords = _verificationRecords.sublist(
+        _verificationRecords.length -
+            MappingVerificationService.maxRecordsPerDevice,
       );
-      return failed.userMessage;
     }
-    await _tts.speak('전체 버튼 테스트 명령을 전송했습니다.', priority: TtsPriority.result);
-    return '전체 ${results.length}개 버튼 테스트 명령 전송';
+    notifyListeners();
+    return record;
   }
+
+  Future<MappingVerificationRecord?> _recordFailedExecution(
+    PointVerificationExecution execution,
+  ) => recordVerification(execution: execution, passed: false);
 
   void clearPoints() {
+    final hadCalibration = _panelCalibration != null;
     _points.clear();
-    _redMarkerPosition = null;
+    _calibrationCorners.clear();
+    _panelCalibration = null;
+    if (hadCalibration) {
+      final revision = ++_calibrationRevision;
+      unawaited(_invalidateSavedCalibration('mapping_cleared', revision));
+    }
     notifyListeners();
   }
 
@@ -470,31 +797,12 @@ class PhotoMappingViewModel extends ChangeNotifier {
   }
 
   Future<String> save() async {
-    // 저장 전 셀 충돌 검사: 서로 다른 버튼이 같은 그리드 셀로 양자화되면
-    // 하드웨어는 같은 지점을 누른다("시작" 자리에서 "취소"가 눌리는 최악의
-    // 오작동). 침묵 저장하지 않고 보호자에게 조정을 요구한다.
-    final collisions = MappingCoordinateService.detectCellCollisions(
-      points: [
-        for (final p in _points)
-          (label: p.label, x: p.position.dx, y: p.position.dy),
-      ],
-      rows: _mappingRows,
-      cols: _mappingCols,
-    );
-    if (collisions.isNotEmpty) {
-      final desc = collisions.map((g) => g.join('·')).join(', ');
-      final msg =
-          '버튼 위치가 서로 너무 가까워 같은 칸에 겹칩니다: $desc. '
-          '그리드 행·열을 늘리거나 겹친 버튼 위치를 조정한 뒤 다시 저장해 주세요.';
-      await _tts.speak(
-        msg,
-        source: 'PhotoMappingScreen',
-        interrupt: true,
-        priority: TtsPriority.result,
-      );
-      return msg;
+    final calibration = _panelCalibration;
+    if (calibration == null) {
+      const message = '패널 모서리와 실제 크기를 먼저 보정해 주세요.';
+      await _tts.speak(message);
+      return message;
     }
-
     _isUploading = true;
     notifyListeners();
 
@@ -523,6 +831,16 @@ class PhotoMappingViewModel extends ChangeNotifier {
         customLabels[btId] = point.label;
       }
 
+      final calibrated = MappingCalibrationService.calculate(
+        calibration: calibration,
+        buttonPositions: positions,
+      );
+      if (!calibrated.isValid) {
+        final message = _userFacingCalibrationErrors(calibrated.errors);
+        await _tts.speak(message, priority: TtsPriority.result);
+        return message;
+      }
+
       final newProfile = DeviceMappingProfile(
         rows: rows,
         cols: cols,
@@ -532,7 +850,16 @@ class PhotoMappingViewModel extends ChangeNotifier {
         pitchY: profile.pitchY,
         buttonMap: map,
         buttonPositions: positions,
+        buttonMachinePositions: calibrated.machinePositions,
+        panelCalibration: calibration,
         customLabels: customLabels,
+        homeRow: profile.homeRow,
+        homeCol: profile.homeCol,
+        travelHeightZ: profile.travelHeightZ,
+        pressDepthZ: profile.pressDepthZ,
+        travelFeed: profile.travelFeed,
+        pressFeed: profile.pressFeed,
+        dwellSeconds: profile.dwellSeconds,
         imagePath: imagePath,
       );
 

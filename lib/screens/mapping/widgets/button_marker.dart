@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
+import '../../../theme/app_colors.dart';
+
 class ButtonMarker extends StatelessWidget {
   final int index;
   final String label;
@@ -27,7 +29,7 @@ class ButtonMarker extends StatelessWidget {
     return Semantics(
       button: true,
       label: '버튼 $buttonNumber: $label',
-      hint: '탭하면 테스트 터치, 길게 누르면 이름 변경',
+      hint: '탭하면 작업 메뉴, 길게 누르면 이름 변경',
       customSemanticsActions: {
         const CustomSemanticsAction(label: '이름 변경'): onLongPress,
         const CustomSemanticsAction(label: '테스트 터치'): onTap,
@@ -48,21 +50,29 @@ class ButtonMarker extends StatelessWidget {
                   width: visualSize,
                   height: visualSize,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFEB00).withValues(alpha: 0.9),
+                    color: AppColors.primary.withValues(alpha: 0.9),
                     shape: BoxShape.circle,
                     border: Border.all(color: Colors.white, width: 2 * rs),
-                    boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 8 * rs)],
+                    boxShadow: [
+                      BoxShadow(color: Colors.black54, blurRadius: 8 * rs),
+                    ],
                   ),
                   child: Center(
                     child: Text(
                       '$buttonNumber',
-                      style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18 * rs),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 18 * rs,
+                      ),
                     ),
                   ),
                 ),
                 SizedBox(height: 4 * rs),
                 Container(
-                  padding: EdgeInsets.symmetric(horizontal: 6 * rs, vertical: 2 * rs),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 6 * rs,
+                    vertical: 2 * rs,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.black87,
                     borderRadius: BorderRadius.circular(4 * rs),

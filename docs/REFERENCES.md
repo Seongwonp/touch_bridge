@@ -1,7 +1,9 @@
 # Touch Bridge — 참고문헌 목록
 
-> 정리일: 2026-08-14 | 작성: 3팀 멜론머스크
+> 정리일: 2026-08-14 | 최신 출처 감사: 2026-09-04 | 작성: 3팀 멜론머스크
 > 이 문서는 Touch Bridge 프로젝트의 접근성 설계, 기술 구현, 법적 근거에 사용된 모든 참고자료를 정리한 것입니다.
+> 출처 신뢰도와 2026-09-04 재확인 결과는
+> [SOURCE_AUDIT_2026-09-04.md](SOURCE_AUDIT_2026-09-04.md)를 우선 참고합니다.
 
 ---
 
@@ -10,7 +12,7 @@
 | # | 자료명 | URL |
 |---|--------|-----|
 | 1 | WCAG 2.2 전문 (Web Content Accessibility Guidelines 2.2) | https://www.w3.org/TR/WCAG22/ |
-| 2 | WCAG2Mobile — WCAG 2.2를 모바일 앱에 적용하는 W3C 해석 | https://www.w3.org/TR/wcag2mobile-22/ |
+| 2 | WCAG2Mobile — WCAG 2.2 모바일 적용 참고안 (**비규범 Group Draft Note**) | https://www.w3.org/TR/wcag2mobile-22/ |
 | 3 | WCAG 1.4.3 — 텍스트 명도 대비 (Contrast Minimum, AA 4.5:1) | https://www.w3.org/TR/WCAG22/#contrast-minimum |
 | 4 | WCAG 1.4.6 — 텍스트 명도 대비 강화 (AAA 7:1) | https://www.w3.org/TR/WCAG22/#contrast-enhanced |
 | 5 | WCAG 1.4.11 — 비텍스트 대비 (Non-text Contrast, 3:1) | https://www.w3.org/TR/WCAG22/#non-text-contrast |
@@ -21,6 +23,7 @@
 | 10 | WCAG 4.1.2 — 이름·역할·값 (Name, Role, Value) | https://www.w3.org/TR/WCAG22/#name-role-value |
 | 11 | WCAG 4.1.3 — 상태 메시지 (Status Messages) | https://www.w3.org/TR/WCAG22/#status-messages |
 | 12 | W3C 모바일 접근성 매핑 (Mobile Accessibility Mapping) | https://www.w3.org/TR/mobile-accessibility-mapping/ |
+| 12-A | WCAG 2.5.7 — 드래그 동작의 단일 포인터 대안 | https://www.w3.org/WAI/WCAG22/Understanding/dragging-movements |
 
 ---
 
@@ -123,9 +126,10 @@
 
 | # | 자료명 | URL |
 |---|--------|-----|
-| 57 | Android TalkBack 개발자 가이드 | https://developer.android.com/guide/topics/ui/accessibility |
-| 58 | iOS VoiceOver 개발자 가이드 | https://developer.apple.com/accessibility/ |
-| 59 | Journal of Universal Design — 키오스크 접근성 국내 사례 | https://www.ud4all.or.kr/Content/Journal/Paper_2108/Paper03/UD0101-Paper03.html |
+| 66 | Android TalkBack 개발자 가이드 | https://developer.android.com/guide/topics/ui/accessibility |
+| 67 | iOS VoiceOver 개발자 가이드 | https://developer.apple.com/accessibility/ |
+| 68 | Journal of Universal Design — 키오스크 접근성 국내 사례 | https://www.ud4all.or.kr/Content/Journal/Paper_2108/Paper03/UD0101-Paper03.html |
+| 69 | DFRobot FIT0482 공식 제품 사양 | https://www.dfrobot.com/product-1432.html |
 
 ---
 
@@ -148,6 +152,7 @@
 | WCAG 2.2.1 (시간 제한 조정) | 이중 탭 타임아웃 20초로 통일 (전체 화면, 2026-08-21 최종) | `lib/widgets/primary_button.dart` 외 전체 |
 | WCAG 2.4.3 (포커스 순서) | BottomSheet 열릴 때 첫 요소 자동 포커스 이동 (`addPostFrameCallback`) | `lib/screens/home/widgets/control_mode_sheet.dart`, `lib/screens/settings/device_management_screen.dart` |
 | WCAG 2.5.5 / 2.5.8 (터치 타깃) | 최소 터치 영역 48px 확보 (`.clamp(48.0, double.infinity)` + `HitTestBehavior.opaque`) | `lib/screens/mapping/widgets/button_marker.dart` |
+| WCAG 2.5.7 (드래그 대안) | 모서리·버튼 중심 드래그에 0.5% 단위 상하좌우 버튼 대안 제공 | `lib/screens/mapping/widgets/position_nudge_sheet.dart` |
 | WCAG 4.1.2 (이름·역할·값) | 전체 화면 `Semantics(label, button, value, checked, onTap)` 적용 | 전체 화면 |
 | WCAG 4.1.3 (상태 메시지) | BleStatusBanner에 `Semantics(liveRegion: true)` 적용 — 재연결 상태 자동 낭독 | `lib/widgets/ble_status_banner.dart` |
 | WCAG 4.1.3 (상태 메시지) | 음성 인식 화면 상태 변화 `liveRegion` 처리 | `lib/screens/voice/voice_listening_screen.dart` |
@@ -170,8 +175,8 @@
 | 참고문헌 | 적용한 작업 | 구현 위치 |
 |----------|------------|-----------|
 | KS X 3253 (18개 항목) | 전체 화면 Semantics 트리 점검 및 `header`, `value`, `liveRegion` 적용 | 전체 화면 |
-| 장차법 제21조 (음성명령 지원 의무) | 음성 명령(STT + Gemini AI) 핵심 기능으로 구현 | `lib/screens/voice/voice_listening_screen.dart` |
-| 장차법 제21조 (음성명령 지원 의무) | 가전 3종(전자레인지·세탁기·에어컨) 음성 명령 서비스 확장 | `lib/services/microwave_command_service.dart`, `washing_machine_command_service.dart`, `ac_command_service.dart` |
+| 장차법 제21조 (전자정보 접근·정당한 편의 원칙) | 음성 명령을 정보 접근을 위한 여러 구현 수단 중 하나로 제공. 법이 특정 UI를 직접 의무화한다고 단정하지 않음 | `lib/screens/voice/voice_listening_screen.dart` |
+| 장차법 제21조 (전자정보 접근·정당한 편의 원칙) | 음성 외에도 버튼·TTS·햅틱·화면읽기 경로를 함께 제공 | 가전 명령 서비스 및 접근성 위젯 전반 |
 
 ### 학술 논문 적용
 

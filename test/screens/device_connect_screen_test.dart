@@ -43,6 +43,6 @@ void main() {
     await tester.tap(find.text('ESP32 Hub'));
     await tester.pumpAndSettle();
 
-    expect(find.text('가전 종류 선택'), findsOneWidget);
+    expect(find.text('설치 모드 · 가전 선택'), findsOneWidget);
   });
 }

@@ -8,7 +8,7 @@
 - **공모전:** 2026 한이음 드림업
 - **기간:** 2026.4.1 ~ 2026.10.30
 - **앱 담당:** 박성원 (단독 개발)
-- **작업 브랜치:** `Touch_bridge_b`
+- **통합 브랜치:** `main`
 
 ## 문제 정의
 
@@ -21,15 +21,15 @@
 
 가전 터치패드 위에 **부착하는 IoT 장치**가 스마트폰 앱/음성 명령을 받아 **물리적으로 버튼을 대신 눌러주는** 시스템
 
-## 하드웨어 (현행 — GRBL XYZ 갠트리)
+## 하드웨어 (전환 중 — FIT0482 X/Y + 스위치봇)
 
-- X/Y/Z: `NK1704S` 42각 스텝모터 3개 + `TB6600` 드라이버 3개
-- 제어: `Arduino Uno + GRBL`, 통신: 앱 → BLE → `ESP32` → UART → Uno
-- 전원: 모터 12V 별도 전원, MCU 전원 분리, 공통 GND
-- 상세 기준: `docs/HARDWARE_MIGRATION_PLAN.md` (NK1704S+TB6600+GRBL 버전),
-  구조 연구: `docs/HARDWARE_FRAME_MODEL_RESEARCH.md`, `docs/DAGUIRRE_COMPACT_REDESIGN.md`
-- (과거의 키캡/SG90/CoreXY 3단계 전략은 폐기 — CoreXY는 클래식 GRBL과 충돌해
-  기각됨. 구버전 계획은 `docs/archive/` 참조)
+- X/Y 후보 확정 방향: `FIT0482` 엔코더 DC 기어모터 2개, ESP32 폐루프 PID
+- 누름부: 별도 Z축 대신 스위치봇 사용
+- X/Y 원점 리미트 스위치와 목표 도달 ACK 필수
+- 기존 `NK1704S + TB6600 + Arduino Uno GRBL XYZ` 코드는 호환 경로로 남아 있으며
+  신규 구조로 마이그레이션 중이다.
+- 신규 기준: `docs/XY_SWITCHBOT_SOFTWARE_PLAN.md`
+- 구 GRBL 계획: `docs/HARDWARE_MIGRATION_PLAN.md`
 
 ## Flutter 앱 — 기술 스택
 
@@ -75,7 +75,7 @@ lib/
 │   │   ├── device_connect_screen.dart     # 기기 연결 (QR/BLE/NFC)
 │   │   └── qr_scan_screen.dart            # QR 스캔 (현재 비활성 — 정직한 안내 화면)
 │   └── mapping/
-│       ├── photo_mapping_screen.dart      # 유동 rows×cols 버튼 매핑 (기기별 저장)
+│       ├── photo_mapping_screen.dart      # 정규화 중심 + 4점 투영 + 실제 mm 버튼 매핑
 │       ├── manual_mapping_screen.dart
 │       ├── photo_mapping_view_model.dart  # ChangeNotifier — AI매핑/저장/BLE업로드 상태 (분리 안 함, 전담 테스트 없어서 보존)
 │       └── widgets/                       # calibration_prompt, mapping_image_view, mapping_markers_layer,
@@ -105,7 +105,11 @@ lib/
 ## 핵심 UX 패턴
 
 ### 이중 탭 확인 (Double-tap Confirmation)
-모든 중요한 액션은 두 번 탭해야 실행됨. 20초 내 두 번째 탭이 없으면 자동 취소 (WCAG 2.2.1, 앱 전체 통일 — 2026-08-21).
+위험하거나 되돌리기 어려운 액션은 두 번 탭해야 실행됨. 20초 내 두 번째 탭이 없으면 자동 취소
+(WCAG 2.2.1, 앱 전체 통일 — 2026-08-21). 단, TalkBack/VoiceOver 활성 시
+단순 화면 이동은 OS의 선택 후 두 번 탭과 앱 확인이 중첩되지 않도록 앱 확인을
+생략한다. 물리 동작·삭제 확인은 화면읽기 사용 여부와 무관하게 유지한다
+(`accessibility_confirmation_policy.dart`, 2026-09-04).
 ```
 1탭: "XXX 버튼입니다. 한 번 더 누르면 실행합니다." + 햅틱 medium
 20초 타임아웃 → 자동 취소
@@ -132,8 +136,10 @@ lib/
 
 ### 버튼 매핑 (PhotoMappingScreen)
 - `deviceId` / `deviceName` 파라미터로 기기별 독립 저장
-- SharedPreferences 키: `mapping_grid_<deviceId>`, `mapping_device_type_<deviceId>`
-- 전역(기기 미지정) 키: `mapping_grid_global`
+- SharedPreferences 프로필 키: `mapping_profile_<deviceId>` (`schemaVersion: 3`)
+- 사진의 패널 모서리를 좌상단→우상단→우하단→좌하단 순서로 지정하고 실제 폭·높이(mm)를 입력
+- 4점 투영변환 결과를 `buttonMachinePositions`에 저장하며, 행/열 좌표는 레거시 호환용
+- 사진 경로·크기·수정시각이 바뀌면 실제 mm 좌표와 캘리브레이션을 자동 무효화
 - 홈 화면 롱프레스 → "버튼 매핑" 선택 시 기기명 전달하며 진입
 - 기존 `mapping_grid_<deviceName>` 데이터는 홈 로드시 `deviceId` 키로 자동 마이그레이션
 
@@ -294,7 +300,7 @@ BLE 연동 구현 파일: `lib/services/ble_service.dart`
 
 ### 완료 ✅
 - [x] 앱 기본 구조 및 4탭 네비게이션
-- [x] 이중 탭 확인 패턴 (모든 화면)
+- [x] 위험도 기반 이중 탭 확인 패턴 (스크린리더 단순 이동은 중복 확인 생략)
 - [x] TTS 서비스 (Singleton, 한국어, 설정 영속화)
 - [x] STT + Gemini AI 음성 명령 (침묵 감지(기본 8초, 설정 5~15초) 포함)
 - [x] 비상 정지 화면 (3초 홀드 + 음성)
@@ -303,8 +309,8 @@ BLE 연동 구현 파일: `lib/services/ble_service.dart`
 - [ ] QR 스캔 재활성화 (mobile_scanner 의존성 제거로 현재 비활성 — 안내 화면으로 대체)
 - [x] NFC 태그 기기 등록 (nfc_manager — NDEF 텍스트 → 기기 코드)
 - [x] 비상 연락처 실제 전화 연결 (url_launcher tel: — 다이얼러 프리필, 발신은 사용자 확정)
-- [x] 사진 매핑 화면 (Gemini Vision + 유동 rows×cols 그리드)
-- [x] Semantics 접근성 태그 전체 적용 (WCAG 2.2 AA/AAA, KS X 3253 준수)
+- [x] 사진 매핑 화면 (Gemini Vision 정규화 중심 + 4점 투영 + 실제 mm 저장)
+- [x] Semantics 접근성 태그와 드래그 대체 조작 적용 (WCAG 2.2·플랫폼 지침 참고)
 - [x] SharedPreferences 설정·기기목록·버튼매핑 영속화
 - [x] 기기 목록 동적 관리 (추가/수정/삭제)
 - [x] 기기별 버튼 매핑 독립 저장
@@ -328,7 +334,7 @@ BLE 연동 구현 파일: `lib/services/ble_service.dart`
 - [x] 가전 음성 명령 확장 — `WashingMachineCommandService`, `AcCommandService`, `ApplianceCommandRouter`
 - [x] 기기 타입별 라우팅 — `ActiveDeviceService.getActiveDeviceType()`, 기기 등록 시 `deviceType` 저장
 - [x] BottomSheet 포커스 관리 — `FocusNode.requestFocus()` in `addPostFrameCallback`, TalkBack 첫 요소 자동 포커스
-- [x] 단위 테스트 160개 자동화 (BLE 재연결 16개 + 가전 명령 라우터 25개 추가)
+- [x] Flutter 자동화 테스트 306개 통과 (2026-09-04)
 - [x] TalkBack 핵심 경로 차단 해소 — PageView 잠금, CustomSemanticsAction 음성 진입, autoStart 통일
 - [x] WCAG 2.2.1 타임아웃 20초 준수 (4곳)
 - [x] 200% 폰트 확대 대응 — `minHeight` 확산 적용 (6곳)
@@ -343,12 +349,12 @@ BLE 연동 구현 파일: `lib/services/ble_service.dart`
 - [ ] **BLE 실기기 E2E 검증** — 실제 ESP32에 연결해 `sendPress()` / `sendEmergencyStop()` 동작 확인
   - 확인 항목: ACK 수신, 타임아웃 처리, 재연결 후 명령 재전송
   - 파일: `lib/services/ble_service.dart`, `lib/services/mapping_execution_service.dart`
-- [ ] **GRBL G-code 응답 번역** — Arduino가 보내는 `ok` / `error:N` / `<Idle|...>` 메시지를 한국어 TTS로 변환
-  - 파일: `lib/services/ble_service.dart`의 notification 핸들러 (`_notifySub`)
+- [ ] **ESP32 모션 v2 상태 번역·실기 검증** — `homing/moving/positioned/pressing/completed/error` 상태와 ACK를 한국어 TTS로 전달
+  - 파일: `lib/services/ble_service.dart`, `lib/services/esp32_motion_protocol.dart`
 - [ ] **자동 재연결 타이머 통합 테스트** — 실기기에서 전원을 껐다 켰을 때 2→4→8초 백오프 정상 동작 확인
   - 파일: `lib/services/ble_service.dart:_maybeScheduleReconnect()`
-- [ ] **버튼 매핑 물리 좌표 보정** — 기기마다 달라지는 X/Y offset 값을 보정할 수 있는 캘리브레이션 UI
-  - 파일: `lib/screens/mapping/manual_mapping_screen.dart`
+- [x] **버튼 매핑 물리 좌표 보정** — 네 모서리 투영 보정과 버튼별 X/Y mm 저장·미세 조정 UI
+  - 파일: `lib/screens/mapping/photo_mapping_screen.dart`, `lib/services/mapping_calibration_service.dart`
 
 ### 중요 (하드웨어 1차 검증 후)
 - [ ] **기기 상태 실시간 모니터링** — ESP32에서 전류·온도 센서 데이터를 BLE notify로 수신해 화면에 표시

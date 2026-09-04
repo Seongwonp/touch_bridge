@@ -12,6 +12,7 @@ import '../../widgets/top_app_bar.dart';
 import '../../theme/app_colors.dart';
 import '../mapping/manual_mapping_screen.dart';
 import '../mapping/photo_mapping_screen.dart';
+import 'widgets/camera_alignment_guide.dart';
 
 IconData _iconForApplianceType(ApplianceType type) {
   switch (type) {
@@ -105,6 +106,12 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
     if (choice == null) return null; // 시트 dismiss = 취소
     if (choice == 2) return (path: null, useSample: true); // 샘플 이미지로 진행
 
+    if (choice == 0) {
+      if (!context.mounted) return null;
+      final ready = await showCameraAlignmentGuide(context);
+      if (!ready) return null;
+    }
+
     try {
       // [CRITICAL] iOS 리소스 격리: 모든 고부하 작업 중지
       await _tts.stop();
@@ -196,7 +203,7 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
 
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: const TopAppBar(title: '가전 종류 선택', showBack: true),
+      appBar: const TopAppBar(title: '설치 모드 · 가전 선택', showBack: true),
       body: ListView.builder(
         padding: EdgeInsets.all(20 * rs),
         itemCount: recommendations.length,

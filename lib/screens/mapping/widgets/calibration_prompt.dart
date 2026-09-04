@@ -3,9 +3,16 @@ import '../../../theme/app_colors.dart';
 
 /// 매핑 화면에서 기준점(원점)이 아직 지정되지 않았을 때 보여주는 안내 오버레이.
 class CalibrationPrompt extends StatelessWidget {
-  const CalibrationPrompt({super.key, required this.scale});
+  const CalibrationPrompt({
+    super.key,
+    required this.scale,
+    required this.selectedCount,
+    required this.needsDimensions,
+  });
 
   final double scale;
+  final int selectedCount;
+  final bool needsDimensions;
 
   @override
   Widget build(BuildContext context) {
@@ -22,10 +29,14 @@ class CalibrationPrompt extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.gps_fixed_rounded, color: AppColors.primary, size: 40 * scale),
+            Icon(
+              Icons.gps_fixed_rounded,
+              color: AppColors.primary,
+              size: 40 * scale,
+            ),
             SizedBox(height: 16 * scale),
             Text(
-              '초기 위치 설정 (Calibration)',
+              '패널 4점 보정',
               style: TextStyle(
                 color: AppColors.primary,
                 fontSize: 18 * scale,
@@ -35,7 +46,9 @@ class CalibrationPrompt extends StatelessWidget {
             ),
             SizedBox(height: 8 * scale),
             Text(
-              '가전기기의 기준점(0,0) 위치를\n이미지 위에서 터치해 주세요.',
+              needsDimensions
+                  ? '모서리 4개를 지정했습니다.\n아래에서 실제 패널 크기를 입력하세요.'
+                  : '좌상단 → 우상단 → 우하단 → 좌하단 순서로\n모서리를 터치하세요. ($selectedCount/4)',
               style: TextStyle(
                 color: AppColors.textPrimary,
                 fontSize: 14 * scale,

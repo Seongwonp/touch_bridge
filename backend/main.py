@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from prompts import MICROWAVE_SYSTEM_PROMPT
 from microwave_logic import infer_food_command, check_simple_rules
 from database import init_db, get_device_profile
-from validation import sanitize_command_response
+from validation import sanitize_command_response, sanitize_vision_mapping_response
 
 # .env 파일 로드
 load_dotenv()
@@ -258,17 +258,21 @@ async def vision_mapping(image: UploadFile = File(...)):
         mime_type = "image/jpeg"
 
     prompt = """
-이 이미지는 가전기기의 터치패드 사진입니다. 버튼들을 분석하여 rows×cols 그리드에 매핑해주세요.
+이 이미지는 가전기기의 터치패드 사진입니다. 각 버튼의 실제 중심점을 찾아주세요.
+좌표 x, y는 이미지 전체 너비와 높이를 각각 0~1로 정규화한 버튼 중심 좌표입니다.
+row/col은 보조 분류값일 뿐이며 x/y를 대신할 수 없습니다.
+잘 보이지 않는 버튼을 추측해서 만들지 말고 confidence를 낮게 반환하세요.
 반드시 아래 JSON 형식으로만 응답하세요:
 {
   "grid": {"rows": 3, "cols": 3},
   "device_type": "전자레인지",
   "description": "분석된 기기 설명",
   "buttons": [
-    {"row": 0, "col": 0, "button_id": "BT-05", "label": "시작"},
+    {"row": 0, "col": 0, "button_id": "BT-05", "label": "시작", "x": 0.73, "y": 0.62, "confidence": 0.94},
     ...
   ]
 }
+모든 x, y, confidence는 반드시 0.0 이상 1.0 이하 숫자여야 합니다.
 """
     try:
         response = await asyncio.wait_for(
@@ -290,7 +294,7 @@ async def vision_mapping(image: UploadFile = File(...)):
             logger.error("JSON 파싱 실패: %s", text[:200])
             raise HTTPException(status_code=500, detail="AI 응답 형식이 올바르지 않습니다.")
 
-        return data
+        return sanitize_vision_mapping_response(data)
     except asyncio.TimeoutError:
         logger.error("Vision 분석 타임아웃")
         raise HTTPException(status_code=504, detail="이미지 분석 시간이 초과되었습니다.")

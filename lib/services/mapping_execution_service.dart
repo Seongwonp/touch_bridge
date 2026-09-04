@@ -92,8 +92,14 @@ class MappingExecutionService {
       );
     }
 
-    final x = calculateX(profile: profile, col: resolved.col);
-    final y = calculateY(profile: profile, row: resolved.row);
+    final machinePosition = resolveMachinePosition(
+      profile: profile,
+      buttonId: buttonId,
+      row: resolved.row,
+      col: resolved.col,
+    );
+    final x = machinePosition.x;
+    final y = machinePosition.y;
     final gcode = buildPressGcode(profile: profile, x: x, y: y);
     final btnNumber = resolved.row * profile.cols + resolved.col + 1;
 
@@ -257,7 +263,8 @@ class MappingExecutionService {
       }
       return MappingExecutionResult(
         ok: false,
-        message: '$buttonId 물리 좌표 전송 실패'
+        message:
+            '$buttonId 물리 좌표 전송 실패'
             '${zDown ? ' (Z복구: ${recovered ? '성공' : '실패'})' : ''}',
         buttonId: buttonId,
         x: targetX,
@@ -302,28 +309,6 @@ class MappingExecutionService {
     );
   }
 
-  Future<List<MappingExecutionResult>> testAllButtons({
-    required String deviceId,
-    required DeviceMappingProfile profile,
-    Duration betweenPressDelay = const Duration(milliseconds: 900),
-    bool dryRun = false,
-  }) async {
-    final ids = profile.buttonMap.keys.toList()..sort();
-    final results = <MappingExecutionResult>[];
-    for (final buttonId in ids) {
-      final result = await pressButton(
-        deviceId: deviceId,
-        profile: profile,
-        buttonId: buttonId,
-        dryRun: dryRun,
-      );
-      results.add(result);
-      if (!result.ok) break;
-      await Future<void>.delayed(betweenPressDelay);
-    }
-    return results;
-  }
-
   ({int row, int col})? resolveButton({
     required DeviceMappingProfile profile,
     required String buttonId,
@@ -353,6 +338,24 @@ class MappingExecutionService {
     required DeviceMappingProfile profile,
     required int row,
   }) => profile.originY + (row * profile.pitchY);
+
+  /// 버튼의 실제 장치 좌표(mm)를 결정한다.
+  ///
+  /// 사진 캘리브레이션으로 확정된 좌표가 있으면 이를 최우선 사용한다. 구버전
+  /// 프로필처럼 실제 좌표가 없을 때만 rows/cols 그리드 계산으로 폴백한다.
+  ({double x, double y}) resolveMachinePosition({
+    required DeviceMappingProfile profile,
+    required String buttonId,
+    required int row,
+    required int col,
+  }) {
+    final exact = profile.buttonMachinePositions[buttonId];
+    if (exact != null) return (x: exact.xMm, y: exact.yMm);
+    return (
+      x: calculateX(profile: profile, col: col),
+      y: calculateY(profile: profile, row: row),
+    );
+  }
 
   List<String> buildPressGcode({
     required DeviceMappingProfile profile,
