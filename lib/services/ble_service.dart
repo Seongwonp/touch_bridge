@@ -39,6 +39,9 @@ class BleService {
   /// 상태를 보내므로 이 broadcast 스트림에서 commandId가 같은 응답만 추적한다.
   final _responseController = StreamController<String>.broadcast();
   Stream<String> get responseStream => _responseController.stream;
+  final _stopRequests = StreamController<String>.broadcast(sync: true);
+  int _motionEpoch = 0;
+  Stream<String> get stopRequests => _stopRequests.stream;
 
   final _connectionStateController =
       StreamController<BluetoothConnectionState>.broadcast();
@@ -285,6 +288,7 @@ class BleService {
       sub = target.connectionState.listen((state) {
         if (!identical(sub, _connectionSub)) return; // 교체된 옛 구독이면 무시
         _connectionStateController.add(state);
+        if (state == BluetoothConnectionState.disconnected) _motionEpoch++;
         _addLog('연결 상태 변경: ${state.name}');
         if (state == BluetoothConnectionState.disconnected) {
           _connectedDevice = null;
@@ -371,6 +375,7 @@ class BleService {
   }
 
   Future<void> disconnect() async {
+    _motionEpoch++;
     // 명시적 해제 → 자동 재연결 완전 중단. null이 돼야 _maybeScheduleReconnect가 조기 반환.
     _reconnectTimer?.cancel();
     _autoReconnectTargetId = null;
@@ -509,6 +514,7 @@ class BleService {
   /// v2 JSON 명령을 전송만 한다. 상태 완료 여부는 [responseStream]에서
   /// 동일한 commandId를 추적하는 상위 모션 계층이 판단한다.
   Future<bool> sendProtocolPayload(Map<String, dynamic> payload) async {
+    final epoch = _motionEpoch;
     if (_demoMode) {
       _addLog('DEMO SEND_V2: ${payload['action']}');
       return true;
@@ -526,6 +532,10 @@ class BleService {
 
     final json = jsonEncode(payload);
     return _withCommandLock(() async {
+      if (epoch != _motionEpoch || !identical(c, _commandCharacteristic)) {
+        _addLog('CANCELLED_V2: connection/stop changed');
+        return false;
+      }
       _addLog('SEND_V2: $json');
       try {
         await c.write(utf8.encode(json), withoutResponse: false);
@@ -750,6 +760,9 @@ class BleService {
   /// 호출부는 이 값을 [EmergencyStopOutcome.fromAck]로 해석해 사용자에게
   /// 정직한 상태(멈춤 확인 vs 전송만 됨 vs 실패)를 안내해야 한다.
   Future<String> sendEmergencyStop(String deviceId) async {
+    _motionEpoch++;
+    // 정지 확인 여부와 무관하게 이미 준비된 앱 작업부터 폐기한다.
+    _stopRequests.add(deviceId);
     if (_priorityStopOverride != null) {
       return _priorityStopOverride!(deviceId);
     }

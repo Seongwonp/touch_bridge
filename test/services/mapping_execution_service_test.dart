@@ -5,6 +5,44 @@ import 'package:touch_bridge/services/device_mapping_service.dart';
 import 'package:touch_bridge/services/mapping_execution_service.dart';
 
 void main() {
+  test('보정 무효화는 JSON 왕복 후에도 그리드 폴백과 BLE 전송을 차단한다', () async {
+    const original = DeviceMappingProfile(
+      rows: 3,
+      cols: 3,
+      originX: 0,
+      originY: 0,
+      pitchX: 10,
+      pitchY: 10,
+      buttonMap: {'BT-05': (row: 1, col: 1)},
+      buttonMachinePositions: {'BT-05': (xMm: 15, yMm: 16)},
+    );
+    final invalid = DeviceMappingProfile.fromJson(
+      DeviceMappingService.invalidatePanelCalibration(original).toJson(),
+    );
+    var writes = 0;
+    BleService.instance.setSendRawOverride((_) async {
+      writes++;
+      return true;
+    });
+    addTearDown(() => BleService.instance.setSendRawOverride(null));
+    final result = await MappingExecutionService.instance.pressButton(
+      deviceId: 'd',
+      profile: invalid,
+      buttonId: 'BT-05',
+    );
+    expect(result.ok, isFalse);
+    expect(result.userMessage, contains('재보정'));
+    expect(writes, 0);
+    expect(
+      () => MappingExecutionService.instance.resolveMachinePosition(
+        profile: invalid,
+        buttonId: 'BT-05',
+        row: 1,
+        col: 1,
+      ),
+      throwsStateError,
+    );
+  });
   group('MappingExecutionService.resolveMachinePosition', () {
     test('버튼별 실제 mm 좌표가 있으면 그리드 좌표보다 우선한다', () {
       const profile = DeviceMappingProfile(

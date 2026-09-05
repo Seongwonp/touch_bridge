@@ -140,6 +140,8 @@ lib/
 - 사진의 패널 모서리를 좌상단→우상단→우하단→좌하단 순서로 지정하고 실제 폭·높이(mm)를 입력
 - 4점 투영변환 결과를 `buttonMachinePositions`에 저장하며, 행/열 좌표는 레거시 호환용
 - 사진 경로·크기·수정시각이 바뀌면 실제 mm 좌표와 캘리브레이션을 자동 무효화
+- 무효화 여부는 `calibrationInvalidated`로 영속화하며, 재보정 전 일반 제어의 그리드 폴백도 차단한다 (2026-09-05).
+- 모션 컨트롤러는 대기 중 연결 끊김도 감시하고 정지·연결 변경 시 이전 작업을 취소한다. 타임아웃은 정지 확인으로 안내하지 않는다. 화면 종료 시 `dispose()` 필수.
 - 홈 화면 롱프레스 → "버튼 매핑" 선택 시 기기명 전달하며 진입
 - 기존 `mapping_grid_<deviceName>` 데이터는 홈 로드시 `deviceId` 키로 자동 마이그레이션
 
@@ -334,7 +336,7 @@ BLE 연동 구현 파일: `lib/services/ble_service.dart`
 - [x] 가전 음성 명령 확장 — `WashingMachineCommandService`, `AcCommandService`, `ApplianceCommandRouter`
 - [x] 기기 타입별 라우팅 — `ActiveDeviceService.getActiveDeviceType()`, 기기 등록 시 `deviceType` 저장
 - [x] BottomSheet 포커스 관리 — `FocusNode.requestFocus()` in `addPostFrameCallback`, TalkBack 첫 요소 자동 포커스
-- [x] Flutter 자동화 테스트 306개 통과 (2026-09-04)
+- [x] Flutter 자동화 테스트 316개 통과 (2026-09-05, 모션·매핑 안전 회귀 10건 추가)
 - [x] TalkBack 핵심 경로 차단 해소 — PageView 잠금, CustomSemanticsAction 음성 진입, autoStart 통일
 - [x] WCAG 2.2.1 타임아웃 20초 준수 (4곳)
 - [x] 200% 폰트 확대 대응 — `minHeight` 확산 적용 (6곳)

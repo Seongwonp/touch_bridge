@@ -79,6 +79,16 @@ class MappingExecutionService {
     Duration afterGridDelay = const Duration(milliseconds: 250),
     bool dryRun = false,
   }) async {
+    if (profile.calibrationInvalidated) {
+      AppLogger.warn('mapping.press.calibration_invalidated', {
+        'device_id': deviceId,
+      });
+      return const MappingExecutionResult(
+        ok: false,
+        message: 'Calibration invalidated; execution blocked.',
+        explicitUserMessage: '버튼 위치 보정이 필요합니다. 보호자에게 재보정을 요청하세요.',
+      );
+    }
     final resolved = resolveButton(profile: profile, buttonId: buttonId);
     if (resolved == null) {
       AppLogger.warn('mapping.press.no_position', {
@@ -350,6 +360,9 @@ class MappingExecutionService {
     required int col,
   }) {
     final exact = profile.buttonMachinePositions[buttonId];
+    if (profile.calibrationInvalidated) {
+      throw StateError('Invalidated calibration cannot resolve a target.');
+    }
     if (exact != null) return (x: exact.xMm, y: exact.yMm);
     return (
       x: calculateX(profile: profile, col: col),

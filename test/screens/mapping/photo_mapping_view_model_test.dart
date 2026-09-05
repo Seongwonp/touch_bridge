@@ -10,6 +10,19 @@ import 'package:touch_bridge/services/mapping_verification_service.dart';
 import 'package:touch_bridge/services/motion_controller.dart';
 
 void main() {
+  test('홈 대기 중 화면을 닫으면 종료된 모델에 알리지 않는다', () async {
+    final sent = Completer<void>();
+    final transport = _FakeMotionTransport()
+      ..onSend = (_, _) => sent.complete();
+    final vm = PhotoMappingViewModel(
+      deviceId: 'disposed',
+      motionTransport: transport,
+    );
+    final pending = vm.homeMotion();
+    await sent.future;
+    vm.dispose();
+    expect(await pending, contains('취소'));
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
@@ -419,6 +432,8 @@ typedef _OnSend =
     );
 
 class _FakeMotionTransport implements MotionTransport {
+  @override
+  Stream<String> get stopRequests => const Stream<String>.empty();
   final _statuses = StreamController<Esp32MotionStatus>.broadcast(sync: true);
   final _connections = StreamController<bool>.broadcast(sync: true);
   final sent = <Esp32MotionCommand>[];

@@ -42,6 +42,7 @@ class MotionOutcome {
 abstract interface class MotionTransport {
   bool get isConnected;
   Stream<bool> get connectionStates;
+  Stream<String> get stopRequests;
   Stream<Esp32MotionStatus> get statuses;
   Future<bool> send(Esp32MotionCommand command);
   Future<String> sendPriorityStop(String deviceId);
@@ -49,6 +50,8 @@ abstract interface class MotionTransport {
 
 abstract interface class MotionController {
   bool get isHomed;
+  int get safetyEpoch;
+  void dispose();
 
   Future<MotionOutcome> home({
     required String deviceId,
@@ -84,6 +87,8 @@ class BleMotionTransport implements MotionTransport {
 
   @override
   Stream<bool> get connectionStates => _ble.isConnectedStream;
+  @override
+  Stream<String> get stopRequests => _ble.stopRequests;
 
   @override
   Stream<Esp32MotionStatus> get statuses => _ble.responseStream
@@ -105,11 +110,48 @@ class Esp32MotionController implements MotionController {
     required MotionTransport transport,
     String Function()? commandIdFactory,
   }) : _transport = transport,
-       _commandIdFactory = commandIdFactory ?? _defaultCommandId;
+       _commandIdFactory = commandIdFactory ?? _defaultCommandId {
+    _connectionSub = _transport.connectionStates.listen((connected) {
+      if (!connected) _invalidate(MotionFailure.disconnected);
+    });
+    _stopSub = _transport.stopRequests.listen((_) {
+      _invalidate(MotionFailure.stopped);
+    });
+  }
 
   final MotionTransport _transport;
   final String Function() _commandIdFactory;
   bool _isHomed = false;
+  String? _homedDeviceId;
+  int _epoch = 0;
+  bool _disposed = false;
+  late final StreamSubscription<bool> _connectionSub;
+  late final StreamSubscription<String> _stopSub;
+  Completer<MotionOutcome>? _active;
+  String _activeId = '';
+  @override
+  int get safetyEpoch => _epoch;
+
+  void _invalidate(MotionFailure reason) {
+    _epoch++;
+    _isHomed = false;
+    _homedDeviceId = null;
+    final active = _active;
+    if (active != null && !active.isCompleted) {
+      active.complete(_failure(_activeId, reason));
+    }
+    AppLogger.warn('motion.safety.invalidated', {'reason': reason.name});
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _invalidate(MotionFailure.stopped);
+    unawaited(_connectionSub.cancel());
+    unawaited(_stopSub.cancel());
+  }
+
   Future<void> _operationTail = Future<void>.value();
 
   @override
@@ -121,11 +163,19 @@ class Esp32MotionController implements MotionController {
     return 'cmd-${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}-$_sequence';
   }
 
-  Future<T> _serialized<T>(Future<T> Function() body) {
+  Future<MotionOutcome> _serialized(Future<MotionOutcome> Function() body) {
+    final epoch = _epoch;
     final previous = _operationTail;
     final release = Completer<void>();
     _operationTail = release.future;
-    return previous.then((_) => body()).whenComplete(release.complete);
+    return previous
+        .then<MotionOutcome>((_) {
+          if (_disposed || epoch != _epoch) {
+            return _failure('', MotionFailure.stopped);
+          }
+          return body();
+        })
+        .whenComplete(release.complete);
   }
 
   @override
@@ -140,8 +190,15 @@ class Esp32MotionController implements MotionController {
       deviceId: deviceId,
     );
     final trace = _MotionTrace.home();
+    final epoch = _epoch;
     final result = await _execute(command, trace: trace, timeout: timeout);
-    if (result.ok) _isHomed = true;
+    if (result.ok && epoch != _epoch) {
+      return _failure(command.commandId, MotionFailure.stopped);
+    }
+    if (result.ok) {
+      _isHomed = true;
+      _homedDeviceId = deviceId;
+    }
     return result;
   });
 
@@ -158,7 +215,9 @@ class Esp32MotionController implements MotionController {
       _isHomed = false;
       return _failure(commandId, MotionFailure.notConnected);
     }
-    if (!_isHomed) return _failure(commandId, MotionFailure.notHomed);
+    if (!_isHomed || _homedDeviceId != deviceId) {
+      return _failure(commandId, MotionFailure.notHomed);
+    }
     if (!xMm.isFinite ||
         !yMm.isFinite ||
         xMm < 0 ||
@@ -189,14 +248,12 @@ class Esp32MotionController implements MotionController {
   @override
   Future<MotionOutcome> emergencyStop({required String deviceId}) async {
     final commandId = _commandIdFactory();
-    _isHomed = false;
+    _invalidate(MotionFailure.stopped);
     final response = await _transport.sendPriorityStop(deviceId);
     final upper = response.toUpperCase();
     final ok =
         !upper.startsWith('ERROR:') &&
-        (upper.contains('OK') ||
-            upper.contains('STOPPED') ||
-            upper.contains('COMPLETED'));
+        (upper.trim() == 'OK' || upper.trim() == 'STOPPED');
     return MotionOutcome(
       ok: ok,
       commandId: commandId,
@@ -216,6 +273,8 @@ class Esp32MotionController implements MotionController {
     }
 
     final completer = Completer<MotionOutcome>();
+    _active = completer;
+    _activeId = command.commandId;
     late final StreamSubscription<Esp32MotionStatus> statusSub;
     late final StreamSubscription<bool> connectionSub;
     statusSub = _transport.statuses.listen((status) {
@@ -235,13 +294,45 @@ class Esp32MotionController implements MotionController {
     });
 
     try {
-      final sent = await _transport.send(command);
-      if (!sent) return _failure(command.commandId, MotionFailure.sendFailed);
-      return await completer.future.timeout(
-        timeout,
-        onTimeout: () => _failure(command.commandId, MotionFailure.timeout),
+      // write 자체가 멈춰도 취소/타임아웃이 먼저 반환되도록 경쟁시킨다.
+      unawaited(
+        _transport
+            .send(command)
+            .then((sent) {
+              if (!sent && !completer.isCompleted) {
+                completer.complete(
+                  _failure(command.commandId, MotionFailure.sendFailed),
+                );
+              }
+            })
+            .catchError((Object _) {
+              if (!completer.isCompleted) {
+                completer.complete(
+                  _failure(command.commandId, MotionFailure.sendFailed),
+                );
+              }
+            }),
       );
+      final result = await completer.future.timeout(
+        timeout,
+        onTimeout: () {
+          _invalidate(MotionFailure.timeout);
+          return _failure(command.commandId, MotionFailure.timeout);
+        },
+      );
+      if (result.failure == MotionFailure.timeout ||
+          result.failure == MotionFailure.protocol) {
+        _invalidate(result.failure);
+        // best-effort 요청일 뿐: 정지 성공이라고 안내하지 않는다.
+        unawaited(
+          _transport
+              .sendPriorityStop(command.deviceId)
+              .catchError((Object _) => 'ERROR:WRITE_FAILED'),
+        );
+      }
+      return result;
     } finally {
+      if (identical(_active, completer)) _active = null;
       await statusSub.cancel();
       await connectionSub.cancel();
     }
@@ -280,6 +371,11 @@ class Esp32SwitchBotActuator implements PressActuator {
     );
     final completer = Completer<MotionOutcome>();
     final trace = _MotionTrace.press();
+    final stopSub = _transport.stopRequests.listen((_) {
+      if (!completer.isCompleted) {
+        completer.complete(_failure(commandId, MotionFailure.stopped));
+      }
+    });
     late final StreamSubscription<Esp32MotionStatus> statusSub;
     late final StreamSubscription<bool> connectionSub;
     statusSub = _transport.statuses.listen((status) {
@@ -293,14 +389,39 @@ class Esp32SwitchBotActuator implements PressActuator {
       }
     });
     try {
-      if (!await _transport.send(command)) {
-        return _failure(commandId, MotionFailure.sendFailed);
-      }
-      return await completer.future.timeout(
+      unawaited(
+        _transport
+            .send(command)
+            .then((sent) {
+              if (!sent && !completer.isCompleted) {
+                completer.complete(
+                  _failure(commandId, MotionFailure.sendFailed),
+                );
+              }
+            })
+            .catchError((Object _) {
+              if (!completer.isCompleted) {
+                completer.complete(
+                  _failure(commandId, MotionFailure.sendFailed),
+                );
+              }
+            }),
+      );
+      final result = await completer.future.timeout(
         timeout,
         onTimeout: () => _failure(commandId, MotionFailure.timeout),
       );
+      if (result.failure == MotionFailure.timeout ||
+          result.failure == MotionFailure.protocol) {
+        unawaited(
+          _transport
+              .sendPriorityStop(deviceId)
+              .catchError((Object _) => 'ERROR:WRITE_FAILED'),
+        );
+      }
+      return result;
     } finally {
+      await stopSub.cancel();
       await statusSub.cancel();
       await connectionSub.cancel();
     }
@@ -324,12 +445,14 @@ class SafePressCoordinator {
     required double yMm,
     double toleranceMm = 0.7,
   }) {
+    final epoch = _motionController.safetyEpoch;
     final previous = _operationTail;
     final release = Completer<void>();
     _operationTail = release.future;
     return previous
         .then((_) async {
-          if (!_motionController.isHomed) {
+          if (epoch != _motionController.safetyEpoch ||
+              !_motionController.isHomed) {
             return _failure('', MotionFailure.notHomed);
           }
           final positioned = await _motionController.moveTo(
@@ -339,6 +462,10 @@ class SafePressCoordinator {
             toleranceMm: toleranceMm,
           );
           if (!positioned.ok) return positioned;
+          if (epoch != _motionController.safetyEpoch ||
+              !_motionController.isHomed) {
+            return _failure(positioned.commandId, MotionFailure.stopped);
+          }
           final error = positioned.positionErrorMm;
           final token = positioned.positionToken;
           if (error == null || error > toleranceMm) {
@@ -355,6 +482,9 @@ class SafePressCoordinator {
             positionToken: token,
           );
           if (!pressed.ok) return pressed;
+          if (epoch != _motionController.safetyEpoch) {
+            return _failure(pressed.commandId, MotionFailure.stopped);
+          }
           return MotionOutcome(
             ok: true,
             commandId: pressed.commandId,
@@ -487,11 +617,11 @@ MotionOutcome _failure(String commandId, MotionFailure failure) {
     MotionFailure.stall => '모터 걸림이 감지되어 동작을 중단했습니다.',
     MotionFailure.press => '누름 장치 오류로 버튼을 누르지 못했습니다.',
     MotionFailure.limit => '이동 중 안전 한계가 감지되어 중단했습니다.',
-    MotionFailure.timeout => '기기 응답 시간이 초과되어 동작을 중단했습니다.',
+    MotionFailure.timeout => '기기 응답을 확인하지 못했습니다. 움직임이 멈췄는지 확인해 주세요.',
     MotionFailure.invalidPositionToken => '위치 확인 정보가 없어 버튼을 누르지 않았습니다.',
-    MotionFailure.stopped => '비상 정지로 동작이 중단되었습니다.',
+    MotionFailure.stopped => '동작 요청을 취소했습니다. 기기가 실제로 멈췄는지 확인해 주세요.',
     MotionFailure.sendFailed => '명령을 보내지 못했습니다. 연결을 확인해 주세요.',
-    MotionFailure.protocol => '기기 상태 응답을 확인할 수 없어 동작을 중단했습니다.',
+    MotionFailure.protocol => '기기 상태를 확인하지 못했습니다. 움직임이 멈췄는지 확인해 주세요.',
     MotionFailure.none => '',
   };
   AppLogger.warn('motion.command.failed', {

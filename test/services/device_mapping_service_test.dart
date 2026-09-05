@@ -197,6 +197,26 @@ void main() {
       expect(p.imagePath, '/tmp/panel.jpg');
     });
 
+    test('수동 그리드 병합과 저장/로드는 무효화 상태를 해제하지 않는다', () async {
+      final invalid = DeviceMappingService.invalidatePanelCalibration(existing);
+      final merged = DeviceMappingService.mergeGridUpdate(
+        existing: invalid,
+        rows: 3,
+        cols: 3,
+        originX: 5,
+        originY: 6,
+        pitchX: 20,
+        pitchY: 21,
+        homeRow: 0,
+        homeCol: 0,
+      ).profile;
+      await DeviceMappingService.instance.save('invalid', merged);
+      final loaded = await DeviceMappingService.instance.load('invalid');
+      expect(loaded.calibrationInvalidated, isTrue);
+      expect(loaded.buttonMap, existing.buttonMap);
+      expect(loaded.buttonMachinePositions, isEmpty);
+    });
+
     test('그리드 축소 시 범위 밖 버튼을 제거하고 목록으로 보고한다', () {
       final result = DeviceMappingService.mergeGridUpdate(
         existing: existing,

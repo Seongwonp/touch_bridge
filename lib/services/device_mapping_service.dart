@@ -108,6 +108,7 @@ class DeviceMappingProfile {
     this.buttonPositions = const {},
     this.buttonMachinePositions = const {},
     this.panelCalibration,
+    this.calibrationInvalidated = false,
     this.customLabels = const {},
     this.homeRow = 0,
     this.homeCol = 0,
@@ -137,6 +138,9 @@ class DeviceMappingProfile {
   /// 기존 프로필은 이 필드가 없으므로 종전 그리드 계산으로 자동 폴백한다.
   final Map<String, ({double xMm, double yMm})> buttonMachinePositions;
   final PanelCalibration? panelCalibration;
+
+  /// 명시적으로 폐기한 보정을 레거시 그리드로 오인하지 않도록 영속화한다.
+  final bool calibrationInvalidated;
   final Map<String, String> customLabels;
   final int homeRow;
   final int homeCol;
@@ -170,6 +174,7 @@ class DeviceMappingProfile {
         e.key: {'xMm': e.value.xMm, 'yMm': e.value.yMm},
     },
     'panelCalibration': panelCalibration?.toJson(),
+    'calibrationInvalidated': calibrationInvalidated,
     'customLabels': customLabels,
     'homePosition': {'row': homeRow, 'col': homeCol},
     'motion': {
@@ -252,6 +257,7 @@ class DeviceMappingProfile {
       buttonPositions: migratedPositions,
       buttonMachinePositions: machinePositions,
       panelCalibration: panelCalibration,
+      calibrationInvalidated: j['calibrationInvalidated'] == true,
       customLabels: labelsRaw.cast<String, String>(),
       homeRow: (homePos['row'] as num?)?.toInt() ?? 0,
       homeCol: (homePos['col'] as num?)?.toInt() ?? 0,
@@ -401,6 +407,7 @@ class DeviceMappingService {
           if (!dropped.contains(e.key)) e.key: e.value,
       },
       panelCalibration: existing.panelCalibration,
+      calibrationInvalidated: existing.calibrationInvalidated,
       customLabels: {
         for (final e in existing.customLabels.entries)
           if (!dropped.contains(e.key)) e.key: e.value,
@@ -430,6 +437,7 @@ class DeviceMappingService {
     buttonPositions: existing.buttonPositions,
     buttonMachinePositions: const {},
     panelCalibration: null,
+    calibrationInvalidated: true,
     customLabels: existing.customLabels,
     homeRow: existing.homeRow,
     homeCol: existing.homeCol,

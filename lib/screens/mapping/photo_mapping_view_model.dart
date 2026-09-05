@@ -48,6 +48,7 @@ class PointVerificationExecution {
 }
 
 class PhotoMappingViewModel extends ChangeNotifier {
+  bool _disposed = false;
   final String deviceId;
   final String? applianceName;
   final String? applianceType;
@@ -390,6 +391,7 @@ class PhotoMappingViewModel extends ChangeNotifier {
 
   Future<String> homeMotion() async {
     final outcome = await _motionController.home(deviceId: deviceId);
+    if (_disposed) return outcome.message;
     notifyListeners();
     await _tts.speak(outcome.message, priority: TtsPriority.result);
     return outcome.message;
@@ -532,6 +534,16 @@ class PhotoMappingViewModel extends ChangeNotifier {
             yMm: target.yMm,
             toleranceMm: 0.7,
           );
+    if (_disposed) {
+      return PointVerificationExecution(
+        ok: false,
+        message: '화면을 닫아 동작 요청을 취소했습니다. 실제 기기 상태를 확인해 주세요.',
+        buttonId: point.id,
+        label: point.label,
+        mode: mode,
+        failure: MotionFailure.stopped.name,
+      );
+    }
     notifyListeners();
 
     final message = outcome.ok
@@ -942,6 +954,8 @@ class PhotoMappingViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    _motionController.dispose();
     // TtsService는 앱 전역 싱글톤 큐라 여기서 stop()을 부르면 다음 화면이
     // 막 넣은 안내까지 지워버린다(화면 전환 시 안내가 잘리는 문제).
     _deviceService.disconnect();

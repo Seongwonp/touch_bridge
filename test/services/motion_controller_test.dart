@@ -5,6 +5,131 @@ import 'package:touch_bridge/services/esp32_motion_protocol.dart';
 import 'package:touch_bridge/services/motion_controller.dart';
 
 void main() {
+  group('정지·재연결 회귀', () {
+    late _FakeMotionTransport transport;
+    late Esp32MotionController controller;
+    setUp(() {
+      transport = _FakeMotionTransport();
+      controller = Esp32MotionController(transport: transport);
+    });
+    tearDown(() => controller.dispose());
+
+    Future<void> home() async {
+      transport.onSend = (command, emit) {
+        emit(_status(command, Esp32MotionState.received));
+        emit(_status(command, Esp32MotionState.homing));
+        emit(_status(command, Esp32MotionState.homed, homed: true));
+        emit(_status(command, Esp32MotionState.completed, homed: true));
+      };
+      expect((await controller.home(deviceId: 'd')).ok, isTrue);
+    }
+
+    test('대기 중 연결 끊김과 재연결은 홈을 폐기한다', () async {
+      await home();
+      transport.connected = false;
+      transport._connections.add(false);
+      transport.connected = true;
+      transport._connections.add(true);
+      expect(controller.isHomed, isFalse);
+      final result = await controller.moveTo(
+        deviceId: 'd',
+        xMm: 1,
+        yMm: 1,
+        toleranceMm: .7,
+      );
+      expect(result.failure, MotionFailure.notHomed);
+      expect(transport.sent, hasLength(1));
+    });
+
+    test('다른 기기에 기존 홈 상태를 재사용하지 않는다', () async {
+      await home();
+      final result = await controller.moveTo(
+        deviceId: 'other',
+        xMm: 1,
+        yMm: 1,
+        toleranceMm: .7,
+      );
+      expect(result.failure, MotionFailure.notHomed);
+      expect(transport.sent, hasLength(1));
+    });
+
+    test('정지 뒤 지연된 홈 완료와 대기 작업을 폐기한다', () async {
+      final started = Completer<Esp32MotionCommand>();
+      transport.onSend = (command, emit) => started.complete(command);
+      final running = controller.home(deviceId: 'd');
+      final queued = controller.home(deviceId: 'd');
+      final command = await started.future;
+      await controller.emergencyStop(deviceId: 'd');
+      for (final state in [
+        Esp32MotionState.received,
+        Esp32MotionState.homing,
+        Esp32MotionState.homed,
+        Esp32MotionState.completed,
+      ]) {
+        transport._statuses.add(_status(command, state, homed: true));
+      }
+      expect((await running).ok, isFalse);
+      expect((await queued).ok, isFalse);
+      expect(controller.isHomed, isFalse);
+      expect(transport.sent, hasLength(1));
+    });
+
+    test('공통 정지 이벤트도 이동과 대기 누름을 취소한다', () async {
+      await home();
+      final started = Completer<void>();
+      transport.onSend = (_, _) => started.complete();
+      final coordinator = SafePressCoordinator(
+        motionController: controller,
+        pressActuator: Esp32SwitchBotActuator(transport: transport),
+      );
+      final first = coordinator.moveAndPress(deviceId: 'd', xMm: 1, yMm: 1);
+      final second = coordinator.moveAndPress(deviceId: 'd', xMm: 2, yMm: 2);
+      await started.future;
+      transport.stops.add('d');
+      expect((await first).ok, isFalse);
+      expect((await second).ok, isFalse);
+      expect(
+        transport.sent.where((c) => c.action == Esp32MotionAction.press),
+        isEmpty,
+      );
+      expect(transport.sent, hasLength(2));
+    });
+
+    test('타임아웃은 정지를 요청하되 정지 완료라고 말하지 않는다', () async {
+      await home();
+      transport.onSend = null;
+      final result = await controller.moveTo(
+        deviceId: 'd',
+        xMm: 1,
+        yMm: 1,
+        toleranceMm: .7,
+        timeout: const Duration(milliseconds: 10),
+      );
+      expect(result.failure, MotionFailure.timeout);
+      expect(result.message, contains('확인하지 못했습니다'));
+      expect(result.message, isNot(contains('중단했습니다')));
+      expect(controller.isHomed, isFalse);
+      expect(transport.stopCount, 1);
+    });
+
+    test('누름 도중 정지하면 늦은 완료를 성공으로 처리하지 않는다', () async {
+      final started = Completer<Esp32MotionCommand>();
+      transport.onSend = (command, _) => started.complete(command);
+      final actuator = Esp32SwitchBotActuator(transport: transport);
+      final pending = actuator.press(deviceId: 'd', positionToken: 'token');
+      final command = await started.future;
+      transport.stops.add('d');
+      transport._statuses.add(_status(command, Esp32MotionState.completed));
+      expect((await pending).failure, MotionFailure.stopped);
+    });
+
+    test('dispose는 연결·정지 구독을 해제한다', () async {
+      controller.dispose();
+      await Future<void>.delayed(Duration.zero);
+      expect(transport._connections.hasListener, isFalse);
+      expect(transport.stops.hasListener, isFalse);
+    });
+  });
   group('Esp32MotionController 안전 상태 머신', () {
     test('홈 완료 전에는 이동 명령 자체를 보내지 않는다', () async {
       final transport = _FakeMotionTransport();
@@ -260,6 +385,10 @@ typedef _OnSend =
     );
 
 class _FakeMotionTransport implements MotionTransport {
+  int stopCount = 0;
+  final stops = StreamController<String>.broadcast(sync: true);
+  @override
+  Stream<String> get stopRequests => stops.stream;
   final _statuses = StreamController<Esp32MotionStatus>.broadcast(sync: true);
   final _connections = StreamController<bool>.broadcast(sync: true);
   final sent = <Esp32MotionCommand>[];
@@ -283,7 +412,11 @@ class _FakeMotionTransport implements MotionTransport {
   }
 
   @override
-  Future<String> sendPriorityStop(String deviceId) async => 'STOPPED';
+  Future<String> sendPriorityStop(String deviceId) async {
+    stopCount++;
+    stops.add(deviceId);
+    return 'STOPPED';
+  }
 }
 
 Esp32MotionStatus _status(
