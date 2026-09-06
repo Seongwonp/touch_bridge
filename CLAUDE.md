@@ -145,6 +145,13 @@ lib/
 - 홈 화면 롱프레스 → "버튼 매핑" 선택 시 기기명 전달하며 진입
 - 기존 `mapping_grid_<deviceName>` 데이터는 홈 로드시 `deviceId` 키로 자동 마이그레이션
 
+### 보호자 위치 맞추기 (ManualMappingScreen)
+- 보호자 흐름은 `위치 맞추기 → 눌러보기 → 저장` 3단계이며 개발자용 행·열 입력을 전면에 노출하지 않는다.
+- 3×3 화면 격자를 강제하지 않고 최대 9개 버튼을 자유롭게 추가·선택하여 실제 X/Y(mm) 위치를 개별 저장한다.
+- 진입 시 버튼을 자동 선택하지 않는다. 사용자가 명시적으로 선택한 뒤에만 `선택한 버튼 위치 저장`을 활성화한다.
+- 패널 그림은 등록 버튼과 앱이 성공적으로 전송한 이동 명령 기준의 현재 위치를 함께 표시한다.
+- 1/5/10mm 조이스틱과 SwitchBot 눌러보기는 보호자 위치 보정 용도이며, raw G-code와 Z축 제어는 고급/개발자 영역으로 분리한다.
+
 ## 음성 명령 (Gemini AI)
 
 `VoiceListeningScreen`에서 STT로 음성을 받아 처리:
@@ -336,7 +343,7 @@ BLE 연동 구현 파일: `lib/services/ble_service.dart`
 - [x] 가전 음성 명령 확장 — `WashingMachineCommandService`, `AcCommandService`, `ApplianceCommandRouter`
 - [x] 기기 타입별 라우팅 — `ActiveDeviceService.getActiveDeviceType()`, 기기 등록 시 `deviceType` 저장
 - [x] BottomSheet 포커스 관리 — `FocusNode.requestFocus()` in `addPostFrameCallback`, TalkBack 첫 요소 자동 포커스
-- [x] Flutter 자동화 테스트 316개 통과 (2026-09-05, 모션·매핑 안전 회귀 10건 추가)
+- [x] Flutter 자동화 테스트 318개 통과 (2026-09-06, 보호자 자유 배치 UI 회귀 2건 포함)
 - [x] TalkBack 핵심 경로 차단 해소 — PageView 잠금, CustomSemanticsAction 음성 진입, autoStart 통일
 - [x] WCAG 2.2.1 타임아웃 20초 준수 (4곳)
 - [x] 200% 폰트 확대 대응 — `minHeight` 확산 적용 (6곳)
