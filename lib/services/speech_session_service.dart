@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
+import 'accessibility_settings.dart';
+
 /// 화면별 STT 콜백 묶음. [SpeechSessionService.attach]로 등록한다.
 class SpeechClient {
   SpeechClient({required this.name, this.onStatus, this.onError});
@@ -71,13 +73,33 @@ class SpeechSessionService {
     _clients.removeWhere((c) => c.name == name);
   }
 
+  /// 안드로이드 음성 엔진의 기본 엔드포인팅은 말이 시작되기 전 약 3초만
+  /// 기다렸다가 세션을 스스로 닫는다. 앱의 침묵 타이머(설정값, 기본 8초)가
+  /// 돌기도 전에 엔진이 먼저 포기해 "음성 인식 실패"로 끝나던 원인이다.
+  /// 게다가 "녹음을 시작합니다" 안내가 듣기 시작한 뒤에 나가므로, 안내가
+  /// 끝나고 사용자에게 남는 여유는 2초가 채 안 됐다.
+  ///
+  /// pauseFor를 설정값보다 2초 길게 잡아, 안내 문구와 화면을 함께 갱신하는
+  /// 앱 쪽 침묵 타이머가 먼저 동작하고 엔진은 백스톱 역할만 하도록 한다.
+  static Duration get _defaultPauseFor => Duration(
+    seconds: AccessibilitySettings.instance.sttSilenceTimeoutSeconds + 2,
+  );
+
+  /// 한 번의 발화에 이보다 오래 걸릴 일은 없다. 무한 대기만 막는 상한.
+  static const Duration _defaultListenFor = Duration(seconds: 60);
+
   Future<void> listen({
     required void Function(SpeechRecognitionResult result) onResult,
     SpeechListenOptions? listenOptions,
   }) {
+    final options = listenOptions ?? SpeechListenOptions(localeId: 'ko_KR');
     return _speech.listen(
       onResult: onResult,
-      listenOptions: listenOptions ?? SpeechListenOptions(localeId: 'ko_KR'),
+      // 호출측이 직접 지정했으면 존중하고, 아니면 기본값을 채운다.
+      listenOptions: options.copyWith(
+        pauseFor: options.pauseFor ?? _defaultPauseFor,
+        listenFor: options.listenFor ?? _defaultListenFor,
+      ),
     );
   }
 

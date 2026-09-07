@@ -167,10 +167,16 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
       profile: profile,
       buttonId: btId,
     );
-    await CommandFeedbackService.instance.announce(
-      result.toCommandResult(),
-      source: 'ImageControlScreen',
-    );
+    // 시작 버튼은 아래에서 타이머 화면 진입이나 "시간을 알 수 없다" 안내를
+    // 따로 하므로 범용 "전달했습니다" 안내를 겹치지 않는다. 두 안내가 22ms
+    // 간격으로 나가면서 interrupt로 서로를 끊어 문장이 잘려 들렸다.
+    final isStartButton = btId == 'BT-05' && label == '시작';
+    if (!isStartButton || !result.ok) {
+      await CommandFeedbackService.instance.announce(
+        result.toCommandResult(),
+        source: 'ImageControlScreen',
+      );
+    }
     if (!result.ok) return;
 
     // 시간 프리셋 버튼(기본 라벨 그대로일 때만 — 보호자가 라벨을 바꿨다면
@@ -188,7 +194,7 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
     // 시작 버튼: 누적된 시간이 있을 때만 실제 시간으로 카운트다운을 연다.
     // (이전에는 무조건 30초 고정 타이머를 돌린 뒤 "작동이 끝났습니다"라고
     // 거짓 안내했다 — 실제 기기는 계속 돌고 있을 수 있는 상태였다.)
-    if (btId == 'BT-05' && label == '시작' && mounted) {
+    if (isStartButton && mounted) {
       final seconds = _accumulatedSeconds;
       _accumulatedSeconds = 0;
       if (seconds > 0) {
