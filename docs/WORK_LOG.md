@@ -31,6 +31,38 @@
 - `flutter test` — **318개 전부 통과** (기존 316 통과 / 2 실패에서 회복).
 - `flutter analyze` — 오류 0건, 경고 4건(기존 `non_const_argument_for_const_parameter` 유지, 신규 0).
 
+## 2026-09-07 — 정적 분석 경고 4건 해소 + SW 전용 제출본 재작성
+
+### 정적 분석 경고 4건 (`non_const_argument_for_const_parameter`)
+- 원인: 기기 목록·추천 킷이 아이콘을 코드포인트(int)로 저장한 뒤
+  `IconData(런타임 int)`로 되살리고 있었다. 단순 린트 경고가 아니라 실제 문제로,
+  릴리스 빌드의 아이콘 트리 셰이킹(`--tree-shake-icons`, 기본 활성)이 어떤 글리프가
+  쓰이는지 알 수 없어 빌드가 막히거나 아이콘이 빈 사각형으로 렌더된다.
+  저장값 손상 시 폰트에 없는 글리프를 그려 tofu가 나오는 위험도 있었다.
+- 조치: `lib/theme/app_icons.dart` 신설. 앱이 저장할 수 있는 아이콘만 const로 모으고
+  코드포인트로 되찾는 `iconFromCodePoint()` 제공, 미등록 값은 대체 아이콘으로 처리.
+  호출부 4곳(`appliance_config`, `home_screen`, `home_device_card`,
+  `device_management_screen`) 교체.
+- 검증: `flutter analyze` **No issues found**(오류 0·경고 0), `flutter test` 318개 통과.
+
+### SW 전용 제출본 (사용자가 새로 제공한 원본 기준)
+산출물은 `docs/submission/`(저장소 제외), 안내는 `docs/submission/예솔_전달메모.md`.
+
+- **제작설계서 PPT** — AI 생성 삽화 2장 제거(1장 UI·UX, 11장 알고리즘 명세서).
+  빈 자리가 생기지 않도록 남은 글상자를 전체 폭 행 배치로 재배치하고 PowerPoint로 렌더 검수.
+  참조가 끊긴 미디어와 관계를 정리해 4.0MB → 1.0MB. 남은 이미지는 전부 실제 앱 캡처.
+- **개발보고서 DOCX** — 새 원본에서 H/W 전용 문단 19개, H/W 주요 기능 표 전체,
+  전체 기능 목록·개발 환경·수행일정의 H/W 행, 요약본의 H/W 서술을 제거해 SW 전용본 생성.
+  첫 열이 세로 병합이라 라벨이 아닌 행 내용으로 H/W 행을 판별해야 했다(라벨 기준으로
+  지우면 남은 행이 S/W 라벨을 물려받음). 고아 미디어 정리로 11.1MB → 1.0MB, 11쪽.
+- **참고문헌 정정** — Toucha11y와 BrushLens의 제목·제1저자가 실제 논문과 달라 원문 확인 후 수정
+  (Guo→Li, J. / Zhao→Liang, C., 제목도 각각 오기). Android Accessibility Codelab은
+  안드로이드 XML 실습 튜토리얼이라 Flutter 앱 근거로 부적합하고 상위 항목과 중복이라 삭제.
+  [1]~[12]로 재정렬, 본문 인용 일치, 빠진 번호 없음.
+- **수치 명시** — "정적 분석 0건"에 측정일(2026-09-07)과 오류·경고 구분을 명시.
+  위 경고 해소로 실제 0건이 되어 서술과 실측이 일치한다.
+- 검증: Word 정상 열림(복구 창 없음), 11쪽 전부 렌더 검수. PowerPoint 19장 열림 확인.
+
 ## 2026-09-07 — 개발보고서 SW 부분 정정 (수치·사진 설명·참고문헌)
 
 산출물 `docs/submission/터치브릿지_개발보고서_SW_수정본_0907.docx`, 안내는
