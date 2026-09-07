@@ -82,3 +82,6 @@ Touch_bridge_HW_code/
 Touch_bridge_HW_code-ble-connect/
 Touch_bridge_HW_code-moter/
 
+# 제출용 산출물 (pptx/docx/이미지 — 저장소에 넣지 않고 파일로 주고받는다)
+docs/submission/
+
