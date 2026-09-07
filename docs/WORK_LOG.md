@@ -5,6 +5,45 @@
 > 팀: 3팀 멜론머스크 (박성원 · 서예솔) — README/CLAUDE.md와 통일 (2026-08-21)
 > 기간: 2026.03 ~ 2026.10
 
+## 2026-09-07 — 위치 맞추기 화면 고급 설정 패널 회귀 수정
+
+### 문제
+- `flutter test`가 `manual_mapping_screen_test.dart`의 2건에서 실패 (318개 중 316개 통과).
+  - `보호자용 위치 맞추기 UI를 노출하고 Z축 제어를 제거한다`
+  - `버튼 추가 창을 취소해도 화면 오류가 발생하지 않는다`
+- 원인은 테스트가 아니라 화면 코드. `_buildAdvancedSettings`("고급 그리드 설정")에서
+  배경색을 가진 `Container`가 `ExpansionTile`을 직접 감싸고 있었다.
+  ExpansionTile 내부 `ListTile`은 가장 가까운 `Material`에 배경과 잉크 효과를 그리는데,
+  중간의 `DecoratedBox`가 그 위를 덮어 Flutter가 프레임워크 assertion을 던졌다
+  (`ListTile background color or ink splashes may be invisible`).
+- 두 테스트 모두 이 화면을 그리기만 해도 예외가 발생해 실패한 것이며,
+  실제 앱에서도 디버그 빌드에서 같은 assertion이 발생하고 터치 피드백이 보이지 않는 상태였다.
+
+### 조치
+- `lib/screens/mapping/manual_mapping_screen.dart:_buildAdvancedSettings`
+  - `Container`에서 `color`를 제거하고 테두리·모서리만 남김.
+  - 배경색은 새로 넣은 `Material(color: AppColors.surfaceElevated, clipBehavior: Clip.antiAlias)`가
+    칠하도록 변경. ListTile의 잉크가 이 Material 위에 그려져 assertion이 사라지고
+    펼치기 탭의 터치 피드백이 정상 표시된다.
+  - 외형(모서리 반경, 테두리, 채움색)은 그대로 유지.
+
+### 검증
+- `flutter test` — **318개 전부 통과** (기존 316 통과 / 2 실패에서 회복).
+- `flutter analyze` — 오류 0건, 경고 4건(기존 `non_const_argument_for_const_parameter` 유지, 신규 0).
+
+## 2026-09-07 — 제작설계서 SW 전용본 분리 (예솔 전달용)
+
+- 통합 제작설계서 중간에 삽입할 수 있도록 순수 SW 설계 구간(양식 13~31쪽) 19장만 추출.
+  산출물 `docs/submission/터치브릿지_SW전용_제작설계서_19장.pptx`. HW 내용 미포함.
+- 쪽 번호를 고정 텍스트에서 자동 번호 필드(`slidenum`)로 전환 (19장 전부).
+  통합본 어느 위치에 넣어도 앞뒤 쪽수에 맞춰 자동으로 다시 매겨진다.
+- 1쪽(UI·UX 정의서)의 삽화 교체 — 재생 버튼처럼 보여 안내 화면으로 오해될 소지가 있던
+  그림을 화면읽기 사용자·큰 글씨 사용자 대비 설명 그림으로 변경.
+- 발표 내용과 직접 연결되지 않는 외부 연구 링크 3건을 발표자 노트에서 삭제하고,
+  가리킬 대상이 없어진 본문 각주 표시 `[1] [2] [3]`도 함께 제거. 코드 위치 출처는 유지.
+- 19쪽 시험 결과 표를 실측값으로 정정. 위 회귀 수정 후 318개 전부 통과 기준으로 재갱신.
+- 전달 안내는 `docs/submission/SW전용_PPT_전달메모.md`.
+
 ## 2026-09-07 — 제작설계서 반복 문구 제거와 설명 그림 추가
 
 - 사용자 지적에 따라 페이지 하단의 반복 설명·작성자 논평을 삭제. 연구 출처와 필요한 제한 사항은 참고자료, 시험 항목, 발표자 노트에 유지.
@@ -1233,13 +1272,39 @@
   학교 모듈이 google SDK를 import하지 않음(AST 검사 — 우회 불가 구조 고정)/
   규칙 기반 문구는 규칙에서 종결/HTTP 매핑.
 
-### 미검증 항목 (배포 서버 실호출 필요 — 명확히 구분)
-- **게이트웨이 사진 입력**: OpenAI 호환 image_url(data URI)로 구성했지만
-  실호출 미검증. 게이트웨이가 제공자 네이티브 전체 API를 지원하지 않으므로
-  소량 승인 테스트로 확인해야 하며, 실패 시 SCHOOL_API_VISION_MODEL 교체 검토.
-- system 역할 메시지 수용 여부(OpenAI 호환이면 표준이나 실호출로 확인).
-- Render 실배포에서의 `ai.call provider=school … status=ok` 로그 확인.
+### 배포 서버 실호출 검증 (2026-09-07, 로컬 mock과 구분)
+
+배포 전 문제: Render 서비스의 Build Branch가 `Touch_bridge_b`(HEAD `0ec7afc`,
+2026-08-14)로 설정돼 있어 `main` 푸시가 배포되지 않았다. 대시보드에서 Branch를
+`main`으로 변경 후 재배포하여 해결. (원인 판별 근거: 배포 이벤트의 커밋 해시가
+`Touch_bridge_b` HEAD와 일치, `GET /` 응답에 신규 `ai_provider` 필드 부재.)
+
+| 항목 | 결과 |
+|---|---|
+| `GET /` | `ai_provider=school`, `ai_text_model=gemini-3.8-flash` (HTTP 200) |
+| `/parse-command` "30초 시작" (규칙) | `MICROWAVE_CONTROL` / `BT-02,BT-05`, **0.38초** — AI 미호출 확인 |
+| `/parse-command` "안녕하세요" (AI) | 자연어 응답 정상, **2.36초**, sanitize 스키마 전 필드 존재 |
+| `/vision-mapping` (PNG 273KB) | HTTP 200, **6.92초**, 모델이 이미지 내용을 정확히 묘사 |
+
+**학교 API 사용 판별 근거**: `AI_PROVIDER=school` 경로는 실패 시 Google로
+우회하지 않고 `_FAIL_MESSAGES`(인증/설정/제한 오류 문구)를 반환하도록 구현했다.
+정상 자연어 응답과 이미지 인식 결과가 왔다는 것은 학교 게이트웨이 호출이
+성공했다는 뜻이다. 응답 시간(규칙 0.38초 vs AI 2.36초/비전 6.92초)도 외부
+호출 발생을 뒷받침한다.
+
+**검증 완료**: 게이트웨이의 사진 입력(OpenAI 호환 image_url data URI) 지원,
+system 역할 메시지 수용, 한국어 UTF-8 왕복.
+
+### 남은 미검증 항목 (과장 금지)
+- **실제 가전 패널 사진의 버튼 좌표 검출 정확도**: 이번 테스트는 앱 스크린샷을
+  보낸 것이라 `buttons`가 빈 배열로 왔다(sanitizer의 BT-xx 형식·confidence
+  0.65·정규화 좌표 요건 미충족). 게이트웨이 사진 입력 "지원 여부"는 확인됐지만
+  실제 전자레인지 패널 사진으로 버튼이 제대로 검출되는지는 별도 검증 필요.
+- Render 로그의 `ai.call provider=school model_req=… model_resp=…` 라인 육안 확인
+  (응답 기반 판별은 완료, 로그 확인은 미실시).
+- 게이트웨이 429(호출 제한)·크레딧 소진 시 실제 동작은 mock으로만 검증.
 
 ### 커밋/배포
-- 사용자 승인 전 — 커밋·푸시·재배포하지 않음. 기존 미커밋 변경
-  (`docs/WORK_LOG.md`, `docs/submission/`)은 보존.
+- 커밋 `a1de3f2`로 `main`에 푸시 완료(사용자 승인). Render는 Branch 설정 수정
+  후 자동 재배포되어 현재 학교 게이트웨이로 서비스 중.
+- `docs/submission/`은 이번 커밋에 포함하지 않고 미커밋 상태로 보존.

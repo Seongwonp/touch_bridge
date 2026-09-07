@@ -939,109 +939,118 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
   Widget _buildAdvancedSettings(double rs) {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surfaceElevated,
         borderRadius: BorderRadius.circular(16 * rs),
         border: Border.all(color: AppColors.borderDefault),
       ),
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          iconColor: AppColors.primary,
-          collapsedIconColor: AppColors.textSecondary,
-          title: Text(
-            '고급 그리드 설정',
-            style: TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 16 * rs,
-              fontWeight: FontWeight.w800,
+      // 배경색은 Material이 칠한다. Container가 칠하면 ExpansionTile의
+      // ListTile 잉크 효과가 가려져 프레임워크 assertion이 발생한다.
+      child: Material(
+        color: AppColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(16 * rs),
+        clipBehavior: Clip.antiAlias,
+        child: Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            iconColor: AppColors.primary,
+            collapsedIconColor: AppColors.textSecondary,
+            title: Text(
+              '고급 그리드 설정',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 16 * rs,
+                fontWeight: FontWeight.w800,
+              ),
             ),
+            subtitle: Text(
+              '필요한 경우에만 열어 행·열·간격을 바꿉니다.',
+              style: TextStyle(
+                color: AppColors.textTertiary,
+                fontSize: 12 * rs,
+              ),
+            ),
+            childrenPadding: EdgeInsets.fromLTRB(16 * rs, 0, 16 * rs, 18 * rs),
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: LabeledNumberField(
+                      label: '버튼 행 수',
+                      controller: _rowsCtrl,
+                      scale: rs,
+                    ),
+                  ),
+                  SizedBox(width: 12 * rs),
+                  Expanded(
+                    child: LabeledNumberField(
+                      label: '버튼 열 수',
+                      controller: _colsCtrl,
+                      scale: rs,
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 12 * rs),
+              Row(
+                children: [
+                  Expanded(
+                    child: LabeledNumberField(
+                      label: '시작 X (mm)',
+                      controller: _oxCtrl,
+                      scale: rs,
+                    ),
+                  ),
+                  SizedBox(width: 12 * rs),
+                  Expanded(
+                    child: LabeledNumberField(
+                      label: '시작 Y (mm)',
+                      controller: _oyCtrl,
+                      scale: rs,
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 12 * rs),
+              Row(
+                children: [
+                  Expanded(
+                    child: LabeledNumberField(
+                      label: '가로 간격 (mm)',
+                      controller: _pxCtrl,
+                      scale: rs,
+                    ),
+                  ),
+                  SizedBox(width: 12 * rs),
+                  Expanded(
+                    child: LabeledNumberField(
+                      label: '세로 간격 (mm)',
+                      controller: _pyCtrl,
+                      scale: rs,
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 12 * rs),
+              Row(
+                children: [
+                  Expanded(
+                    child: LabeledNumberField(
+                      label: '홈 행',
+                      controller: _hrCtrl,
+                      scale: rs,
+                    ),
+                  ),
+                  SizedBox(width: 12 * rs),
+                  Expanded(
+                    child: LabeledNumberField(
+                      label: '홈 열',
+                      controller: _hcCtrl,
+                      scale: rs,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-          subtitle: Text(
-            '필요한 경우에만 열어 행·열·간격을 바꿉니다.',
-            style: TextStyle(color: AppColors.textTertiary, fontSize: 12 * rs),
-          ),
-          childrenPadding: EdgeInsets.fromLTRB(16 * rs, 0, 16 * rs, 18 * rs),
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: LabeledNumberField(
-                    label: '버튼 행 수',
-                    controller: _rowsCtrl,
-                    scale: rs,
-                  ),
-                ),
-                SizedBox(width: 12 * rs),
-                Expanded(
-                  child: LabeledNumberField(
-                    label: '버튼 열 수',
-                    controller: _colsCtrl,
-                    scale: rs,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 12 * rs),
-            Row(
-              children: [
-                Expanded(
-                  child: LabeledNumberField(
-                    label: '시작 X (mm)',
-                    controller: _oxCtrl,
-                    scale: rs,
-                  ),
-                ),
-                SizedBox(width: 12 * rs),
-                Expanded(
-                  child: LabeledNumberField(
-                    label: '시작 Y (mm)',
-                    controller: _oyCtrl,
-                    scale: rs,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 12 * rs),
-            Row(
-              children: [
-                Expanded(
-                  child: LabeledNumberField(
-                    label: '가로 간격 (mm)',
-                    controller: _pxCtrl,
-                    scale: rs,
-                  ),
-                ),
-                SizedBox(width: 12 * rs),
-                Expanded(
-                  child: LabeledNumberField(
-                    label: '세로 간격 (mm)',
-                    controller: _pyCtrl,
-                    scale: rs,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 12 * rs),
-            Row(
-              children: [
-                Expanded(
-                  child: LabeledNumberField(
-                    label: '홈 행',
-                    controller: _hrCtrl,
-                    scale: rs,
-                  ),
-                ),
-                SizedBox(width: 12 * rs),
-                Expanded(
-                  child: LabeledNumberField(
-                    label: '홈 열',
-                    controller: _hcCtrl,
-                    scale: rs,
-                  ),
-                ),
-              ],
-            ),
-          ],
         ),
       ),
     );

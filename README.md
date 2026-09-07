@@ -178,10 +178,15 @@ MONGO_URI=mongodb://localhost:27017/
    - `/parse-command`에 규칙에 없는 문장(예: "안녕하세요")을 보내고,
      Render 로그에서 `ai.call provider=school model_req=... model_resp=...
      status=ok` 라인으로 실제 학교 API 사용을 확인
-4. 사진 분석(`/vision-mapping`)의 게이트웨이 지원은 **미검증** — 소량 테스트로
-   확인하고, 실패 시 `SCHOOL_API_VISION_MODEL`을 모델 목록의 다른 멀티모달
-   모델로 바꿔 재시도하세요. (게이트웨이는 제공자 네이티브 전체 API를 지원하지
-   않으며, 모델 이름만으로 사진 지원을 확정할 수 없음)
+4. 사진 분석(`/vision-mapping`)도 `gemini-3.8-flash`로 동작 확인됨(2026-09-07).
+   다른 모델로 바꾸려면 `SCHOOL_API_VISION_MODEL`을 설정하세요 — 게이트웨이는
+   제공자 네이티브 전체 API를 지원하지 않으므로, 모델을 바꿀 때는 사진 1장으로
+   재확인하는 것이 안전합니다.
+
+> **Branch 주의**: Render Settings → Build & Deploy → **Branch가 `main`인지**
+> 확인하세요. 다른 브랜치로 설정돼 있으면 `main`에 푸시해도 배포되지 않고
+> 구버전이 계속 서비스됩니다(2026-09-07에 실제로 겪은 문제).
+> 새 코드 반영 여부는 `GET /` 응답의 `ai_provider` 필드 유무로 즉시 판별됩니다.
 
 > 백엔드에는 IP당 분당 60회(비전 10회) 레이트리밋, 업로드 5MB 상한,
 > AI 응답 스키마 검증(버튼 ID 화이트리스트 등)이 적용되어 있습니다.
