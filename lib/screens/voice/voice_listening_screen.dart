@@ -114,6 +114,17 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
   // 연속 실패 횟수 — 2회 이상 시 "도움말" 힌트를 추가한다.
   int _consecutiveFailures = 0;
+  /// 기기 확인 되묻기 연속 횟수. 한도를 넘으면 자동 재청취를 멈춘다.
+  int _followUpAttempts = 0;
+  static const int _kMaxFollowUpAttempts = 2;
+
+  /// 버튼을 실제로 누르는 중인지. true면 진행 화면을 띄운다.
+  bool _isExecuting = false;
+  String _executingLabel = '';
+
+  /// 누르기가 끝난 뒤 잠시 띄우는 완료 화면 문구. 비어 있으면 표시하지 않는다.
+  String _pressDoneLabel = '';
+  Timer? _pressDoneTimer;
   static const _kExamplesSeenKey = 'voice_examples_announced';
 
   @override
@@ -137,6 +148,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     _recordingTimeoutTimer?.cancel();
     _silenceTimer?.cancel();
     _actionResetTimer?.cancel();
+    _pressDoneTimer?.cancel();
     // TtsService는 앱 전역 싱글톤 큐라 여기서 stop()을 부르면 다음 화면이
     // 막 넣은 안내까지 지워버린다(화면 전환 시 안내가 잘리는 문제).
     // 공용 STT 세션 스택에서도 빠져 이전 화면이 이벤트를 이어받게 한다.
@@ -450,6 +462,60 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   /// 확인·되묻기 경로는 발화 후 이 메서드를 호출해야 한다.
   /// TTS 큐가 빌 때까지 기다렸다가 마이크를 열어, 질문 소리가 STT에 섞이거나
   /// 질문을 듣는 중에 침묵 타이머가 도는 문제를 막는다.
+  /// "2번 버튼을 누릅니다." → "2번 버튼을 누르는 중입니다."
+  static String _toPressingMessage(String base) =>
+      base.contains('누릅니다') ? base.replaceAll('누릅니다', '누르는 중입니다') : base;
+
+  /// "2번 버튼을 누릅니다." → "2번 버튼을 눌렀습니다."
+  static String _toDoneMessage(String base) => base.contains('누릅니다')
+      ? base.replaceAll('누릅니다', '눌렀습니다')
+      : '$base 완료했습니다.';
+
+  /// 하드웨어가 실제로 움직이는 구간을 화면과 음성으로 함께 알린다.
+  /// 전송이 끝난 뒤에야 "누릅니다"라고 말하던 때는 이 구간(로그 기준 약 1.9초)
+  /// 동안 아무 안내가 없어, 화면을 못 보는 사용자가 진행 여부를 알 수 없었다.
+  Future<void> _beginPress(String label) async {
+    _pressDoneTimer?.cancel();
+    if (!mounted) return;
+    setState(() {
+      _isExecuting = true;
+      _executingLabel = label;
+      _pressDoneLabel = '';
+      _statusMessage = label;
+    });
+    await _speak(label, interrupt: true, priority: TtsPriority.result);
+  }
+
+  /// 누르기 결과를 완료 화면으로 보여준 뒤 잠시 후 원래 화면으로 돌아온다.
+  /// 결과 보고이므로 스크린리더 활성 시에도 들리도록 result 우선순위를 명시한다.
+  Future<void> _finishPress(String doneLabel) async {
+    if (!mounted) return;
+    setState(() {
+      _isExecuting = false;
+      _pressDoneLabel = doneLabel;
+      _statusMessage = doneLabel;
+    });
+    await _speak(doneLabel, interrupt: true, priority: TtsPriority.result);
+    _pressDoneTimer?.cancel();
+    _pressDoneTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _pressDoneLabel = '');
+    });
+  }
+
+  /// 진행 화면만 걷어낸다. 전송 실패 시(실패 안내는 _sendBleSequence가 한다)와,
+  /// 완료 화면 대신 타이머 화면으로 곧바로 넘어갈 때 쓴다.
+  void _clearPress() {
+    if (mounted) setState(() => _isExecuting = false);
+  }
+
+  /// 버튼을 연달아 누르는 구간의 안내 문구.
+  /// 전송에 버튼당 약 1.9초가 걸려(로그 기준) 4개면 8초에 가까운데, 그동안
+  /// 아무 안내가 없으면 화면을 못 보는 사용자는 멈춘 것과 구분할 수 없다.
+  static String _pressingLabelForSequence(List<dynamic> commands) =>
+      commands.length > 1
+      ? '버튼 ${commands.length}개를 누르는 중입니다.'
+      : '버튼을 누르는 중입니다.';
+
   void _restartListeningAfterPrompt() {
     if (!_speechEnabled || !mounted) return;
     Future<void>(() async {
@@ -676,20 +742,34 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       await _activateVoiceDevice(resolution.device!);
     }
 
-    if (resolution.needsClarification || resolution.needsAction) {
+    // 되묻는 건 "어느 기기인지" 모호할 때뿐이다.
+    // needsAction(기기는 특정됐고 동작 키워드만 못 찾은 경우)은 여기서 막지 않고
+    // 아래 간단 규칙 → AI 백엔드까지 흘려보낸다. VoiceDeviceResolver의 키워드
+    // 목록은 20개 남짓이라 "햇반 돌려줘" 같은 목록 밖 표현을 잡지 못하는데,
+    // 그걸 게이트로 쓰면 정작 그런 표현을 해석하라고 둔 백엔드에 도달조차 못 한다.
+    // ("돌려"가 "들려"로 오인식되자 같은 질문만 무한 반복된 사고가 있었다.)
+    if (resolution.needsClarification) {
+      _followUpAttempts++;
       AppLogger.info('voice.device_resolution.follow_up', {
         'requestId': requestId,
-        'needsClarification': resolution.needsClarification,
-        'needsAction': resolution.needsAction,
+        'needsClarification': true,
+        'attempt': _followUpAttempts,
       });
+      // 같은 답이 반복되면 자동 재청취를 멈춘다. 끝없이 되묻으면 화면을 못 보는
+      // 사용자에게는 빠져나갈 방법이 없는 상태가 된다.
+      final giveUp = _followUpAttempts >= _kMaxFollowUpAttempts;
+      final prompt = giveUp
+          ? '${resolution.message} 잘 안 되면 마이크 버튼을 누르고 기기 이름부터 말씀해 주세요.'
+          : resolution.message;
       setState(() {
-        _statusMessage = resolution.message;
+        _statusMessage = prompt;
         _isProcessing = false;
       });
-      await _speak(resolution.message);
-      _restartListeningAfterPrompt();
+      await _speak(prompt);
+      if (!giveUp) _restartListeningAfterPrompt();
       return;
     }
+    _followUpAttempts = 0;
 
     final commandText = resolution.commandText.isNotEmpty
         ? resolution.commandText
@@ -890,20 +970,24 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
     switch (action) {
       case 'IMMEDIATE_PRESS':
+        final pressBase = message.isNotEmpty ? message : '버튼을 누릅니다.';
+        // 전송 "전"에 누르는 중임을 알린다. 이전에는 전송이 끝난 뒤에야
+        // "누릅니다"라고 말해 시제도 결과도 어긋났다.
+        await _beginPress(_toPressingMessage(pressBase));
         final immediateSent = await _sendBleSequence(commands);
         if (!immediateSent) {
+          _clearPress();
           FeedbackService.instance.playFailure(); // 실패 안내는 _sendBleSequence가 함
           return;
         }
         _consecutiveFailures = 0;
         // "성공"이 아니라 "전송됨"이다: BLE write 성공일 뿐 GRBL 확인이 아니다.
         FeedbackService.instance.signalSent();
-        _recordLastCommand(data, message.isNotEmpty ? message : '버튼 실행');
-        // _statusMessage 갱신 → liveRegion이 스크린리더 채널로 결과를 전달한다.
-        // (주의: interrupt:true만으로는 스크린리더 활성 시 TTS가 억제되므로,
-        // 이 liveRegion 갱신이 스크린리더 사용자용 주 채널이다.)
-        setState(() => _statusMessage = message);
-        await _speak(message, interrupt: true);
+        _recordLastCommand(data, pressBase);
+        // _finishPress가 _statusMessage도 갱신한다 → liveRegion이 스크린리더
+        // 채널로 결과를 전달한다. (interrupt:true만으로는 스크린리더 활성 시
+        // TTS가 억제되므로 result 우선순위와 liveRegion이 함께 필요하다.)
+        await _finishPress(_toDoneMessage(pressBase));
         return;
 
       case 'EMERGENCY_STOP':
@@ -942,8 +1026,12 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         final seconds =
             inferredSeconds ??
             MicrowaveCommandService.calculateSeconds(commands);
+        // 버튼을 여러 개 연달아 누르는 경로라 실행 구간이 가장 길다(로그 기준
+        // 4개에 약 7.7초). 진행 화면 없이는 그동안 멈춘 것처럼 보인다.
+        await _beginPress(_pressingLabelForSequence(commands));
         final microwaveSent = await _sendBleSequence(commands);
         if (!microwaveSent) {
+          _clearPress();
           FeedbackService.instance.playFailure(); // 실패: 성공 피드백/이동 금지
           return;
         }
@@ -955,10 +1043,14 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
             : message;
         final finalMsg = spokenMessage.isNotEmpty ? spokenMessage : '시작할게요.';
         _recordLastCommand(data, finalMsg);
-        setState(() => _statusMessage = finalMsg);
-        await _speak(finalMsg, interrupt: true);
 
-        if (seconds > 0 && mounted) {
+        if (seconds > 0) {
+          // 곧 타이머 화면이 완료 상태를 대신하므로 진행 화면만 걷어낸다.
+          _clearPress();
+          if (!mounted) return;
+          setState(() => _statusMessage = finalMsg);
+          await _speak(finalMsg, interrupt: true);
+          if (!mounted) return;
           Navigator.push(
             context,
             MaterialPageRoute<void>(
@@ -968,7 +1060,10 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
               ),
             ),
           );
+          return;
         }
+        // 시간이 없는 명령(취소 등)은 넘어갈 화면이 없으니 완료 화면으로 알린다.
+        await _finishPress(finalMsg);
         return;
 
       case 'WASHER_CONTROL':
@@ -979,8 +1074,10 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
           _restartListeningAfterPrompt();
           return;
         }
+        await _beginPress(_pressingLabelForSequence(commands));
         final washerSent = await _sendBleSequence(commands);
         if (!washerSent) {
+          _clearPress();
           FeedbackService.instance.playFailure();
           return;
         }
@@ -990,8 +1087,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
             ? message
             : WashingMachineCommandService.buildCommandsLabel(commands);
         _recordLastCommand(data, washerMsg);
-        setState(() => _statusMessage = washerMsg);
-        await _speak(washerMsg, interrupt: true);
+        await _finishPress(washerMsg);
         return;
 
       case 'AC_CONTROL':
@@ -1002,8 +1098,10 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
           _restartListeningAfterPrompt();
           return;
         }
+        await _beginPress(_pressingLabelForSequence(commands));
         final acSent = await _sendBleSequence(commands);
         if (!acSent) {
+          _clearPress();
           FeedbackService.instance.playFailure();
           return;
         }
@@ -1013,8 +1111,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
             ? message
             : AcCommandService.buildCommandsLabel(commands);
         _recordLastCommand(data, acMsg);
-        setState(() => _statusMessage = acMsg);
-        await _speak(acMsg, interrupt: true);
+        await _finishPress(acMsg);
         return;
 
       case 'NAVIGATE':
@@ -1061,12 +1158,76 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     }
   }
 
+  /// 누르는 중(진행) / 눌렀습니다(완료)를 같은 레이아웃으로 보여준다.
+  Widget _buildPressStatusView(double rs) {
+    final done = _pressDoneLabel.isNotEmpty;
+    final label = done ? _pressDoneLabel : _executingLabel;
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 24 * rs),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 140 * rs,
+            height: 140 * rs,
+            child: done
+                ? Icon(
+                    Icons.check_circle,
+                    size: 128 * rs,
+                    color: AppColors.success,
+                  )
+                : CircularProgressIndicator(
+                    strokeWidth: 8 * rs,
+                    color: AppColors.primary,
+                  ),
+          ),
+          SizedBox(height: 32 * rs),
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: done ? AppColors.success : AppColors.primary,
+                fontSize: 30 * rs,
+                fontWeight: FontWeight.w900,
+                height: 1.25,
+                letterSpacing: -0.5,
+              ),
+            ),
+          ),
+          SizedBox(height: 16 * rs),
+          Text(
+            done ? '잠시 후 음성 화면으로 돌아갑니다.' : '기기가 버튼을 누르고 있습니다. 잠시만 기다려 주세요.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 17 * rs,
+              fontWeight: FontWeight.w500,
+              height: 1.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
     final screenH = MediaQuery.sizeOf(context).height;
     final waveH = (screenH * 0.12).clamp(48.0, 100.0);
     final bool isIdle = !_isRecording && !_isProcessing;
+
+    // 누르는 중 / 누르기 완료는 화면 전체로 크게 보여준다. 하드웨어가 실제로
+    // 움직이는 구간과 끝난 시점을 화면·음성 양쪽에서 분명히 구분하기 위함이다.
+    if (_isExecuting || _pressDoneLabel.isNotEmpty) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: const TopAppBar(title: 'Touch Bridge AI'),
+        body: SafeArea(child: Center(child: _buildPressStatusView(rs))),
+      );
+    }
 
     return Scaffold(
       backgroundColor: AppColors.background,
