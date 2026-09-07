@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_icons.dart';
+
 enum ApplianceType { washer, microwave, dryer, airConditioner, other }
 
 class KitPart {
@@ -19,7 +21,7 @@ class KitPart {
     return KitPart(
       name: json['name'] as String,
       count: json['count'] as int,
-      icon: IconData(json['icon'] as int, fontFamily: 'MaterialIcons'),
+      icon: iconFromCodePoint(json['icon'], fallback: kFallbackPartIcon),
     );
   }
 }

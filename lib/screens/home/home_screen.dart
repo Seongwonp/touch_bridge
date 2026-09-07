@@ -10,6 +10,7 @@ import '../../services/home_device_store.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_icons.dart';
 import '../voice/voice_listening_screen.dart';
 import '../connection/device_connect_screen.dart';
 
@@ -139,10 +140,7 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (ctx) => ControlModeSheet(
         deviceName: deviceName,
         deviceId: deviceId,
-        deviceIcon: IconData(
-          device['iconCodePoint'] as int,
-          fontFamily: 'MaterialIcons',
-        ),
+        deviceIcon: iconFromCodePoint(device['iconCodePoint']),
       ),
     );
   }

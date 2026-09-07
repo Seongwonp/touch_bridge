@@ -4,6 +4,7 @@ import '../../services/home_device_store.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_icons.dart';
 import '../connection/device_connect_screen.dart';
 
 class DeviceManagementScreen extends StatefulWidget {
@@ -200,10 +201,7 @@ class _DeviceManagementScreenState extends State<DeviceManagementScreen> {
                       Row(
                         children: [
                           Icon(
-                            IconData(
-                              device['iconCodePoint'] as int,
-                              fontFamily: 'MaterialIcons',
-                            ),
+                            iconFromCodePoint(device['iconCodePoint']),
                             color: AppColors.primary,
                             size: 24 * rs,
                           ),
@@ -301,14 +299,14 @@ class _DeviceManagementScreenState extends State<DeviceManagementScreen> {
                           Expanded(
                             child: Text(
                               ((device['aliases'] as List?)
-                                          ?.whereType<String>()
-                                          .join(', ') ??
-                                      '')
+                                              ?.whereType<String>()
+                                              .join(', ') ??
+                                          '')
                                       .isEmpty
                                   ? '별명 없음 — 평소 부르는 이름을 등록하세요'
                                   : (device['aliases'] as List)
-                                      .whereType<String>()
-                                      .join(', '),
+                                        .whereType<String>()
+                                        .join(', '),
                               style: TextStyle(
                                 color: Colors.white70,
                                 fontSize: 14 * rs,

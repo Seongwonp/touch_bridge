@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import '../../../widgets/responsive_scale.dart';
 import '../../../theme/app_colors.dart';
+import '../../../theme/app_icons.dart';
 
 class HomeDeviceCard extends StatelessWidget {
   // 스크린리더 커스텀 액션은 재빌드마다 새로 만들지 않도록 한 번만 생성한다.
@@ -52,127 +53,125 @@ class HomeDeviceCard extends StatelessWidget {
         onTap: onTap,
         customSemanticsActions: {
           if (managementEnabled && onManage != null) _manageAction: onManage!,
-          if (!managementEnabled && onVoiceControl != null) _voiceAction: onVoiceControl!,
+          if (!managementEnabled && onVoiceControl != null)
+            _voiceAction: onVoiceControl!,
         },
         child: ExcludeSemantics(
           child: GestureDetector(
-          onTap: onTap,
-          onLongPressStart: onLongPressStart,
-          onLongPressEnd: onLongPressEnd,
-          onLongPressCancel: onLongPressEnd == null
-              ? null
-              : () => onLongPressEnd!(LongPressEndDetails()),
-          child: Container(
-            padding: EdgeInsets.all(22 * rs),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceElevated,
-              borderRadius: BorderRadius.circular(24 * rs),
-              border: Border.all(color: AppColors.borderDefault),
-              boxShadow: const [
-                BoxShadow(
-                  color: AppColors.shadowSecondaryGlow,
-                  blurRadius: 16,
-                  spreadRadius: 1,
-                ),
-              ],
-            ),
-            child: Center(
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 100 * rs,
-                      height: 100 * rs,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: AppColors.primaryGradient,
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
+            onTap: onTap,
+            onLongPressStart: onLongPressStart,
+            onLongPressEnd: onLongPressEnd,
+            onLongPressCancel: onLongPressEnd == null
+                ? null
+                : () => onLongPressEnd!(LongPressEndDetails()),
+            child: Container(
+              padding: EdgeInsets.all(22 * rs),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceElevated,
+                borderRadius: BorderRadius.circular(24 * rs),
+                border: Border.all(color: AppColors.borderDefault),
+                boxShadow: const [
+                  BoxShadow(
+                    color: AppColors.shadowSecondaryGlow,
+                    blurRadius: 16,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+              child: Center(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 100 * rs,
+                        height: 100 * rs,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: AppColors.primaryGradient,
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(24 * rs),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: AppColors.shadowPrimary,
+                              blurRadius: 16,
+                            ),
+                          ],
                         ),
-                        borderRadius: BorderRadius.circular(24 * rs),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: AppColors.shadowPrimary,
-                            blurRadius: 16,
+                        child: Center(
+                          child: Icon(
+                            iconFromCodePoint(device['iconCodePoint']),
+                            color: Colors.black,
+                            size: 48 * rs,
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: ResponsiveScale.v(context, 16)),
+                      Text(
+                        device['name'] as String,
+                        style: TextStyle(
+                          fontSize: 26 * rs,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                          height: 1.2,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      SizedBox(height: ResponsiveScale.v(context, 10)),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 8 * rs,
+                            height: 8 * rs,
+                            decoration: const BoxDecoration(
+                              color: AppColors.success,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          SizedBox(width: 8 * rs),
+                          Text(
+                            device['status'] as String,
+                            style: TextStyle(
+                              fontSize: 15 * rs,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textSecondary,
+                            ),
                           ),
                         ],
                       ),
-                      child: Center(
-                        child: Icon(
-                          IconData(
-                            device['iconCodePoint'] as int,
-                            fontFamily: 'MaterialIcons',
+                      SizedBox(height: ResponsiveScale.v(context, 18)),
+                      Container(
+                        width: double.infinity,
+                        padding: EdgeInsets.symmetric(vertical: 14 * rs),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: AppColors.primaryGradient,
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
                           ),
-                          color: Colors.black,
-                          size: 48 * rs,
+                          borderRadius: BorderRadius.circular(12 * rs),
                         ),
-                      ),
-                    ),
-                    SizedBox(height: ResponsiveScale.v(context, 16)),
-                    Text(
-                      device['name'] as String,
-                      style: TextStyle(
-                        fontSize: 26 * rs,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
-                        height: 1.2,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    SizedBox(height: ResponsiveScale.v(context, 10)),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 8 * rs,
-                          height: 8 * rs,
-                          decoration: const BoxDecoration(
-                            color: AppColors.success,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        SizedBox(width: 8 * rs),
-                        Text(
-                          device['status'] as String,
+                        child: Text(
+                          '눌러서 제어하기',
+                          textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 15 * rs,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                            color: Colors.black,
                           ),
                         ),
-                      ],
-                    ),
-                    SizedBox(height: ResponsiveScale.v(context, 18)),
-                    Container(
-                      width: double.infinity,
-                      padding: EdgeInsets.symmetric(vertical: 14 * rs),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: AppColors.primaryGradient,
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                        ),
-                        borderRadius: BorderRadius.circular(12 * rs),
                       ),
-                      child: Text(
-                        '눌러서 제어하기',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 15 * rs,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.5,
-                          color: Colors.black,
-                        ),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          ),  // ExcludeSemantics
+          ), // ExcludeSemantics
         ),
       ),
     );
