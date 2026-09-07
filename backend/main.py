@@ -19,6 +19,8 @@ from prompts import MICROWAVE_SYSTEM_PROMPT
 from microwave_logic import infer_food_command, check_simple_rules
 from database import init_db, get_device_profile
 from validation import sanitize_command_response, sanitize_vision_mapping_response
+import ai_provider
+from school_gateway import SchoolGatewayConfig, SchoolGatewayError
 
 # .env 파일 로드
 load_dotenv()
@@ -100,7 +102,40 @@ async def rate_limit_middleware(request: Request, call_next):
     return await call_next(request)
 
 
-# Gemini AI 설정
+# ── AI 제공자 선택 ───────────────────────────────────────────────────────────
+# AI_PROVIDER=google(기본) | school. 학교 게이트웨이(school) 선택 시 실패해도
+# Google로 조용히 우회하지 않는다 — 실패는 실패로 보고한다.
+AI_PROVIDER, _PROVIDER_VALID = ai_provider.resolve_provider(os.environ)
+SCHOOL_CONFIG = SchoolGatewayConfig.from_env(os.environ)
+
+if not _PROVIDER_VALID:
+    logger.critical(
+        "ai.provider.invalid value=%s — 요청은 설정 오류로 실패합니다. "
+        "AI_PROVIDER는 google 또는 school이어야 합니다.",
+        AI_PROVIDER,
+    )
+elif AI_PROVIDER == ai_provider.PROVIDER_SCHOOL:
+    _school_problems = SCHOOL_CONFIG.missing_fields()
+    if _school_problems:
+        logger.critical(
+            "ai.provider.selected provider=school config=INVALID missing=%s "
+            "— AI 요청은 설정 오류로 실패합니다.",
+            ",".join(_school_problems),
+        )
+    else:
+        logger.info(
+            "ai.provider.selected provider=school text_model=%s vision_model=%s "
+            "base_host=%s (키는 기록하지 않음)",
+            SCHOOL_CONFIG.text_model,
+            SCHOOL_CONFIG.vision_model,
+            SCHOOL_CONFIG.base_url.split("//", 1)[-1].split("/", 1)[0],
+        )
+else:
+    logger.info("ai.provider.selected provider=google model=%s",
+                os.getenv("GEMINI_MODEL", "gemini-1.5-flash"))
+
+# Gemini AI 설정 (google 제공자용 — school 선택 시에도 객체 생성은 무해한
+# 로컬 동작이며, 실제 API 호출은 제공자 분기에서만 일어난다)
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 _MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 
@@ -139,11 +174,21 @@ async def request_logging_middleware(request, call_next):
 
 @app.get("/")
 async def root():
+    # ai_provider/ai_text_model은 배포된 서버가 어떤 제공자 설정으로 떠 있는지
+    # 확인하는 용도다(키 등 비밀은 절대 포함하지 않는다).
+    # 주의: 이 값과 /healthz 200은 "AI 연결 성공"의 증거가 아니다 —
+    # 실제 연결 여부는 /parse-command 호출 후 서버 로그의 ai.call 라인으로 확인한다.
     return {
         "service": "touch_bridge_backend",
         "status": "ok",
         "docs": "/docs",
         "health": "/healthz",
+        "ai_provider": AI_PROVIDER,
+        "ai_text_model": (
+            SCHOOL_CONFIG.text_model
+            if AI_PROVIDER == ai_provider.PROVIDER_SCHOOL
+            else _MODEL_NAME
+        ),
     }
 
 
@@ -161,8 +206,8 @@ async def fetch_profile(device_id: str):
     return profile
 
 
-def _interpret_with_ai_sync(text: str):
-    """Gemini를 사용하여 텍스트를 앱 명령 JSON으로 변환 (동기 — to_thread로 호출)"""
+def _interpret_with_google_sync(text: str):
+    """Google Gemini 직접 호출로 텍스트를 앱 명령 JSON으로 변환 (기존 호환 경로)."""
     try:
         response = ai_model.generate_content(f"사용자 입력: \"{text}\"")
         if not response.text:
@@ -172,10 +217,12 @@ def _interpret_with_ai_sync(text: str):
         # AI 응답은 신뢰할 수 없는 입력이다: 사용자 발화에 섞인 주입 지시가
         # message(TTS 낭독)나 needs_confirmation(확인 우회)을 오염시킬 수 있어
         # 서버에서 스키마를 강제한다.
-        return sanitize_command_response(json.loads(json_str))
+        result = sanitize_command_response(json.loads(json_str))
+        logger.info("ai.call provider=google model_req=%s status=ok", _MODEL_NAME)
+        return result
     except Exception as e:
         err_msg = str(e)
-        logger.error("AI 해석 오류: %s", err_msg)
+        logger.error("ai.call provider=google status=fail error=%s", err_msg)
 
         # 할당량 초과 시 구체적인 메시지 제공
         if "exhausted" in err_msg.lower() or "429" in err_msg:
@@ -191,6 +238,28 @@ def _interpret_with_ai_sync(text: str):
             "needs_confirmation": False,
             "message": message,
         }
+
+
+def _interpret_with_ai_sync(text: str):
+    """AI_PROVIDER에 따라 명령 해석 경로를 고른다 (동기 — to_thread로 호출).
+
+    school 선택 시 실패해도 Google로 우회하지 않는다.
+    """
+    if AI_PROVIDER == ai_provider.PROVIDER_SCHOOL:
+        return ai_provider.interpret_with_school(SCHOOL_CONFIG, text)
+    if AI_PROVIDER == ai_provider.PROVIDER_GOOGLE:
+        return _interpret_with_google_sync(text)
+    # 알 수 없는 AI_PROVIDER 값 — 설정 오류로 정직하게 실패한다.
+    logger.error("ai.call provider=%s status=fail(invalid_provider)", AI_PROVIDER)
+    return {
+        "action": "NONE",
+        "commands": [],
+        "target": None,
+        "inferred_seconds": 0,
+        "confidence": 0.0,
+        "needs_confirmation": False,
+        "message": "AI 서비스 설정에 문제가 있습니다. 보호자나 관리자에게 확인을 요청해 주세요.",
+    }
 
 
 class CommandRequest(BaseModel):
@@ -242,22 +311,7 @@ async def parse_command(req: CommandRequest):
 # 업로드 상한 — Vision 입력은 사진 1장이면 충분하다.
 _MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
-
-@app.post("/vision-mapping", dependencies=[Depends(require_api_key)])
-async def vision_mapping(image: UploadFile = File(...)):
-    # 주의: save_as_id 파라미터는 제거됨 — 무인증 프로필 덮어쓰기(임의 이미지로
-    # 기존 기기의 시작↔취소 배치를 바꿔치기)가 가능했던 물리 안전 결함.
-    # 프로필 저장이 필요해지면 별도의 인증된 관리자 경로로 추가할 것.
-    image_bytes = await image.read()
-    if len(image_bytes) > _MAX_IMAGE_BYTES:
-        raise HTTPException(status_code=413, detail="이미지가 너무 큽니다. 5MB 이하로 보내주세요.")
-
-    # MIME 타입이 명확하지 않은 경우 기본값으로 보정
-    mime_type = image.content_type
-    if not mime_type or mime_type == "application/octet-stream":
-        mime_type = "image/jpeg"
-
-    prompt = """
+_VISION_PROMPT = """
 이 이미지는 가전기기의 터치패드 사진입니다. 각 버튼의 실제 중심점을 찾아주세요.
 좌표 x, y는 이미지 전체 너비와 높이를 각각 0~1로 정규화한 버튼 중심 좌표입니다.
 row/col은 보조 분류값일 뿐이며 x/y를 대신할 수 없습니다.
@@ -274,6 +328,58 @@ row/col은 보조 분류값일 뿐이며 x/y를 대신할 수 없습니다.
 }
 모든 x, y, confidence는 반드시 0.0 이상 1.0 이하 숫자여야 합니다.
 """
+
+
+@app.post("/vision-mapping", dependencies=[Depends(require_api_key)])
+async def vision_mapping(image: UploadFile = File(...)):
+    # 주의: save_as_id 파라미터는 제거됨 — 무인증 프로필 덮어쓰기(임의 이미지로
+    # 기존 기기의 시작↔취소 배치를 바꿔치기)가 가능했던 물리 안전 결함.
+    # 프로필 저장이 필요해지면 별도의 인증된 관리자 경로로 추가할 것.
+    image_bytes = await image.read()
+    if len(image_bytes) > _MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="이미지가 너무 큽니다. 5MB 이하로 보내주세요.")
+
+    # MIME 타입이 명확하지 않은 경우 기본값으로 보정
+    mime_type = image.content_type
+    if not mime_type or mime_type == "application/octet-stream":
+        mime_type = "image/jpeg"
+
+    # ── 학교 게이트웨이 경로 ─────────────────────────────────────────────
+    # ⚠ 게이트웨이의 사진 입력 지원은 실호출 검증 전까지 미검증이다.
+    # 실패해도 Google로 우회하지 않고 오류로 보고한다.
+    if AI_PROVIDER == ai_provider.PROVIDER_SCHOOL:
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(
+                    ai_provider.vision_with_school,
+                    SCHOOL_CONFIG,
+                    prompt=_VISION_PROMPT,
+                    image_bytes=image_bytes,
+                    mime_type=mime_type,
+                ),
+                timeout=45,
+            )
+        except asyncio.TimeoutError:
+            logger.error("ai.call provider=school status=fail(timeout) path=vision")
+            raise HTTPException(status_code=504, detail="이미지 분석 시간이 초과되었습니다.")
+        except SchoolGatewayError as e:
+            logger.error(
+                "ai.call provider=school kind=%s status=%s result=fail(vision)",
+                e.kind,
+                e.status_code,
+            )
+            status_code, detail = ai_provider.gateway_error_to_http(e)
+            raise HTTPException(status_code=status_code, detail=detail)
+
+    if AI_PROVIDER != ai_provider.PROVIDER_GOOGLE:
+        # 알 수 없는 AI_PROVIDER 값 — 설정 오류로 정직하게 실패한다.
+        raise HTTPException(
+            status_code=503,
+            detail="AI 서비스 설정에 문제가 있습니다. 관리자에게 확인을 요청해 주세요.",
+        )
+
+    # ── Google 직접 호출 경로 (기존 호환) ────────────────────────────────
+    prompt = _VISION_PROMPT
     try:
         response = await asyncio.wait_for(
             asyncio.to_thread(

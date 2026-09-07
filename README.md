@@ -140,14 +140,48 @@ AI_BACKEND_API_KEY=
 `backend` 실행 환경 `.env`:
 
 ```env
+# AI 제공자 선택: google(기본, Gemini 직접 호출) | school(수원대 API Gateway)
+# school 선택 시 실패해도 Google로 자동 우회하지 않습니다.
+AI_PROVIDER=google
+
+# google 제공자용
 GOOGLE_API_KEY=여기에_실제_키_입력
 GEMINI_MODEL=gemini-1.5-flash
+
+# school 제공자용 (수원대학교 API Gateway, OpenAI 호환)
+SCHOOL_API_KEY=
+SCHOOL_API_BASE_URL=https://factchat-cloud.mindlogic.ai/v1/gateway
+SCHOOL_API_MODEL=gemini-3.8-flash
+# 사진 분석용 모델을 따로 쓰려면 지정 (미지정 시 SCHOOL_API_MODEL과 동일)
+SCHOOL_API_VISION_MODEL=
+
 # 배포 시 필수 — 설정하면 모든 API 요청에 X-API-Key 헤더를 요구합니다
 BACKEND_API_KEY=
 # MongoDB (미설정 시 localhost, 연결 실패 시 인메모리 폴백)
 MONGO_URI=mongodb://localhost:27017/
 ```
 (`backend/.env_ex` 참고)
+
+#### Render 배포 (학교 API Gateway 사용 시)
+1. Render 서비스의 Environment에 다음 변수를 설정:
+   - `AI_PROVIDER=school`
+   - `SCHOOL_API_KEY=<학교 발급 키>` (Git/예제 파일에 절대 넣지 말 것)
+   - `SCHOOL_API_BASE_URL=https://factchat-cloud.mindlogic.ai/v1/gateway`
+   - `SCHOOL_API_MODEL=gemini-3.8-flash`
+   - (선택) `SCHOOL_API_VISION_MODEL=<사진 분석용 모델 ID>`
+   - `BACKEND_API_KEY=<앱과 공유할 서버 인증 키>`
+2. 코드 변경을 push하면 Render가 자동 재배포합니다 (수동이면 Manual Deploy →
+   Deploy latest commit).
+3. 배포 확인 순서:
+   - `GET /` 응답의 `ai_provider`가 `school`인지 확인 (설정 확인용일 뿐,
+     **AI 연결 성공의 증거는 아님** — `/healthz` 200도 마찬가지)
+   - `/parse-command`에 규칙에 없는 문장(예: "안녕하세요")을 보내고,
+     Render 로그에서 `ai.call provider=school model_req=... model_resp=...
+     status=ok` 라인으로 실제 학교 API 사용을 확인
+4. 사진 분석(`/vision-mapping`)의 게이트웨이 지원은 **미검증** — 소량 테스트로
+   확인하고, 실패 시 `SCHOOL_API_VISION_MODEL`을 모델 목록의 다른 멀티모달
+   모델로 바꿔 재시도하세요. (게이트웨이는 제공자 네이티브 전체 API를 지원하지
+   않으며, 모델 이름만으로 사진 지원을 확정할 수 없음)
 
 > 백엔드에는 IP당 분당 60회(비전 10회) 레이트리밋, 업로드 5MB 상한,
 > AI 응답 스키마 검증(버튼 ID 화이트리스트 등)이 적용되어 있습니다.
