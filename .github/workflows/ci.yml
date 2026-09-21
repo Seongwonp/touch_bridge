@@ -1,0 +1,99 @@
+name: CI
+
+# 왜 필요한가: 2026-09-07 작업 로그의 ExpansionTile 회귀는 테스트 2건이
+# 깨진 채로 커밋돼 있었고, 디버그 빌드의 실제 화면에서도 터치 피드백이
+# 사라진 상태였다. 수동으로 `flutter test`를 돌리기 전까지 아무도 몰랐다.
+# 이 워크플로는 그 간극을 없앤다.
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# 같은 브랜치에 연속으로 푸시하면 이전 실행을 취소한다 (러너 시간 절약).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # pubspec.lock은 Flutter >=3.44.0 / Dart >=3.12.0 기준으로 생성돼 있다(락파일
+  # 하단 sdks 섹션). 이 값은 그 조건을 만족하는 버전이어야 한다.
+  #
+  # 주의: 개발 로컬이 이보다 낮은 버전이면 `flutter pub get`이 락파일을
+  # 다운그레이드한다(예: 3.41.6에서 meta 1.19.0 → 1.17.0). 그 결과를 커밋하면
+  # CI와 로컬이 서로 다른 패키지 조합으로 테스트하게 되므로, 락파일을 건드린
+  # 변경은 커밋 전에 한 번 확인할 것. (불일치를 자동으로 잡는 단계는 로컬
+  # 버전이 정리될 때까지 두지 않았다.)
+  FLUTTER_VERSION: '3.47.5'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  app:
+    name: Flutter 앱 (analyze + test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      # pubspec.yaml이 `.env`를 asset으로 선언하므로 파일이 없으면 analyze가
+      # asset_does_not_exist 경고를 내고 릴리스 빌드가 실패한다. `.env`는
+      # gitignore 대상이라 CI에서는 예시 파일로 대체한다.
+      # 테스트는 네트워크를 타지 않으므로 실제 키가 필요 없다.
+      - name: .env 생성 (.env_ex 기반)
+        run: cp .env_ex .env
+
+      - name: 의존성 설치
+        run: flutter pub get
+
+      # 현재 저장소는 경고 0건 상태다(2026-09-07 아이콘 트리셰이킹 경고 해소 완료).
+      # info까지 실패로 처리해 그 상태를 유지한다.
+      - name: 정적 분석
+        run: flutter analyze --fatal-infos
+
+      - name: 단위·위젯 테스트
+        run: flutter test --coverage
+
+      # 커버리지는 게이트가 아니라 관측용이다. 안전 경로(비상 정지·음성 명령)
+      # 커버리지를 올려가는 근거 자료로 쓴다.
+      - name: 커버리지 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-coverage
+          path: coverage/lcov.info
+          if-no-files-found: warn
+          retention-days: 14
+
+  backend:
+    name: 백엔드 (unittest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: 의존성 설치
+        run: pip install -r requirements.txt
+
+      # 외부 API 호출은 모두 mock 처리돼 있어 실제 키·네트워크가 필요 없다.
+      - name: 테스트
+        run: python -m unittest discover -s . -p "test_*.py" -v

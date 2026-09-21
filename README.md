@@ -136,6 +136,13 @@ AI_BACKEND_API_KEY=
 앱은 Gemini API 키를 직접 사용하지 않고, 백엔드 API를 통해 AI 기능을 호출합니다.
 (`.env_ex` 참고)
 
+`.env`는 `pubspec.yaml`에 asset으로 선언돼 있어 **없으면 analyze 경고와 빌드 실패**가
+발생합니다. gitignore 대상이므로 클론 직후 한 번 만들어 주세요:
+
+```bash
+cp .env_ex .env
+```
+
 ### 백엔드(FastAPI)
 `backend` 실행 환경 `.env`:
 

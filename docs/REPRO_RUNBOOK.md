@@ -1,7 +1,11 @@
 # Touch Bridge 재현 가이드 (심사용)
 
 ## 1) 사전 준비
-- Flutter 3.x / Dart 3.x
+- **Flutter 3.44.0 이상 / Dart 3.12.0 이상** — `pubspec.lock` 하단 `sdks` 섹션이
+  요구하는 하한이며, CI는 3.47.5로 검증한다.
+  이보다 낮은 버전에서 `flutter pub get`을 돌리면 SDK가 핀하는 패키지
+  (`meta`/`matcher`/`test_api`/`vector_math`)가 다운그레이드되어 락파일이
+  변경되므로, 재현 시에는 하한 이상을 쓸 것.
 - Python 3.10+ (백엔드 실행용)
 - 실제 또는 테스트용 BLE 주변기기
 
@@ -14,7 +18,15 @@ AI_BACKEND_URL=http://127.0.0.1:8000
 # 백엔드에 BACKEND_API_KEY를 설정한 경우 같은 값 지정
 AI_BACKEND_API_KEY=
 ```
-(`.env_ex` 참고)
+`.env`는 **선택이 아니라 필수**다. `pubspec.yaml`이 `.env`를 asset으로 선언하므로
+파일이 없으면 `flutter analyze`가 `asset_does_not_exist` 경고를 내고 릴리스 빌드가
+실패한다. `.env`는 gitignore 대상이라 클론 직후에는 존재하지 않는다:
+
+```bash
+cp .env_ex .env   # 클론 후 최초 1회
+```
+
+테스트(`flutter test`)는 네트워크를 타지 않으므로 값이 비어 있어도 된다.
 
 ### 백엔드 `.env` (`backend` 실행 환경)
 ```env
