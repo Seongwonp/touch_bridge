@@ -202,6 +202,13 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   Future<void> _onHoldCompleted() async {
     if (!mounted || _stopInProgress) return;
     _stopInProgress = true;
+    // 홀드 진행 햅틱을 여기서 반드시 멈춘다. 이 타이머는 _onHoldEnd에서만
+    // 취소됐는데, 완주 직후 _isHolding이 false가 되어 _onHoldEnd가 조기
+    // 반환하므로 주기 타이머가 그대로 남았다. 정지를 한 번 쓸 때마다 1초
+    // 주기 타이머가 누적되고, 다음 홀드에서 _isHolding이 true가 되는 순간
+    // 누수된 타이머들이 함께 발화해 진행 햅틱이 중복된다 — 화면을 볼 수 없는
+    // 사용자가 3초 경과를 촉각으로 가늠하는 신호가 깨진다.
+    _holdHapticTimer?.cancel();
     setState(() {
       _isHolding = false;
     });

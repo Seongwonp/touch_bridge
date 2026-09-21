@@ -123,6 +123,20 @@ class TtsService {
     }
   }
 
+  /// 테스트 전용: 발화 로그·대기 큐와 중복 억제 상태를 초기화한다.
+  ///
+  /// [TtsService]는 싱글톤이라 상태가 테스트 사이에 남는다. 특히 "동일 멘트
+  /// 8초 반복 억제"는 실제 벽시계(DateTime.now())를 쓰므로, 같은 문구를
+  /// 검증하는 테스트 두 개가 8초 안에 연달아 돌면 두 번째 발화가 조용히
+  /// DROPPED 되어 테스트가 원인 불명으로 실패한다. setUp에서 호출할 것.
+  @visibleForTesting
+  void resetForTest() {
+    _speakLog.clear();
+    _queue.clear();
+    _lastSpokenText = '';
+    _lastSpokenAt = DateTime.fromMillisecondsSinceEpoch(0);
+  }
+
   /// 최근 TTS 로그 반환 (디버깅용)
   List<String> getRecentLog() {
     return _speakLog
