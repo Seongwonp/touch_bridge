@@ -18,7 +18,6 @@ import '../../services/app_logger.dart';
 import '../../services/ai_backend_service.dart';
 import '../../services/active_device_service.dart';
 import '../../services/ble_service.dart';
-import '../../services/emergency_intent.dart';
 import '../../services/emergency_stop_service.dart';
 import '../../services/help_intent.dart';
 import '../../services/microwave_command_service.dart';
@@ -26,15 +25,13 @@ import '../../services/washing_machine_command_service.dart';
 import '../../services/ac_command_service.dart';
 import '../../services/appliance_command_router.dart';
 import '../../services/last_command_service.dart';
-import '../../services/repeat_intent.dart';
-import '../../services/replay_intent.dart';
 import '../../services/status_intent.dart';
 import '../../services/device_mapping_service.dart';
 import '../../services/feedback_service.dart';
 import '../../services/voice_device_resolver.dart';
+import '../../services/voice_intent_router.dart';
 import '../../services/mapping_execution_service.dart';
 import '../../services/home_device_store.dart';
-import '../../services/voice_text_matcher.dart';
 import '../../services/accessibility_settings.dart';
 import '../../theme/app_colors.dart';
 import 'widgets/voice_wave_visualizer.dart';
@@ -78,11 +75,9 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   String _lastWords = '';
 
   // 부엌 소음 대응: STT 인식 신뢰도가 낮으면 바로 실행하지 않고 인식한
-  // 문장을 먼저 확인한다. missingConfidence(-1)일 때는 신뢰도를 신뢰할 수
-  // 없는 신호이므로 게이트를 걸지 않는다(플랫폼에 따라 항상 -1/1.0을 주는
-  // 경우가 있어, 없는 신호로 정상 동작을 막지 않기 위함).
+  // 문장을 먼저 확인한다. 임계값과 missingConfidence(-1) 처리 규칙은
+  // VoiceIntentRouter가 갖는다.
   double _lastConfidence = SpeechRecognitionWords.missingConfidence;
-  static const double _lowConfidenceThreshold = 0.5;
   String? _pendingLowConfidenceText;
 
   Timer? _waveTimer;
@@ -533,139 +528,128 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       'text': text,
     });
 
-    if (text.isEmpty) {
-      AppLogger.warn('voice.send_to_gemini.empty_text');
-      setState(() {
-        _statusMessage = '명령이 없습니다.';
-        _isProcessing = false;
-      });
-      return;
-    }
+    // 어떤 흐름으로 보낼지는 VoiceIntentRouter가 단독으로 결정한다.
+    // 판정 "순서" 자체가 안전 계약이라(비상 정지 최우선, 상태·재생은 확인
+    // 맥락 보존 등) 화면 밖에서 검증할 수 있어야 한다.
+    // → test/services/voice_intent_router_test.dart
+    final decision = VoiceIntentRouter.route(
+      text: text,
+      hasPendingCommand: _pendingCommandData != null,
+      pendingLowConfidenceText: _pendingLowConfidenceText,
+      confidence: _lastConfidence,
+    );
 
-    // 어떤 상태(확인 대기/기기 선택/AI 분석)보다 먼저 "멈춰/그만/정지"를 최우선 처리한다.
-    if (EmergencyIntent.matches(text)) {
-      AppLogger.info('voice.emergency_intercept', {'requestId': requestId});
-      _pendingCommandData = null;
-      setState(() {
-        _statusMessage = '중단';
-        _isProcessing = false;
-      });
-      await _handleEmergencyStop();
-      return;
-    }
+    // 대기 상태 정리는 분기 실행 전에 한 번에 반영한다. pendingAccepted는
+    // 비우기 전의 명령이 필요하므로 미리 잡아 둔다.
+    final pendingCommand = _pendingCommandData;
+    if (decision.clearPendingCommand) _pendingCommandData = null;
+    if (decision.clearPendingLowConfidence) _pendingLowConfidenceText = null;
 
-    // "무엇을 할 수 있어?" 류 발화도 AI를 거치지 않고 즉시 답한다. 화면의
-    // 예시 명령어 칩을 볼 수 없는 사용자를 위한 발견성 보완.
-    if (HelpIntent.matches(text)) {
-      AppLogger.info('voice.help_intercept', {'requestId': requestId});
-      _pendingCommandData = null;
-      setState(() {
-        _statusMessage = '도움말';
-        _isProcessing = false;
-      });
-      await _speak(HelpIntent.buildResponse(), interrupt: true);
-      return;
-    }
+    switch (decision.kind) {
+      case VoiceIntentKind.emptyText:
+        AppLogger.warn('voice.send_to_gemini.empty_text');
+        setState(() {
+          _statusMessage = '명령이 없습니다.';
+          _isProcessing = false;
+        });
+        return;
 
-    // "얼마나 남았어?", "지금 뭐 해?" 류 상태 질의도 AI 없이 즉시 답한다.
-    // 확인 대기 컨텍스트(_pendingCommandData 등)는 지우지 않는다 — 상태를
-    // 물어본 뒤 이어서 예/아니오로 답할 수 있어야 한다.
-    if (StatusIntent.matches(text)) {
-      AppLogger.info('voice.status_intercept', {'requestId': requestId});
-      final response = StatusIntent.buildResponse();
-      setState(() {
-        _statusMessage = response;
-        _isProcessing = false;
-      });
-      await _speak(response, interrupt: true, priority: TtsPriority.result);
-      // 확인 질문에 답하던 중이었다면 다시 들을 수 있게 마이크를 연다.
-      if (_pendingCommandData != null || _pendingLowConfidenceText != null) {
+      case VoiceIntentKind.emergencyStop:
+        AppLogger.info('voice.emergency_intercept', {'requestId': requestId});
+        setState(() {
+          _statusMessage = '중단';
+          _isProcessing = false;
+        });
+        await _handleEmergencyStop();
+        return;
+
+      case VoiceIntentKind.help:
+        AppLogger.info('voice.help_intercept', {'requestId': requestId});
+        setState(() {
+          _statusMessage = '도움말';
+          _isProcessing = false;
+        });
+        await _speak(HelpIntent.buildResponse(), interrupt: true);
+        return;
+
+      case VoiceIntentKind.status:
+        AppLogger.info('voice.status_intercept', {'requestId': requestId});
+        final response = StatusIntent.buildResponse();
+        setState(() {
+          _statusMessage = response;
+          _isProcessing = false;
+        });
+        await _speak(response, interrupt: true, priority: TtsPriority.result);
+        // 확인 질문에 답하던 중이었다면 다시 들을 수 있게 마이크를 연다.
+        if (_pendingCommandData != null || _pendingLowConfidenceText != null) {
+          _restartListeningAfterPrompt();
+        }
+        return;
+
+      case VoiceIntentKind.replayLastSpeech:
+        AppLogger.info('voice.replay_intercept', {'requestId': requestId});
+        setState(() => _isProcessing = false);
+        await _tts.replayLast();
+        return;
+
+      case VoiceIntentKind.repeatLastCommand:
+        AppLogger.info('voice.repeat_intercept', {'requestId': requestId});
+        final last = await LastCommandService.instance.load();
+        if (last == null) {
+          const msg = '다시 실행할 최근 명령이 없어요. 새 명령을 말씀해 주세요.';
+          setState(() {
+            _statusMessage = msg;
+            _isProcessing = false;
+          });
+          await _speak(msg, interrupt: true, priority: TtsPriority.result);
+          return;
+        }
+
+        // 마지막 명령의 기기가 아직 등록되어 있는지 확인하고 활성화한다.
+        final devices = await HomeDeviceStore.loadDevices();
+        final match = devices.where((d) => d['id'] == last.deviceId).toList();
+        if (match.isEmpty) {
+          final msg = '마지막 명령의 기기 ${last.deviceName}가 더 이상 등록되어 있지 않아요.';
+          setState(() {
+            _statusMessage = msg;
+            _isProcessing = false;
+          });
+          await _speak(msg, interrupt: true, priority: TtsPriority.result);
+          return;
+        }
+        final device = match.first;
+        await ActiveDeviceService.instance.setActiveDevice(
+          deviceId: last.deviceId,
+          deviceName: last.deviceName,
+          bleId: device['bleId'] as String?,
+          bleName: device['bleName'] as String?,
+          deviceType: device['deviceType'] as String?,
+        );
+
+        // 물리 동작이므로 바로 실행하지 않고 기존 예/아니오 확인 흐름을 탄다.
+        _pendingCommandData = Map<String, dynamic>.from(last.data);
+        final question =
+            '마지막 명령은 ${last.deviceName}, ${last.description} 이에요. '
+            '다시 실행할까요? 맞으면 예라고 말씀해 주세요.';
+        setState(() {
+          _statusMessage = question;
+          _isProcessing = false;
+        });
+        await _speak(question, interrupt: true, priority: TtsPriority.result);
         _restartListeningAfterPrompt();
-      }
-      return;
-    }
-
-    // "다시 말해줘/뭐라고/안 들려"는 부엌 소음으로 안내를 놓쳤을 때 쓴다.
-    // 확인 대기 상태(_pendingCommandData/_pendingLowConfidenceText)는 지우지
-    // 않는다 — 놓친 게 확인 질문 자체일 수 있으므로 맥락을 그대로 유지한 채
-    // 마지막 안내만 다시 들려준다.
-    if (ReplayIntent.matches(text)) {
-      AppLogger.info('voice.replay_intercept', {'requestId': requestId});
-      setState(() => _isProcessing = false);
-      await _tts.replayLast();
-      return;
-    }
-
-    // "아까 그거 다시" — 마지막 전송 성공 명령의 재실행 요청.
-    // 물리 동작으로 이어지므로 바로 실행하지 않고 반드시 확인 질문을 거친다:
-    // 기존 _pendingCommandData + 예/아니오 흐름을 그대로 재사용한다.
-    // (판별 순서: Replay("다시 말해줘"=안내 재생) 먼저, Repeat 나중 — 토큰 비겹침)
-    if (RepeatIntent.matches(text)) {
-      AppLogger.info('voice.repeat_intercept', {'requestId': requestId});
-      final last = await LastCommandService.instance.load();
-      if (last == null) {
-        const msg = '다시 실행할 최근 명령이 없어요. 새 명령을 말씀해 주세요.';
-        setState(() {
-          _statusMessage = msg;
-          _isProcessing = false;
-        });
-        await _speak(msg, interrupt: true, priority: TtsPriority.result);
         return;
-      }
 
-      // 마지막 명령의 기기가 아직 등록되어 있는지 확인하고 활성화한다.
-      final devices = await HomeDeviceStore.loadDevices();
-      final match =
-          devices.where((d) => d['id'] == last.deviceId).toList();
-      if (match.isEmpty) {
-        final msg = '마지막 명령의 기기 ${last.deviceName}가 더 이상 등록되어 있지 않아요.';
-        setState(() {
-          _statusMessage = msg;
-          _isProcessing = false;
-        });
-        await _speak(msg, interrupt: true, priority: TtsPriority.result);
-        return;
-      }
-      final device = match.first;
-      await ActiveDeviceService.instance.setActiveDevice(
-        deviceId: last.deviceId,
-        deviceName: last.deviceName,
-        bleId: device['bleId'] as String?,
-        bleName: device['bleName'] as String?,
-        deviceType: device['deviceType'] as String?,
-      );
-
-      _pendingCommandData = Map<String, dynamic>.from(last.data);
-      final question =
-          '마지막 명령은 ${last.deviceName}, ${last.description} 이에요. '
-          '다시 실행할까요? 맞으면 예라고 말씀해 주세요.';
-      setState(() {
-        _statusMessage = question;
-        _isProcessing = false;
-      });
-      await _speak(question, interrupt: true, priority: TtsPriority.result);
-      _restartListeningAfterPrompt();
-      return;
-    }
-
-    // 낮은 신뢰도로 확인을 요청했던 문장에 대한 예/아니오 응답 처리.
-    // 부엌 소음(후드·전자레인지 등)으로 오인식된 문장을 그대로 실행하지
-    // 않기 위한 안전장치 — _pendingCommandData(이미 파싱된 명령 확인)와는
-    // 별개로, "무엇을 들었는지" 자체를 먼저 확인한다.
-    if (_pendingLowConfidenceText != null) {
-      final pendingText = _pendingLowConfidenceText!;
-      _pendingLowConfidenceText = null;
-      if (VoiceTextMatcher.isAffirmative(text)) {
+      case VoiceIntentKind.lowConfidenceAccepted:
         AppLogger.info('voice.low_confidence.confirmed', {
           'requestId': requestId,
         });
         // 사용자가 직접 확인했으므로 재확인 루프에 빠지지 않게 신뢰도를
         // 신뢰 가능한 값으로 리셋한 뒤 원문을 다시 처리한다.
         _lastConfidence = 1.0;
-        await _sendTextToGemini(pendingText);
+        await _sendTextToGemini(decision.payload!);
         return;
-      }
-      if (VoiceTextMatcher.isNegative(text)) {
+
+      case VoiceIntentKind.lowConfidenceRejected:
         AppLogger.info('voice.low_confidence.rejected', {
           'requestId': requestId,
         });
@@ -677,58 +661,49 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         // "다시 말씀해 주세요"라고 요청했으니 마이크를 자동으로 다시 연다.
         _restartListeningAfterPrompt();
         return;
-      }
-      // 예/아니오가 아니면 새로 들어온 문장을 새 명령으로 계속 처리한다.
-    }
 
-    // 소음 환경 등으로 인식 신뢰도가 낮으면 바로 실행하지 않고 들은 문장을
-    // 먼저 확인한다. missingConfidence(-1)일 때는 게이트를 걸지 않는다.
-    if (_lastConfidence != SpeechRecognitionWords.missingConfidence &&
-        _lastConfidence < _lowConfidenceThreshold) {
-      AppLogger.info('voice.low_confidence_confirm', {
-        'requestId': requestId,
-        'confidence': _lastConfidence,
-      });
-      _pendingLowConfidenceText = text;
-      final confirmQuestion = '"$text"라고 들었어요. 맞으면 "예", 아니면 "아니오"라고 말씀해 주세요.';
-      setState(() {
-        // 확인 질문 전문을 liveRegion에 실어 스크린리더 사용자도 질문 내용을
-        // 들을 수 있게 한다('다시 확인 중'만으로는 무엇을 확인하는지 알 수 없다).
-        _statusMessage = confirmQuestion;
-        _isProcessing = false;
-      });
-      await _speak(confirmQuestion, interrupt: true);
-      // 질문했으니 답을 들을 수 있게 마이크를 자동으로 다시 연다.
-      _restartListeningAfterPrompt();
-      return;
-    }
+      case VoiceIntentKind.confirmLowConfidence:
+        AppLogger.info('voice.low_confidence_confirm', {
+          'requestId': requestId,
+          'confidence': _lastConfidence,
+        });
+        _pendingLowConfidenceText = decision.payload;
+        final confirmQuestion =
+            '"$text"라고 들었어요. 맞으면 "예", 아니면 "아니오"라고 말씀해 주세요.';
+        setState(() {
+          // 확인 질문 전문을 liveRegion에 실어 스크린리더 사용자도 질문 내용을
+          // 들을 수 있게 한다('다시 확인 중'만으로는 무엇을 확인하는지 알 수 없다).
+          _statusMessage = confirmQuestion;
+          _isProcessing = false;
+        });
+        await _speak(confirmQuestion, interrupt: true);
+        // 질문했으니 답을 들을 수 있게 마이크를 자동으로 다시 연다.
+        _restartListeningAfterPrompt();
+        return;
 
-    if (_pendingCommandData != null) {
-      if (VoiceTextMatcher.isAffirmative(text)) {
+      case VoiceIntentKind.pendingAccepted:
         AppLogger.info('voice.response.affirmative', {'requestId': requestId});
-        final pending = _pendingCommandData!;
-        _pendingCommandData = null;
         await _handleCommand(
-          pending,
+          pendingCommand!,
           recognizedText: text,
           forceExecution: true,
         );
         return;
-      }
 
-      if (VoiceTextMatcher.isNegative(text)) {
+      case VoiceIntentKind.pendingRejected:
         AppLogger.info('voice.response.negative', {'requestId': requestId});
-        _pendingCommandData = null;
         setState(() {
           _statusMessage = '취소됨';
           _isProcessing = false;
         });
         await _speak('알겠습니다. 취소할게요.');
         return;
-      }
 
-      _pendingCommandData = null;
+      case VoiceIntentKind.parseAsNewCommand:
+        // 아래 기기 해석 → 간단 규칙 → AI 백엔드 경로로 이어진다.
+        break;
     }
+
 
     final registeredDevices = await _loadRegisteredDevices();
     final resolution = VoiceDeviceResolver.resolve(
