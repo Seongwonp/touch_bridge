@@ -539,7 +539,10 @@ void main() {
 
       expect(result.ok, isFalse);
       expect(result.stoppedByEmergency, isTrue);
-      expect(result.buttonId, 'BT-05', reason: '누르지 않은 다음 버튼을 알려준다');
+      // 정지는 첫 버튼의 마지막 줄 전송 직후(뒤따르는 대기 중)에 들어오므로,
+      // 첫 버튼(BT-04) 자체가 "마지막 대기 중 정지"로 보고된다. 어느 쪽이든
+      // 두 번째 버튼은 시작되지 않아야 한다.
+      expect(result.buttonId, 'BT-04');
       expect(sent.length, 7, reason: '첫 버튼 7줄만 전송되고 두 번째 버튼은 0줄');
     });
 
@@ -568,6 +571,130 @@ void main() {
       );
       // 전송 오류가 아니므로 "연결을 확인" 문구가 아니라 정지 취소 문구여야 한다.
       expect(result.userMessage, isNot(contains('연결을 확인')));
+    });
+
+    test('전송 전 대기 중 정지가 오면 한 줄도 보내지 않는다 (재리뷰 P1)', () async {
+      final sent = <String>[];
+      BleService.instance.setSendRawOverride((cmd) async {
+        sent.add(cmd);
+        return true;
+      });
+
+      final future = MappingExecutionService.instance.pressSequence(
+        deviceId: 'test-device',
+        profile: profile,
+        buttonIds: const ['BT-04'],
+      );
+      // pressButton은 전송 전 afterGridDelay(250ms)를 기다린다. 그 사이에 정지.
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      await BleService.instance.sendEmergencyStop('test-device');
+      final result = await future;
+
+      expect(result.ok, isFalse);
+      expect(result.stoppedByEmergency, isTrue);
+      expect(sent, isEmpty, reason: '하위 전송 함수가 epoch를 새로 잡으면 여기서 7줄이 나간다');
+    });
+
+    test('마지막 줄 뒤 대기 중 정지는 정상 완료로 보고하지 않는다', () async {
+      final sent = <String>[];
+      BleService.instance.setSendRawOverride((cmd) async {
+        sent.add(cmd);
+        if (sent.length == 7) {
+          // 마지막 줄 전송 직후(뒤따르는 120ms 대기 중) 정지.
+          Future<void>.delayed(const Duration(milliseconds: 30), () {
+            BleService.instance.sendEmergencyStop('test-device');
+          });
+        }
+        return true;
+      });
+
+      final result = await MappingExecutionService.instance.pressButton(
+        deviceId: 'test-device',
+        profile: profile,
+        buttonId: 'BT-04',
+      );
+
+      expect(sent.length, 7, reason: '줄은 이미 다 나갔다');
+      expect(result.ok, isFalse);
+      expect(result.stoppedByEmergency, isTrue);
+    });
+
+    test('전송 오류 복구 도중 정지가 오면 남은 복구 줄을 보내지 않는다', () async {
+      final sent = <String>[];
+      BleService.instance.setSendRawOverride((cmd) async {
+        sent.add(cmd);
+        if (cmd.startsWith('G4')) return false; // 누름 유지에서 일반 전송 오류
+        if (cmd == 'G90' && sent.where((c) => c == 'G90').length == 2) {
+          // 복구 첫 줄(G90) 전송 중 비상 정지.
+          await BleService.instance.sendEmergencyStop('test-device');
+        }
+        return true;
+      });
+
+      final result = await MappingExecutionService.instance.pressButton(
+        deviceId: 'test-device',
+        profile: profile,
+        buttonId: 'BT-04',
+      );
+
+      expect(result.ok, isFalse);
+      expect(result.stoppedByEmergency, isTrue);
+      expect(result.userMessage, contains('누른 채'), reason: '핀 상태 미확인을 알린다');
+      expect(
+        sent.where((c) => c.startsWith('G0 Z')).length,
+        1,
+        reason: '복구의 두 번째 줄(G0 Z 안전높이)은 정지 후라 보내면 안 된다',
+      );
+    });
+
+    test('pressPhysicalSequence: 버튼 사이 대기 중 정지가 오면 다음 버튼을 시작하지 않는다', () async {
+      // pressPhysical 내부의 마지막 대기(800ms)가 끝나 정상 반환한 **뒤**,
+      // 외부 루프의 버튼 사이 대기(여기서는 1500ms) 중에 정지를 넣는다.
+      // 내부 함수의 검사가 아니라 외부 루프의 검사를 검증하는 것이 목적이다.
+      final sent = <String>[];
+      BleService.instance.setSendRawOverride((cmd) async {
+        sent.add(cmd);
+        if (cmd.startsWith('G1 X0 Y0')) {
+          Future<void>.delayed(const Duration(milliseconds: 1100), () {
+            BleService.instance.sendEmergencyStop('test-device');
+          });
+        }
+        return true;
+      });
+
+      final result = await MappingExecutionService.instance.pressPhysicalSequence(
+        const ['BT-01', 'BT-02'],
+        betweenPressDelay: const Duration(milliseconds: 1500),
+      );
+
+      expect(result.ok, isFalse);
+      expect(result.stoppedByEmergency, isTrue);
+      expect(result.message, contains('남은 버튼'), reason: '외부 루프의 검사에서 끊겨야 한다');
+      expect(result.buttonId, 'BT-02');
+      expect(
+        sent.where((c) => c == 'G92.1').length,
+        1,
+        reason: '두 번째 버튼(G92.1로 시작)은 시작되면 안 된다',
+      );
+    });
+
+    test('pressPhysical: 상위 토큰을 넘기면 시작 전 정지도 감지한다', () async {
+      final sent = <String>[];
+      BleService.instance.setSendRawOverride((cmd) async {
+        sent.add(cmd);
+        return true;
+      });
+      final stale = BleService.instance.motionEpoch;
+      await BleService.instance.sendEmergencyStop('test-device');
+
+      final result = await MappingExecutionService.instance.pressPhysical(
+        'BT-01',
+        epoch: stale,
+      );
+
+      expect(result.ok, isFalse);
+      expect(result.stoppedByEmergency, isTrue);
+      expect(sent, isEmpty);
     });
 
     test('정지가 없으면 두 버튼 시퀀스가 끝까지 전송된다 (회귀 방지)', () async {

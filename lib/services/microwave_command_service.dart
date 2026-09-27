@@ -1,5 +1,7 @@
 import 'dart:math' show max;
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 class MicrowaveCommandService {
   const MicrowaveCommandService._();
 
@@ -97,9 +99,43 @@ class MicrowaveCommandService {
     };
   }
 
-  /// 부정·거절 표현. 이 단어가 있으면 앱 규칙은 실행 명령을 만들지 않고
-  /// 백엔드(AI)로 넘긴다 — "30초 시작하지마"를 30초 시작으로 실행하던 문제.
-  static const _negationTokens = ['하지마', '하지말', '말고', '말아', '안해', '안돼', '아니야', '아냐'];
+  /// 부정·거절 표현이 있으면 앱 규칙은 실행 명령을 만들지 않고 백엔드(AI)로
+  /// 넘긴다 — "30초 시작하지마"를 30초 시작으로 실행하던 문제.
+  ///
+  /// 공백을 지운 문자열에서 토큰 포함 여부를 보면 "30초 동안 해줘"의 "안해",
+  /// "국에 밥 말아 데워줘"의 "말아"가 오탐된다(재리뷰 P2). 그래서 원문 어절
+  /// 단위로 본다. 백엔드 `microwave_logic.has_negation`과 같은 규칙이다.
+  static final _negationSuffixRe = RegExp(
+    r'(하지마|하지말|하지않|하지마세요|않을래|않을게|안할래|안할게|싫어|싫은데|말래|안돼|안되|않아|말고)(요|여|야)?$',
+  );
+  static final _negationPrefixRe = RegExp(r'^(안|못)(해|할|되|돼)');
+  static final _punctRe = RegExp(r'[.,!?~…]+');
+
+  /// 어절은 문장부호를 뗀 뒤 본다("시작하지마."). "만두말고"처럼 조사가 붙은
+  /// 경우는 어미 규칙(…말고)으로 잡는다.
+  @visibleForTesting
+  static bool hasNegation(String text) {
+    final words = text
+        .replaceAll(_punctRe, ' ')
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .toList();
+    for (var i = 0; i < words.length; i++) {
+      final w = words[i];
+      if (w == '안' || w == '못') return true; // "안 할래", "못 해"
+      if (_negationPrefixRe.hasMatch(w)) return true; // "안해줘", "못하겠어"
+      if (_negationSuffixRe.hasMatch(w)) return true; // "시작하지마", "안할래"
+      if (w == '말고') return true; // "만두 말고 밥"
+      // "누르지 말아" — 앞 어절이 '지'로 끝날 때만 부정. "밥 말아 데워줘"는 아님.
+      if ((w.startsWith('말아') || w.startsWith('마세요') || w == '마') &&
+          i > 0 &&
+          words[i - 1].endsWith('지')) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   /// 'n번', 'n번 버튼', 'n번 눌러줘' — 문장 전체가 이 형태일 때만 즉시 누름.
   /// 이전의 앵커 없는 firstMatch는 "3번째 만두 데워줘"도 3번 버튼 즉시 누름으로
@@ -125,8 +161,8 @@ class MicrowaveCommandService {
       };
     }
 
-    // 2) 부정·거절 표현은 규칙으로 실행하지 않는다 (AI 경로로).
-    if (_negationTokens.any(t.contains)) return null;
+    // 2) 부정·거절 표현은 규칙으로 실행하지 않는다 (AI 경로로). 원문 어절 기준.
+    if (hasNegation(text)) return null;
 
     // 3) 'n번' 즉시 누름 — 문장 전체 일치일 때만.
     final pressMatch = _pressOnlyRe.firstMatch(t);

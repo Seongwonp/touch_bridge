@@ -81,13 +81,20 @@ class MappingExecutionService {
   MappingExecutionService._();
   static final MappingExecutionService instance = MappingExecutionService._();
 
+  /// [epoch]: 상위 시퀀스가 시작 시점에 잡은 실행 토큰([BleService.motionEpoch]).
+  /// 넘기지 않으면 이 호출이 시작될 때 잡는다. 모든 대기(`await`) 뒤에 같은 토큰을
+  /// 다시 비교해, 대기 중 들어온 비상 정지 이후로는 어떤 줄도 보내지 않는다.
+  /// (첫 구현은 하위 전송 함수가 토큰을 새로 잡아, 전송 전 대기 중의 정지가
+  /// 무시되는 빈틈이 있었다 — 2026-09-27 재리뷰 P1.)
   Future<MappingExecutionResult> pressButton({
     required String deviceId,
     required DeviceMappingProfile profile,
     required String buttonId,
     Duration afterGridDelay = const Duration(milliseconds: 250),
     bool dryRun = false,
+    int? epoch,
   }) async {
+    final token = epoch ?? BleService.instance.motionEpoch;
     if (profile.calibrationInvalidated) {
       AppLogger.warn('mapping.press.calibration_invalidated', {
         'device_id': deviceId,
@@ -154,6 +161,25 @@ class MappingExecutionService {
     }
 
     await Future<void>.delayed(afterGridDelay);
+    if (BleService.instance.motionEpoch != token) {
+      // 전송 전 대기 중에 비상 정지가 들어왔다. 한 줄도 보내지 않는다.
+      AppLogger.warn('mapping.press.cancelled_by_stop', {
+        'device_id': deviceId,
+        'button_id': buttonId,
+        'sent_lines': 0,
+      });
+      return MappingExecutionResult(
+        ok: false,
+        message: '비상 정지로 전송을 시작하지 않았습니다. (전송된 라인: 0/${gcode.length})',
+        buttonId: buttonId,
+        row: resolved.row,
+        col: resolved.col,
+        x: x,
+        y: y,
+        gcode: gcode,
+        stoppedByEmergency: true,
+      );
+    }
     AppLogger.info('mapping.press.send', {
       'device_id': deviceId,
       'button_id': buttonId,
@@ -166,7 +192,7 @@ class MappingExecutionService {
       'gcode': gcode,
     });
 
-    final send = await sendGcodeSequenceWithIndex(gcode);
+    final send = await sendGcodeSequenceWithIndex(gcode, epoch: token);
 
     if (send.stopped) {
       // 비상 정지/끊김으로 끊긴 경우: Z 복구 이동 명령을 보내지 않는다.
@@ -200,17 +226,39 @@ class MappingExecutionService {
       final zDownIndex = gcode.indexWhere((line) => line.startsWith('G1 Z'));
       final zMayBeDown = zDownIndex >= 0 && send.failedIndex >= zDownIndex;
       var recovered = true;
+      var stoppedDuringRecovery = false;
       if (zMayBeDown) {
-        recovered = await _tryRecoverZAbsolute(
+        final recovery = await _tryRecoverZAbsolute(
           safeZ: profile.travelHeightZ,
           feed: profile.pressFeed,
+          epoch: token,
         );
+        recovered = recovery.recovered;
+        stoppedDuringRecovery = recovery.stopped;
         AppLogger.warn('mapping.press.z_recovery', {
           'device_id': deviceId,
           'button_id': buttonId,
           'failed_index': send.failedIndex,
           'recovered': recovered,
+          'stopped': stoppedDuringRecovery,
         });
+      }
+      if (stoppedDuringRecovery) {
+        // 복구 도중 정지: 남은 복구 줄을 보내지 않았다. 핀 상태는 미확인이다.
+        return MappingExecutionResult(
+          ok: false,
+          message: '복구 중 비상 정지로 남은 복구 명령을 취소했습니다. '
+              '(실패 라인: ${send.failedIndex}, Z 하강 이후)',
+          buttonId: buttonId,
+          row: resolved.row,
+          col: resolved.col,
+          x: x,
+          y: y,
+          gcode: gcode,
+          stoppedByEmergency: true,
+          explicitUserMessage: '비상 정지로 남은 동작을 취소했습니다. 누름 장치가 버튼을 '
+              '누른 채 멈춰 있을 수 있으니 기기 상태를 확인해 주세요.',
+        );
       }
       return MappingExecutionResult(
         ok: false,
@@ -273,10 +321,21 @@ class MappingExecutionService {
         profile: profile,
         buttonId: buttonId,
         dryRun: dryRun,
+        epoch: epoch,
       );
       if (!result.ok) return result;
       dryRunGcode.addAll(result.gcode);
       await Future<void>.delayed(betweenPressDelay);
+    }
+    if (!dryRun && BleService.instance.motionEpoch != epoch) {
+      // 마지막 버튼 뒤 대기 중 정지: 보낸 줄은 다 나갔지만 "정상 완료"로
+      // 보고하지 않는다. 결과 안내는 비상 정지 경로가 맡는다.
+      return MappingExecutionResult(
+        ok: false,
+        message: '시퀀스 전송 후 대기 중 비상 정지가 들어왔습니다.',
+        gcode: dryRunGcode,
+        stoppedByEmergency: true,
+      );
     }
     return MappingExecutionResult(
       ok: true,
@@ -286,11 +345,49 @@ class MappingExecutionService {
     );
   }
 
+  /// 저장 매핑이 없을 때 여러 버튼을 목데이터 좌표로 연달아 누른다.
+  /// 버튼 사이 대기 중의 비상 정지도 같은 실행 토큰으로 막는다 — 호출부가
+  /// [pressPhysical]을 직접 반복하면 대기 구간이 보호되지 않는다(재리뷰 P1).
+  Future<MappingExecutionResult> pressPhysicalSequence(
+    List<String> buttonIds, {
+    Duration betweenPressDelay = const Duration(milliseconds: 800),
+  }) async {
+    final ble = BleService.instance;
+    final epoch = ble.motionEpoch;
+    for (final buttonId in buttonIds) {
+      if (ble.motionEpoch != epoch) {
+        AppLogger.warn('mapping.physical_sequence.cancelled_by_stop', {
+          'next_button_id': buttonId,
+        });
+        return MappingExecutionResult(
+          ok: false,
+          message: '비상 정지로 남은 버튼($buttonId 이후)을 누르지 않았습니다.',
+          buttonId: buttonId,
+          stoppedByEmergency: true,
+        );
+      }
+      final result = await pressPhysical(buttonId, epoch: epoch);
+      if (!result.ok) return result;
+      await Future<void>.delayed(betweenPressDelay);
+    }
+    if (ble.motionEpoch != epoch) {
+      return MappingExecutionResult(
+        ok: false,
+        message: '시퀀스 전송 후 대기 중 비상 정지가 들어왔습니다.',
+        stoppedByEmergency: true,
+      );
+    }
+    return const MappingExecutionResult(ok: true, message: '물리 좌표 시퀀스 전송 완료');
+  }
+
   /// 저장된 매핑 프로필이 없을 때 쓰는 데모/목데이터 물리 좌표 기반 누름.
   /// [MicrowaveCommandService.btnToPhysical]에 정의된 검증된 좌표로 직접
   /// G-code를 조립해 전송한다. 저장 매핑이 있으면 [pressButton]을 쓴다.
   /// (이전에는 이 로직이 voice_listening_screen.dart에 인라인으로 중복돼 있었다.)
-  Future<MappingExecutionResult> pressPhysical(String buttonId) async {
+  Future<MappingExecutionResult> pressPhysical(
+    String buttonId, {
+    int? epoch,
+  }) async {
     final phys = MicrowaveCommandService.btnToPhysical(buttonId);
     if (phys == null) {
       return MappingExecutionResult(
@@ -311,44 +408,54 @@ class MappingExecutionService {
     // 실패하면 누름 핀이 버튼을 누른 채일 수 있으므로 best-effort 복구를 시도한다.
     var zDown = false;
     final ble = BleService.instance;
-    // 시퀀스 시작 시점의 안전 카운터. 각 명령 전에 비교해, 비상 정지 이후에는
-    // 남은 이동·누름 명령을 보내지 않는다.
-    final epoch = ble.motionEpoch;
+    // 실행 토큰. 상위 시퀀스가 넘긴 값을 쓰고, 없으면 지금 잡는다. 각 명령 전과
+    // 모든 대기 뒤에 비교해, 비상 정지 이후에는 남은 이동·누름 명령을 보내지 않는다.
+    final token = epoch ?? ble.motionEpoch;
     var stopped = false;
     Future<bool> raw(String command) async {
-      if (ble.motionEpoch != epoch) {
+      if (ble.motionEpoch != token) {
         stopped = true;
         return false;
       }
       final ok = await ble.sendRaw(command);
-      if (!ok && ble.motionEpoch != epoch) stopped = true;
+      if (!ok && ble.motionEpoch != token) stopped = true;
       return ok;
     }
 
+    MappingExecutionResult stoppedResult({String? detail}) {
+      AppLogger.warn('mapping.press_physical.cancelled_by_stop', {
+        'button_id': buttonId,
+        'z_down': zDown,
+      });
+      return MappingExecutionResult(
+        ok: false,
+        message: '$buttonId 비상 정지로 남은 명령 전송 취소'
+            '${zDown ? ' (Z 하강 이후)' : ''}${detail == null ? '' : ' — $detail'}',
+        buttonId: buttonId,
+        x: targetX,
+        y: targetY,
+        stoppedByEmergency: true,
+        explicitUserMessage: zDown
+            ? '비상 정지로 남은 동작을 취소했습니다. 누름 장치가 버튼을 누른 채 멈춰 '
+                '있을 수 있으니 기기 상태를 확인해 주세요.'
+            : null,
+      );
+    }
+
     Future<MappingExecutionResult> fail() async {
-      if (stopped) {
-        // 정지로 끊긴 경우 Z 복구 이동을 보내지 않는다 — 정지 계약 우선.
-        AppLogger.warn('mapping.press_physical.cancelled_by_stop', {
-          'button_id': buttonId,
-          'z_down': zDown,
-        });
-        return MappingExecutionResult(
-          ok: false,
-          message: '$buttonId 비상 정지로 남은 명령 전송 취소'
-              '${zDown ? ' (Z 하강 이후)' : ''}',
-          buttonId: buttonId,
-          x: targetX,
-          y: targetY,
-          stoppedByEmergency: true,
-        );
-      }
+      // 정지로 끊긴 경우 Z 복구 이동을 보내지 않는다 — 정지 계약 우선.
+      if (stopped) return stoppedResult();
       var recovered = true;
       if (zDown) {
-        recovered = await _tryRecoverZRelative();
+        final recovery = await _tryRecoverZRelative(epoch: token);
+        recovered = recovery.recovered;
         AppLogger.warn('mapping.press_physical.z_recovery', {
           'button_id': buttonId,
           'recovered': recovered,
+          'stopped': recovery.stopped,
         });
+        // 복구 도중 정지: 남은 복구 줄을 보내지 않았다.
+        if (recovery.stopped) return stoppedResult(detail: '복구 중 정지');
       }
       return MappingExecutionResult(
         ok: false,
@@ -387,6 +494,11 @@ class MappingExecutionService {
     await Future<void>.delayed(const Duration(milliseconds: 300));
     if (!await raw('G1 X0 Y0 F1000')) return fail(); // 원점 복귀
     await Future<void>.delayed(const Duration(milliseconds: 800));
+    // 마지막 대기 중 정지: 줄은 다 나갔지만 정상 완료로 보고하지 않는다.
+    if (ble.motionEpoch != token) {
+      stopped = true;
+      return stoppedResult(detail: '전송 후 대기 중 정지');
+    }
 
     return MappingExecutionResult(
       ok: true,
@@ -479,22 +591,30 @@ class MappingExecutionService {
   /// [stopped]가 true면 전송 오류가 아니라 비상 정지/끊김([BleService.motionEpoch]
   /// 변화)으로 [failedIndex]번째 줄부터 보내지 않은 것이다. 이 경우 호출부는
   /// 복구 이동 명령을 추가로 보내면 안 된다.
+  ///
+  /// [epoch]: 상위가 잡은 실행 토큰. 넘기지 않으면 여기서 잡는다(단독 호출용).
+  /// 마지막 줄 뒤 대기 중 정지가 오면 줄은 다 나갔어도 `stopped: true`,
+  /// `failedIndex: gcode.length`로 보고한다.
   Future<({bool ok, int failedIndex, bool stopped})> sendGcodeSequenceWithIndex(
-    List<String> gcode,
-  ) async {
+    List<String> gcode, {
+    int? epoch,
+  }) async {
     final ble = BleService.instance;
-    final epoch = ble.motionEpoch;
+    final token = epoch ?? ble.motionEpoch;
     for (var i = 0; i < gcode.length; i++) {
-      if (ble.motionEpoch != epoch) {
+      if (ble.motionEpoch != token) {
         return (ok: false, failedIndex: i, stopped: true);
       }
       final ok = await ble.sendRaw(gcode[i]);
       if (!ok) {
         // write 대기 중 정지가 들어와 sendRaw가 큐 안에서 취소된 경우도 포함한다.
-        final stopped = ble.motionEpoch != epoch;
+        final stopped = ble.motionEpoch != token;
         return (ok: false, failedIndex: i, stopped: stopped);
       }
       await Future<void>.delayed(const Duration(milliseconds: 120));
+    }
+    if (ble.motionEpoch != token) {
+      return (ok: false, failedIndex: gcode.length, stopped: true);
     }
     return (ok: true, failedIndex: -1, stopped: false);
   }
@@ -502,31 +622,39 @@ class MappingExecutionService {
   /// Z축이 내려간 채 시퀀스가 끊겼을 때의 best-effort 복구 (절대 좌표 경로).
   /// G90 후 안전 높이로 올린다. 연결 자체가 죽었으면 실패할 수 있으며,
   /// 그 경우 호출부가 사용자에게 물리 상태 확인을 안내해야 한다.
-  Future<bool> _tryRecoverZAbsolute({
+  /// 복구 중 비상 정지가 오면 남은 줄을 보내지 않고 `stopped: true`.
+  Future<({bool recovered, bool stopped})> _tryRecoverZAbsolute({
     required double safeZ,
     required int feed,
+    required int epoch,
   }) async {
     final ble = BleService.instance;
     try {
+      if (ble.motionEpoch != epoch) return (recovered: false, stopped: true);
       final abs = await ble.sendRaw('G90');
+      if (ble.motionEpoch != epoch) return (recovered: false, stopped: true);
       final up = await ble.sendRaw('G0 Z${_fmt(safeZ)} F$feed');
-      return abs && up;
+      return (recovered: abs && up, stopped: ble.motionEpoch != epoch);
     } catch (_) {
-      return false;
+      return (recovered: false, stopped: ble.motionEpoch != epoch);
     }
   }
 
   /// Z축 복구 (상대 좌표 경로 — [pressPhysical] 전용).
   /// G91 상태에서 실패했을 수 있으므로 상대 상승 후 절대 모드로 되돌린다.
   /// 핀이 실제로는 안 내려간 상태에서 실행돼도 패널 반대 방향 1mm 이동이라 무해하다.
-  Future<bool> _tryRecoverZRelative() async {
+  Future<({bool recovered, bool stopped})> _tryRecoverZRelative({
+    required int epoch,
+  }) async {
     final ble = BleService.instance;
     try {
+      if (ble.motionEpoch != epoch) return (recovered: false, stopped: true);
       final up = await ble.sendRaw('G1 Z1.0 F150');
+      if (ble.motionEpoch != epoch) return (recovered: false, stopped: true);
       final abs = await ble.sendRaw('G90');
-      return up && abs;
+      return (recovered: up && abs, stopped: ble.motionEpoch != epoch);
     } catch (_) {
-      return false;
+      return (recovered: false, stopped: ble.motionEpoch != epoch);
     }
   }
 

@@ -251,7 +251,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       setState(() {
         _isRecording = false;
         _isProcessing = false;
-        _statusMessage = '말씀이 들리지 않았습니다.';
+        _statusMessage = '말씀이 들리지 않았습니다. 다시 말하려면 마이크를 누르세요.';
       });
       _speak('말씀이 들리지 않았습니다. 다시 말하려면 마이크를 누르세요.');
     });
@@ -585,7 +585,8 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       case VoiceIntentKind.help:
         AppLogger.info('voice.help_intercept', {'requestId': requestId});
         setState(() {
-          _statusMessage = '도움말';
+          // liveRegion에도 TTS와 같은 도움말 전문을 싣는다.
+          _statusMessage = HelpIntent.buildResponse();
           _isProcessing = false;
         });
         await _speak(HelpIntent.buildResponse(), interrupt: true);
@@ -913,15 +914,16 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     // 저장 매핑이 없을 때만 검증된 데모 목데이터 물리 좌표를 fallback으로 쓴다.
     // 실제 G-code 조립/전송은 MappingExecutionService.pressPhysical에 있다
     // (이전엔 여기 인라인으로 중복돼 있었다).
-    for (final dynamic raw in commands) {
-      final btn = raw as String;
-      final result = await MappingExecutionService.instance.pressPhysical(btn);
+    // 버튼 사이 대기까지 하나의 실행 토큰으로 묶는다 — 화면에서 pressPhysical을
+    // 직접 반복하면 대기 중 비상 정지가 다음 버튼을 막지 못한다.
+    {
+      final result = await MappingExecutionService.instance
+          .pressPhysicalSequence(commands.cast<String>());
       if (!result.ok) {
         if (mounted) setState(() => _statusMessage = result.userMessage);
         _speak(result.userMessage);
         return false;
       }
-      await Future<void>.delayed(const Duration(milliseconds: 800));
     }
     return true;
   }

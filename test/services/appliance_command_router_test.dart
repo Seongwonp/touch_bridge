@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:touch_bridge/services/appliance_command_router.dart';
+import 'package:touch_bridge/services/microwave_command_service.dart';
 import 'package:touch_bridge/services/washing_machine_command_service.dart';
 import 'package:touch_bridge/services/ac_command_service.dart';
 
@@ -107,6 +108,21 @@ void main() {
       expect(mw('30초 시작하지마'), isNull);
       expect(mw('1분 시작 말고'), isNull);
       expect(mw('3번 누르지 말아'), isNull);
+      expect(mw('1분 시작 안 할래'), isNull);
+    });
+
+    test('부정어 판정은 어절 기준이라 정상 문장을 오탐하지 않는다 (재리뷰 P2)', () {
+      expect(MicrowaveCommandService.hasNegation('30초 동안 해줘'), isFalse);
+      expect(MicrowaveCommandService.hasNegation('국에 밥 말아 데워줘'), isFalse);
+      expect(MicrowaveCommandService.hasNegation('30초 시작'), isFalse);
+      expect(MicrowaveCommandService.hasNegation('안해줘'), isTrue);
+      expect(MicrowaveCommandService.hasNegation('못 하겠어'), isTrue);
+      expect(MicrowaveCommandService.hasNegation('만두 말고 밥'), isTrue);
+      expect(MicrowaveCommandService.hasNegation('누르지 말아'), isTrue);
+      // 문장부호·붙여쓰기 (재리뷰 P2 회귀)
+      expect(MicrowaveCommandService.hasNegation('30초 시작하지마.'), isTrue);
+      expect(MicrowaveCommandService.hasNegation('만두말고 밥 데워줘'), isTrue);
+      expect(mw('30초 시작하지마.'), isNull);
     });
   });
 
