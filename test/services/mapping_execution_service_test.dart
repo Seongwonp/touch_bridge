@@ -455,4 +455,137 @@ void main() {
       expect(sent.last, startsWith('G0 X'), reason: '실패 지점 이후 전송이 없어야 한다');
     });
   });
+
+  group('비상 정지 후 잔여 명령 차단 (정지 계약)', () {
+    // 비상 정지는 명령 큐를 우회해 먼저 나간다. 그 뒤에 남아 있던 이동·누름
+    // 명령이 계속 전송되면 "정지를 눌렀는데 다음 버튼으로 이동해 누르는" 사고가
+    // 된다. 시퀀스는 시작 시점의 motionEpoch를 기억하고, 정지(epoch 증가) 이후
+    // 명령은 보내지 않아야 한다. 정지로 끊긴 경우 Z 복구 이동도 보내지 않는다.
+    const profile = DeviceMappingProfile(
+      rows: 3,
+      cols: 3,
+      originX: 0,
+      originY: 0,
+      pitchX: 10,
+      pitchY: 10,
+      travelHeightZ: 5,
+      pressDepthZ: -1,
+      travelFeed: 1200,
+      pressFeed: 200,
+      buttonMap: {'BT-04': (row: 1, col: 0), 'BT-05': (row: 1, col: 1)},
+    );
+
+    setUp(() {
+      BleService.instance.setPriorityStopOverride((_) async => 'STOPPED');
+    });
+    tearDown(() {
+      BleService.instance.setSendRawOverride(null);
+      BleService.instance.setPriorityStopOverride(null);
+    });
+
+    test('한 버튼의 누름 도중 정지가 오면 그 뒤 줄과 다음 버튼을 보내지 않는다', () async {
+      final sent = <String>[];
+      BleService.instance.setSendRawOverride((cmd) async {
+        sent.add(cmd);
+        if (cmd.startsWith('G4')) {
+          // 누름 유지(dwell) 전송 직후 사용자가 비상 정지를 누른 상황.
+          await BleService.instance.sendEmergencyStop('test-device');
+        }
+        return true;
+      });
+
+      final result = await MappingExecutionService.instance.pressSequence(
+        deviceId: 'test-device',
+        profile: profile,
+        buttonIds: const ['BT-04', 'BT-05'],
+      );
+
+      expect(result.ok, isFalse);
+      expect(result.stoppedByEmergency, isTrue);
+      expect(result.userMessage, contains('비상 정지'));
+      expect(sent.last, startsWith('G4'), reason: '정지 이후 줄이 전송되면 안 된다');
+      expect(
+        sent.where((c) => c.startsWith('G0 X')).length,
+        1,
+        reason: '두 번째 버튼(BT-05)으로 이동하면 안 된다',
+      );
+      expect(
+        sent.where((c) => c.startsWith('G0 Z')).length,
+        1,
+        reason: '정지로 끊긴 경우 Z 복구 이동을 추가로 보내면 안 된다',
+      );
+    });
+
+    test('버튼 사이 대기 중 정지가 오면 다음 버튼을 시작하지 않는다', () async {
+      final sent = <String>[];
+      var zUpCount = 0;
+      BleService.instance.setSendRawOverride((cmd) async {
+        sent.add(cmd);
+        if (cmd.startsWith('G0 Z')) {
+          zUpCount++;
+          // 첫 버튼의 마지막 줄(안전 높이 복귀)이 나간 뒤 정지.
+          if (zUpCount == 2) {
+            await BleService.instance.sendEmergencyStop('test-device');
+          }
+        }
+        return true;
+      });
+
+      final result = await MappingExecutionService.instance.pressSequence(
+        deviceId: 'test-device',
+        profile: profile,
+        buttonIds: const ['BT-04', 'BT-05'],
+      );
+
+      expect(result.ok, isFalse);
+      expect(result.stoppedByEmergency, isTrue);
+      expect(result.buttonId, 'BT-05', reason: '누르지 않은 다음 버튼을 알려준다');
+      expect(sent.length, 7, reason: '첫 버튼 7줄만 전송되고 두 번째 버튼은 0줄');
+    });
+
+    test('pressPhysical: Z 하강 후 정지가 오면 상승 복구도 보내지 않는다', () async {
+      final sent = <String>[];
+      BleService.instance.setSendRawOverride((cmd) async {
+        sent.add(cmd);
+        if (cmd.startsWith('G1 Z-')) {
+          await BleService.instance.sendEmergencyStop('test-device');
+        }
+        return true;
+      });
+
+      final result = await MappingExecutionService.instance.pressPhysical(
+        'BT-01',
+      );
+
+      expect(result.ok, isFalse);
+      expect(result.stoppedByEmergency, isTrue);
+      expect(result.phase, CommandPhase.failed);
+      expect(sent.last, startsWith('G1 Z-'), reason: '정지 이후 명령이 전송되면 안 된다');
+      expect(
+        sent.any((c) => c.startsWith('G1 Z1.0')),
+        isFalse,
+        reason: '정지 직후에는 복구 이동조차 보내지 않는다 (정지 계약 우선)',
+      );
+      // 전송 오류가 아니므로 "연결을 확인" 문구가 아니라 정지 취소 문구여야 한다.
+      expect(result.userMessage, isNot(contains('연결을 확인')));
+    });
+
+    test('정지가 없으면 두 버튼 시퀀스가 끝까지 전송된다 (회귀 방지)', () async {
+      final sent = <String>[];
+      BleService.instance.setSendRawOverride((cmd) async {
+        sent.add(cmd);
+        return true;
+      });
+
+      final result = await MappingExecutionService.instance.pressSequence(
+        deviceId: 'test-device',
+        profile: profile,
+        buttonIds: const ['BT-04', 'BT-05'],
+      );
+
+      expect(result.ok, isTrue);
+      expect(result.stoppedByEmergency, isFalse);
+      expect(sent.length, 14);
+    });
+  });
 }

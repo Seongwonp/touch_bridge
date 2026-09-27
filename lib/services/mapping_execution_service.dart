@@ -18,6 +18,7 @@ class MappingExecutionResult {
     this.gcode = const [],
     this.dryRun = false,
     this.explicitUserMessage,
+    this.stoppedByEmergency = false,
   });
 
   final bool ok;
@@ -34,11 +35,19 @@ class MappingExecutionResult {
   /// row/col을 쓰지 않는 경로가 아래 자동 판정 로직을 오판하지 않도록 한다.
   final String? explicitUserMessage;
 
+  /// 비상 정지(또는 연결 끊김)로 남은 명령을 보내지 않고 중단한 결과.
+  ///
+  /// 전송 오류와 구분한다: 이 경우 Z 복구 같은 추가 이동 명령을 보내지 않는다
+  /// (정지 직후에 이동 명령을 내는 것 자체가 정지 계약 위반이며, 사용자 안내는
+  /// 비상 정지 경로가 ACK 기준으로 따로 한다).
+  final bool stoppedByEmergency;
+
   /// 시각장애인 사용자에게 읽어줄 정직한 문구.
   /// 기술용어(G-code/XYZ/BT-xx)나 내부 좌표를 노출하지 않는다.
   /// (개발자 로그용 상세 문구는 [message]를 그대로 쓴다.)
   String get userMessage {
     if (explicitUserMessage != null) return explicitUserMessage!;
+    if (stoppedByEmergency) return '비상 정지로 남은 동작을 취소했습니다.';
     if (!ok) {
       final mappingMissing = row == null || col == null;
       if (mappingMissing) {
@@ -159,6 +168,28 @@ class MappingExecutionService {
 
     final send = await sendGcodeSequenceWithIndex(gcode);
 
+    if (send.stopped) {
+      // 비상 정지/끊김으로 끊긴 경우: Z 복구 이동 명령을 보내지 않는다.
+      // 정지 이후의 물리 상태 안내는 비상 정지 경로(ACK 기준)가 담당한다.
+      AppLogger.warn('mapping.press.cancelled_by_stop', {
+        'device_id': deviceId,
+        'button_id': buttonId,
+        'sent_lines': send.failedIndex,
+      });
+      return MappingExecutionResult(
+        ok: false,
+        message: '비상 정지로 남은 명령 전송을 취소했습니다. '
+            '(전송된 라인: ${send.failedIndex}/${gcode.length})',
+        buttonId: buttonId,
+        row: resolved.row,
+        col: resolved.col,
+        x: x,
+        y: y,
+        gcode: gcode,
+        stoppedByEmergency: true,
+      );
+    }
+
     if (!send.ok) {
       // Z 하강 라인(G1 Z<pressZ>)이 이미 전송된 뒤 실패했다면 누름 핀이
       // 버튼을 누른 채 멈춰 있을 수 있다 — best-effort로 안전 높이 복구를
@@ -219,7 +250,24 @@ class MappingExecutionService {
     bool dryRun = false,
   }) async {
     final dryRunGcode = <String>[];
+    // 시퀀스 시작 시점의 안전 카운터. 버튼 사이 대기 중에 비상 정지가 오면
+    // 다음 버튼을 누르지 않는다. (한 버튼 안의 줄 단위 검사는
+    // [sendGcodeSequenceWithIndex]가 한다.)
+    final epoch = BleService.instance.motionEpoch;
     for (final buttonId in buttonIds) {
+      if (!dryRun && BleService.instance.motionEpoch != epoch) {
+        AppLogger.warn('mapping.sequence.cancelled_by_stop', {
+          'device_id': deviceId,
+          'next_button_id': buttonId,
+        });
+        return MappingExecutionResult(
+          ok: false,
+          message: '비상 정지로 남은 버튼($buttonId 이후)을 누르지 않았습니다.',
+          buttonId: buttonId,
+          gcode: dryRunGcode,
+          stoppedByEmergency: true,
+        );
+      }
       final result = await pressButton(
         deviceId: deviceId,
         profile: profile,
@@ -262,7 +310,38 @@ class MappingExecutionService {
     // zDown: Z 하강 명령 전송 이후 ~ 상승 명령 성공 전까지 true. 이 구간에서
     // 실패하면 누름 핀이 버튼을 누른 채일 수 있으므로 best-effort 복구를 시도한다.
     var zDown = false;
+    final ble = BleService.instance;
+    // 시퀀스 시작 시점의 안전 카운터. 각 명령 전에 비교해, 비상 정지 이후에는
+    // 남은 이동·누름 명령을 보내지 않는다.
+    final epoch = ble.motionEpoch;
+    var stopped = false;
+    Future<bool> raw(String command) async {
+      if (ble.motionEpoch != epoch) {
+        stopped = true;
+        return false;
+      }
+      final ok = await ble.sendRaw(command);
+      if (!ok && ble.motionEpoch != epoch) stopped = true;
+      return ok;
+    }
+
     Future<MappingExecutionResult> fail() async {
+      if (stopped) {
+        // 정지로 끊긴 경우 Z 복구 이동을 보내지 않는다 — 정지 계약 우선.
+        AppLogger.warn('mapping.press_physical.cancelled_by_stop', {
+          'button_id': buttonId,
+          'z_down': zDown,
+        });
+        return MappingExecutionResult(
+          ok: false,
+          message: '$buttonId 비상 정지로 남은 명령 전송 취소'
+              '${zDown ? ' (Z 하강 이후)' : ''}',
+          buttonId: buttonId,
+          x: targetX,
+          y: targetY,
+          stoppedByEmergency: true,
+        );
+      }
       var recovered = true;
       if (zDown) {
         recovered = await _tryRecoverZRelative();
@@ -286,28 +365,27 @@ class MappingExecutionService {
       );
     }
 
-    final ble = BleService.instance;
-    if (!await ble.sendRaw('G92.1')) return fail(); // 모든 오프셋 취소
-    if (!await ble.sendRaw('G92 X0 Y0')) return fail(); // 현재 위치를 (0,0)으로 설정
-    if (!await ble.sendRaw('G90')) return fail(); // 절대 좌표 모드 명시
-    if (!await ble.sendRaw('G1 X$targetX Y$targetY F1000')) return fail();
+    if (!await raw('G92.1')) return fail(); // 모든 오프셋 취소
+    if (!await raw('G92 X0 Y0')) return fail(); // 현재 위치를 (0,0)으로 설정
+    if (!await raw('G90')) return fail(); // 절대 좌표 모드 명시
+    if (!await raw('G1 X$targetX Y$targetY F1000')) return fail();
     await Future<void>.delayed(const Duration(milliseconds: 1500)); // 이동 시간 확보
 
     // Z 터치 로직: 상대 좌표(G91)
-    if (!await ble.sendRaw('G91')) return fail();
+    if (!await raw('G91')) return fail();
     zDown = true; // 하강 명령을 보내는 시점부터 "눌린 채 멈춤" 가능 구간
-    if (!await ble.sendRaw('G1 Z-1.0 F150')) return fail(); // 1.0mm 내려가기
+    if (!await raw('G1 Z-1.0 F150')) return fail(); // 1.0mm 내려가기
     await Future<void>.delayed(const Duration(milliseconds: 800));
 
-    if (!await ble.sendRaw('G4 P0.4')) return fail(); // 터치 유지
+    if (!await raw('G4 P0.4')) return fail(); // 터치 유지
     await Future<void>.delayed(const Duration(milliseconds: 600));
 
-    if (!await ble.sendRaw('G1 Z1.0 F150')) return fail(); // 1.0mm 올라오기
+    if (!await raw('G1 Z1.0 F150')) return fail(); // 1.0mm 올라오기
     zDown = false; // 상승 명령 전송 성공 — 이후 실패는 눌림 위험 없음
     await Future<void>.delayed(const Duration(milliseconds: 300));
-    if (!await ble.sendRaw('G90')) return fail(); // 다시 절대 좌표 모드로 설정
+    if (!await raw('G90')) return fail(); // 다시 절대 좌표 모드로 설정
     await Future<void>.delayed(const Duration(milliseconds: 300));
-    if (!await ble.sendRaw('G1 X0 Y0 F1000')) return fail(); // 원점 복귀
+    if (!await raw('G1 X0 Y0 F1000')) return fail(); // 원점 복귀
     await Future<void>.delayed(const Duration(milliseconds: 800));
 
     return MappingExecutionResult(
@@ -397,15 +475,28 @@ class MappingExecutionService {
   /// G-code를 순서대로 전송하고, 실패 시 실패한 라인 인덱스를 함께 반환한다.
   /// 호출부는 인덱스로 "Z 하강 이후 실패"(핀이 눌린 채 멈춤 위험)를 판별해
   /// 복구 시퀀스를 결정한다.
-  Future<({bool ok, int failedIndex})> sendGcodeSequenceWithIndex(
+  ///
+  /// [stopped]가 true면 전송 오류가 아니라 비상 정지/끊김([BleService.motionEpoch]
+  /// 변화)으로 [failedIndex]번째 줄부터 보내지 않은 것이다. 이 경우 호출부는
+  /// 복구 이동 명령을 추가로 보내면 안 된다.
+  Future<({bool ok, int failedIndex, bool stopped})> sendGcodeSequenceWithIndex(
     List<String> gcode,
   ) async {
+    final ble = BleService.instance;
+    final epoch = ble.motionEpoch;
     for (var i = 0; i < gcode.length; i++) {
-      final ok = await BleService.instance.sendRaw(gcode[i]);
-      if (!ok) return (ok: false, failedIndex: i);
+      if (ble.motionEpoch != epoch) {
+        return (ok: false, failedIndex: i, stopped: true);
+      }
+      final ok = await ble.sendRaw(gcode[i]);
+      if (!ok) {
+        // write 대기 중 정지가 들어와 sendRaw가 큐 안에서 취소된 경우도 포함한다.
+        final stopped = ble.motionEpoch != epoch;
+        return (ok: false, failedIndex: i, stopped: stopped);
+      }
       await Future<void>.delayed(const Duration(milliseconds: 120));
     }
-    return (ok: true, failedIndex: -1);
+    return (ok: true, failedIndex: -1, stopped: false);
   }
 
   /// Z축이 내려간 채 시퀀스가 끊겼을 때의 best-effort 복구 (절대 좌표 경로).

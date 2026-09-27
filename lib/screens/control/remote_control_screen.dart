@@ -268,7 +268,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen>
     // "0230" 같은 네 자리 입력에도 안내를 계속 들어야 해 반복 사용 피로가
     // 크다. 실제 하드웨어를 움직이는 "시작"만 2단계로 유지한다.
     return Semantics(
-      label: '$number 숫자 버튼',
+      label: '$number',
       hint: '누르면 바로 입력됩니다',
       button: true,
       child: _ActionKey(
@@ -293,7 +293,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen>
   Widget _cancelKey(double rs) {
     final isArmed = _armedActionId == 'cancel';
     return Semantics(
-      label: '취소 버튼',
+      label: '취소',
       button: true,
       child: _ActionKey(
         color: const Color(0xFF1A0A0A),
@@ -329,7 +329,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen>
     // 숫자 입력과 같은 이유로 1단계(즉시 실행): 하드웨어에 영향 없고
     // 되돌릴 수 있는 로컬 편집 동작이다.
     return Semantics(
-      label: '지우기 버튼',
+      label: '지우기',
       hint: '누르면 마지막 숫자가 지워집니다',
       button: true,
       child: _ActionKey(
@@ -444,7 +444,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen>
                       width: double.infinity,
                       height: 72 * rs,
                       child: Semantics(
-                        label: '시작 버튼',
+                        label: '시작',
                         button: true,
                         child: ElevatedButton.icon(
                           onPressed: () {

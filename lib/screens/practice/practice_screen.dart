@@ -388,7 +388,7 @@ class _PracticeScreenState extends State<PracticeScreen>
 
   Widget _practiceTapButton(double rs) => Semantics(
         button: true,
-        label: '연습 시작 버튼',
+        label: '연습 시작',
         value: _tapArmed ? '실행 대기 중' : null,
         hint: _tapArmed ? '한 번 더 누르면 연습 실행' : '한 번 누르면 안내, 두 번 누르면 실행',
         liveRegion: _tapArmed,
@@ -422,7 +422,7 @@ class _PracticeScreenState extends State<PracticeScreen>
 
   Widget _practiceHoldButton(double rs) => Semantics(
         button: true,
-        label: '비상 정지 연습 버튼',
+        label: '비상 정지 연습',
         hint: '3초간 길게 누르면 연습 성공',
         onLongPress: _onHoldCompleted,
         child: GestureDetector(
@@ -577,7 +577,7 @@ class _PracticeScreenState extends State<PracticeScreen>
 
   Widget _voicePracticeButton(double rs) => Semantics(
         button: true,
-        label: '음성 연습 버튼',
+        label: '음성 연습',
         hint: _speechEnabled ? '누르면 바로 듣기 시작' : '이 기기에서는 사용할 수 없음',
         child: InkWell(
           onTap: _onVoicePracticeTap,

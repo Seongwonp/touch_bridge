@@ -89,7 +89,29 @@ flutter run -d chrome
 ```bash
 flutter analyze
 flutter test
+cd backend && python -m unittest discover -s . -p "test_*.py"
 ```
+
+### Windows에서 한글 경로일 때 (2026-09-27 확인)
+사용자 폴더나 프로젝트 경로에 한글이 있으면(예: `C:\Users\삼성\...\한이음드림업`)
+Flutter 3.47.5 기준 두 가지가 깨진다.
+
+- `flutter test`: 임시 폴더(`%TEMP%`)가 한글 경로라 `flutter_tester`가 시작 직후
+  종료되고 "Connection closed before test suite loaded"만 남는다.
+  → 세션에서 임시 폴더만 ASCII 경로로 바꾸면 원본 위치에서 그대로 돈다.
+  ```powershell
+  $env:TEMP = "C:\src\tmp"; $env:TMP = "C:\src\tmp"; flutter test
+  ```
+- `flutter analyze`: 분석 서버가 프로젝트 경로 길이를 잘못 세어 JSON 파싱 오류로
+  죽는다(`FormatException: Unterminated string`). 임시 폴더로는 해결되지 않으므로
+  ASCII 경로에 복사본을 두고 거기서 돌린다.
+  ```powershell
+  robocopy <프로젝트> C:\src\tb /E /XD .dart_tool build .git
+  cd C:\src\tb; $env:TEMP = "C:\src\tmp"; $env:TMP = "C:\src\tmp"; flutter analyze --fatal-infos
+  ```
+  `dart analyze`는 복사본에서만 정상 동작을 확인했다.
+- `flutter pub get`이 `linux/`·`macos/`·`windows/`의 생성 파일을 줄바꿈만 바꿔
+  건드릴 수 있다. 커밋 전에 `git checkout -- linux macos windows`로 되돌린다.
 
 ## 6) 데모 체크리스트
 

@@ -97,36 +97,22 @@ class MicrowaveCommandService {
     };
   }
 
+  /// 부정·거절 표현. 이 단어가 있으면 앱 규칙은 실행 명령을 만들지 않고
+  /// 백엔드(AI)로 넘긴다 — "30초 시작하지마"를 30초 시작으로 실행하던 문제.
+  static const _negationTokens = ['하지마', '하지말', '말고', '말아', '안해', '안돼', '아니야', '아냐'];
+
+  /// 'n번', 'n번 버튼', 'n번 눌러줘' — 문장 전체가 이 형태일 때만 즉시 누름.
+  /// 이전의 앵커 없는 firstMatch는 "3번째 만두 데워줘"도 3번 버튼 즉시 누름으로
+  /// 확정해 AI 통제층을 건너뛰었다.
+  static final _pressOnlyRe =
+      RegExp(r'^(\d{1,2})번(버튼)?(을|를)?(눌러줘|눌러|눌러주세요|누르기)?$');
+  static final _start30Re = RegExp(r'^(30초|삼십초)(으로|로)?시작(해|해줘|해주세요)?$');
+  static final _start60Re = RegExp(r'^(1분|일분)(으로|로)?시작(해|해줘|해주세요)?$');
+
   static Map<String, dynamic>? checkSimpleRules(String text) {
     final t = text.replaceAll(' ', '');
-    // 새로운 규칙 추가: 'n번 눌러줘' 또는 'n번 버튼' 또는 그냥 'n번'
-    final pressMatch = RegExp(r'(\d+)번(눌러줘|눌러|버튼|)?').firstMatch(t);
-    if (pressMatch != null) {
-      final btnNum = pressMatch.group(1);
-      if (btnNum != null) {
-        final btnId = 'BT-${btnNum.padLeft(2, '0')}';
-        return {
-          'action': 'IMMEDIATE_PRESS',
-          'commands': [btnId],
-          'message': '$btnNum번 버튼을 누릅니다.',
-        };
-      }
-    }
 
-    if (t.contains('30초시작') || t.contains('삼십초시작')) {
-      return {
-        'action': 'MICROWAVE_CONTROL',
-        'commands': ['BT-02', 'BT-05'],
-        'message': '30초 조리를 시작합니다.',
-      };
-    }
-    if (t.contains('1분시작') || t.contains('일분시작')) {
-      return {
-        'action': 'MICROWAVE_CONTROL',
-        'commands': ['BT-03', 'BT-05'],
-        'message': '1분 조리를 시작합니다.',
-      };
-    }
+    // 1) 취소·정지는 다른 규칙보다 먼저 본다. "1분 시작 취소"는 취소다.
     if (t.contains('취소') ||
         t.contains('정지') ||
         t.contains('그만') ||
@@ -136,6 +122,37 @@ class MicrowaveCommandService {
         'action': 'MICROWAVE_CONTROL',
         'commands': ['BT-06'],
         'message': '조리를 중단합니다.',
+      };
+    }
+
+    // 2) 부정·거절 표현은 규칙으로 실행하지 않는다 (AI 경로로).
+    if (_negationTokens.any(t.contains)) return null;
+
+    // 3) 'n번' 즉시 누름 — 문장 전체 일치일 때만.
+    final pressMatch = _pressOnlyRe.firstMatch(t);
+    if (pressMatch != null) {
+      final btnNum = pressMatch.group(1)!;
+      final btnId = 'BT-${btnNum.padLeft(2, '0')}';
+      return {
+        'action': 'IMMEDIATE_PRESS',
+        'commands': [btnId],
+        'message': '$btnNum번 버튼을 누릅니다.',
+      };
+    }
+
+    // 4) 빈출 시간 명령 — 전체 일치. ("11분 시작"이 "1분시작"에 걸리지 않게)
+    if (_start30Re.hasMatch(t)) {
+      return {
+        'action': 'MICROWAVE_CONTROL',
+        'commands': ['BT-02', 'BT-05'],
+        'message': '30초 조리를 시작합니다.',
+      };
+    }
+    if (_start60Re.hasMatch(t)) {
+      return {
+        'action': 'MICROWAVE_CONTROL',
+        'commands': ['BT-03', 'BT-05'],
+        'message': '1분 조리를 시작합니다.',
       };
     }
     return null;

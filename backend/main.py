@@ -274,15 +274,17 @@ async def parse_command(req: CommandRequest):
     if not text:
         return {"action": "NONE", "commands": [], "target": None, "message": "명령이 비어 있습니다."}
 
+    # 어느 경로에서 나왔든 응답은 같은 스키마 검증을 통과한다. 이전에는 규칙·음식
+    # 추론 결과가 검증 없이 그대로 나가서 "300분 데워줘"가 61회 누름으로 통과했다.
     # 1. 간단 규칙
     rule_result = check_simple_rules(text)
     if rule_result:
-        return rule_result
+        return sanitize_command_response(rule_result)
 
     # 2. 음식 추론 (Heuristics)
     food_result = infer_food_command(text)
     if food_result:
-        return food_result
+        return sanitize_command_response(food_result)
 
     # 3. AI 해석 (Gemini) — 동기 SDK 호출이 이벤트 루프를 막지 않도록 스레드로.
     try:

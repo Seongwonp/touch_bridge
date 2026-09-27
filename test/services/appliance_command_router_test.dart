@@ -78,6 +78,38 @@ void main() {
     });
   });
 
+  group('MicrowaveCommandService 규칙 — 오탐 방지 계약', () {
+    Map<String, dynamic>? mw(String text) =>
+        ApplianceCommandRouter.checkSimpleRules(text, deviceType: 'microwave');
+
+    test('"n번"은 문장 전체가 그 형태일 때만 즉시 누름이다', () {
+      expect(mw('3번')!['action'], 'IMMEDIATE_PRESS');
+      expect(mw('3번 눌러줘')!['commands'], ['BT-03']);
+      expect(mw('3번 버튼')!['commands'], ['BT-03']);
+      // 문장 속 "3번째"는 즉시 누름이 아니다 — AI 경로로 넘긴다.
+      expect(mw('3번째 만두 데워줘'), isNull);
+      expect(mw('만두 3번 데워줘'), isNull);
+    });
+
+    test('"11분 시작"은 1분 규칙에 걸리지 않는다', () {
+      expect(mw('1분 시작')!['commands'], ['BT-03', 'BT-05']);
+      expect(mw('11분 시작'), isNull, reason: '앱 규칙에 없으므로 백엔드 파서로');
+      expect(mw('30초 시작')!['commands'], ['BT-02', 'BT-05']);
+      expect(mw('130초 시작'), isNull);
+    });
+
+    test('취소·정지가 붙으면 시작이 아니라 취소다', () {
+      expect(mw('1분 시작 취소')!['commands'], ['BT-06']);
+      expect(mw('30초 시작 그만')!['commands'], ['BT-06']);
+    });
+
+    test('부정 표현은 규칙으로 실행하지 않는다', () {
+      expect(mw('30초 시작하지마'), isNull);
+      expect(mw('1분 시작 말고'), isNull);
+      expect(mw('3번 누르지 말아'), isNull);
+    });
+  });
+
   group('WashingMachineCommandService — 규칙 파싱', () {
     test('시작 명령 → BT-W02', () {
       final r = WashingMachineCommandService.checkSimpleRules('시작해줘');

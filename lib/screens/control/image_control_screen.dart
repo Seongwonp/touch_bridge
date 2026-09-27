@@ -408,7 +408,7 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
     final armed = _armedButtonId == btId;
 
     return Semantics(
-      label: '$label 버튼',
+      label: label,
       hint: armed ? '다시 누르면 실행합니다' : '한 번 누르면 안내합니다',
       button: true,
       child: GestureDetector(

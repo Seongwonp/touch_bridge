@@ -43,6 +43,15 @@ class BleService {
   int _motionEpoch = 0;
   Stream<String> get stopRequests => _stopRequests.stream;
 
+  /// 비상 정지·연결 끊김·명시적 해제 때마다 1 증가하는 안전 카운터.
+  ///
+  /// 긴 시퀀스(여러 버튼 누름, 여러 G-code 줄)를 보내는 쪽은 시작 시점의 값을
+  /// 기억해 두고 매 전송 전에 비교해야 한다. 값이 바뀌었으면 정지 이후에 준비된
+  /// 명령이므로 보내지 않는다. (v2 [sendProtocolPayload]는 내부에서 같은 검사를
+  /// 하고, 레거시 [sendRaw]도 큐 안에서 검사하지만, 데모 모드·테스트 오버라이드
+  /// 경로까지 일관되게 막으려면 호출부도 이 값을 봐야 한다.)
+  int get motionEpoch => _motionEpoch;
+
   final _connectionStateController =
       StreamController<BluetoothConnectionState>.broadcast();
   Stream<BluetoothConnectionState> get connectionStateStream =>
@@ -555,6 +564,9 @@ class BleService {
     }
     final c = _commandCharacteristic;
     if (c == null) return false;
+    // 인증 핸드셰이크와 큐 대기 사이에 비상 정지/끊김이 끼어들 수 있다.
+    // 이 시점의 epoch를 기억해 두고 실제 write 직전에 다시 비교한다.
+    final epoch = _motionEpoch;
 
     // 물리 동작 인증 게이트: 페어링 키가 프로비저닝된 기기는 유효한 HMAC
     // 세션 없이는 raw 명령(G-code/BTN_n/SET_GRID)을 보내지 않는다.
@@ -571,6 +583,13 @@ class BleService {
     // write는 명령 큐로 직렬화한다 (인증 핸드셰이크는 위에서 이미 끝났으므로
     // 잠금 안에서 재진입하지 않는다 — _withCommandLock 주석 참조).
     return _withCommandLock(() async {
+      // 비상 정지는 큐를 우회해 먼저 나간다. 그 뒤에 큐에서 차례가 온 이동·누름
+      // 명령은 정지 이전에 준비된 것이므로 버린다 — 정지를 눌렀는데 갠트리가
+      // 다음 버튼으로 이동하는 사고를 막는다. (sendProtocolPayload와 같은 계약)
+      if (epoch != _motionEpoch || !identical(c, _commandCharacteristic)) {
+        _addLog('CANCELLED_RAW: connection/stop changed ($command)');
+        return false;
+      }
       _addLog('SEND_RAW: $command');
       try {
         await c.write(utf8.encode('$command\r\n'), withoutResponse: false);

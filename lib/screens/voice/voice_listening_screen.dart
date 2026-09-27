@@ -179,7 +179,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
           if (mounted) {
             _speak('음성 인식에 실패했습니다. 마이크 버튼을 다시 눌러주세요.');
             setState(() {
-              _statusMessage = '음성 인식 실패';
+              _statusMessage = '음성 인식에 실패했습니다. 마이크 버튼을 다시 눌러주세요.';
               _isProcessing = false;
               _isRecording = false;
             });
@@ -191,7 +191,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     );
     _speechEnabled = await _speechSession.initialize();
     if (_speechEnabled) {
-      await _speak('음성 명령입니다. 마이크 버튼을 눌러 명령하세요.');
+      await _speak('음성 명령입니다. 마이크 버튼을 눌러 명령하세요.', priority: TtsPriority.navigation);
       // autoStart가 아닐 때만 예시를 낭독한다 — 자동 녹음 시작 흐름과 충돌을 막기 위함.
       if (!widget.autoStart && mounted) {
         final prefs = await SharedPreferences.getInstance();
@@ -199,7 +199,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         if (!seen) {
           await prefs.setBool(_kExamplesSeenKey, true);
           final examples = kVoiceExampleCommands.take(4).join(', ');
-          await _speak('예시 명령으로는 $examples 등이 있습니다.');
+          await _speak('예시 명령으로는 $examples 등이 있습니다.', priority: TtsPriority.navigation);
         }
       }
     } else {
@@ -210,11 +210,15 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     }
   }
 
+  /// 이 화면의 발화는 대부분 명령 결과·실패·확인 질문이다. 기본값을 result로
+  /// 두어 스크린리더 활성 시에도 들리게 하고, 화면 진입 안내처럼 스크린리더가
+  /// 대신 읽는 것만 호출부에서 navigation을 명시한다. (이전에는 기본값이
+  /// navigation이라 43곳 중 35곳의 실패·취소 안내가 스크린리더에서 무음이었다.)
   Future<void> _speak(
     String message, {
     String source = 'voicelisteningScreen',
     bool interrupt = false,
-    TtsPriority priority = TtsPriority.navigation,
+    TtsPriority priority = TtsPriority.result,
   }) async {
     await _tts.speak(
       message,
@@ -328,7 +332,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         _statusMessage = '명령을 확인하고 있습니다.';
       });
       _stopWaveAnimation();
-      _speak('녹음이 종료되었습니다.');
+      _speak('녹음이 종료되었습니다.', priority: TtsPriority.navigation);
       if (_lastWords.isNotEmpty) {
         _sendTextToGemini(_lastWords);
       } else {
@@ -381,7 +385,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
           _startWaveAnimation();
           FeedbackService.instance.playDing(); // "띵" 소리 추가
           FeedbackService.instance.vibrateSuccess(); // 짧은 진동 추가
-          _speak('녹음을 시작합니다.');
+          _speak('녹음을 시작합니다.', priority: TtsPriority.navigation);
 
           // 멘트가 끝날 때까지 기다린 후(약 1.5초) 침묵 감지 시작
           Future.delayed(const Duration(milliseconds: 1500), () {
@@ -416,7 +420,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       _actionResetTimer = Timer(kDoubleTapArmTimeout, () {
         if (mounted) setState(() => _micArmed = false);
       });
-      _speak(_isRecording ? '녹음 중지' : '녹음 시작');
+      _speak(_isRecording ? '녹음 중지' : '녹음 시작', priority: TtsPriority.navigation);
       return;
     }
 
@@ -461,10 +465,25 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   static String _toPressingMessage(String base) =>
       base.contains('누릅니다') ? base.replaceAll('누릅니다', '누르는 중입니다') : base;
 
-  /// "2번 버튼을 누릅니다." → "2번 버튼을 눌렀습니다."
+  /// "2번 버튼을 누릅니다." → "2번 버튼을 누르도록 기기에 전달했습니다."
+  ///
+  /// BLE write 성공은 기기가 눌렀다는 확인이 아니다(이 경로에는 ACK가 없다).
+  /// 이전 문구 "눌렀습니다"는 화면을 볼 수 없는 사용자에게 거짓 완료였다.
+  /// 완료 확인은 비상 정지(ACK 기반)에서만 말한다.
   static String _toDoneMessage(String base) => base.contains('누릅니다')
-      ? base.replaceAll('누릅니다', '눌렀습니다')
-      : '$base 완료했습니다.';
+      ? base.replaceAll('누릅니다', '누르도록 기기에 전달했습니다')
+      : '기기에 동작을 전달했습니다.';
+
+  /// "1분 조리를 시작합니다." → "1분 조리를 시작하도록 기기에 전달했습니다."
+  static String _toSentMessage(String base) {
+    if (base.contains('시작합니다')) {
+      return base.replaceAll('시작합니다', '시작하도록 기기에 전달했습니다');
+    }
+    if (base.contains('시작할게요')) {
+      return base.replaceAll('시작할게요', '시작하도록 기기에 전달했습니다');
+    }
+    return '기기에 동작을 전달했습니다.';
+  }
 
   /// 하드웨어가 실제로 움직이는 구간을 화면과 음성으로 함께 알린다.
   /// 전송이 끝난 뒤에야 "누릅니다"라고 말하던 때는 이 구간(로그 기준 약 1.9초)
@@ -654,7 +673,8 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
           'requestId': requestId,
         });
         setState(() {
-          _statusMessage = '취소됨';
+          // liveRegion에는 축약어가 아니라 다음 행동이 담긴 전체 문장을 싣는다.
+          _statusMessage = '알겠습니다. 다시 말씀해 주세요.';
           _isProcessing = false;
         });
         await _speak('알겠습니다. 다시 말씀해 주세요.');
@@ -693,7 +713,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       case VoiceIntentKind.pendingRejected:
         AppLogger.info('voice.response.negative', {'requestId': requestId});
         setState(() {
-          _statusMessage = '취소됨';
+          _statusMessage = '알겠습니다. 취소할게요.';
           _isProcessing = false;
         });
         await _speak('알겠습니다. 취소할게요.');
@@ -783,7 +803,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
           : '명령을 이해하지 못했습니다. 기기 이름과 동작을 함께 말해 주세요.';
       _speak(failMsg);
       setState(() {
-        _statusMessage = '명령 이해 실패';
+        _statusMessage = failMsg;
         _isProcessing = false;
       });
     }
@@ -794,7 +814,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     _pendingCommandData = null;
     setState(() {
       _isProcessing = false;
-      _statusMessage = '취소됨';
+      _statusMessage = '취소되었습니다.';
     });
     _speak('취소되었습니다.');
   }
@@ -1016,7 +1036,9 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         final spokenMessage = forceExecution && confirmationMessage.isNotEmpty
             ? confirmationMessage
             : message;
-        final finalMsg = spokenMessage.isNotEmpty ? spokenMessage : '시작할게요.';
+        final finalMsg = _toSentMessage(
+          spokenMessage.isNotEmpty ? spokenMessage : '시작할게요.',
+        );
         _recordLastCommand(data, finalMsg);
 
         if (seconds > 0) {
@@ -1109,7 +1131,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         }
         if (navigateDest == null) return;
         _consecutiveFailures = 0;
-        await _speak('$destName 화면으로 이동합니다.', interrupt: true);
+        await _speak('$destName 화면으로 이동합니다.', interrupt: true, priority: TtsPriority.navigation);
         if (!mounted) return;
         final navScreen = navigateDest;
         Navigator.push(

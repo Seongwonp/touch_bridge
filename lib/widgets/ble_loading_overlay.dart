@@ -142,7 +142,7 @@ class BleLoadingOverlay extends StatelessWidget {
               if (isCompleted) ...[
                 SizedBox(height: ResponsiveScale.v(context, 16)),
                 Semantics(
-                  label: '확인 버튼',
+                  label: '확인',
                   button: true,
                   child: SizedBox(
                     width: double.infinity,
