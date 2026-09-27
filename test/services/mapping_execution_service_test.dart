@@ -1,10 +1,16 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:touch_bridge/models/command_result.dart';
+import 'package:touch_bridge/services/active_device_service.dart';
 import 'package:touch_bridge/services/ble_service.dart';
+import 'package:touch_bridge/services/emergency_stop_service.dart';
 import 'package:touch_bridge/services/device_mapping_service.dart';
 import 'package:touch_bridge/services/mapping_execution_service.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   test('보정 무효화는 JSON 왕복 후에도 그리드 폴백과 BLE 전송을 차단한다', () async {
     const original = DeviceMappingProfile(
       rows: 3,
@@ -695,6 +701,38 @@ void main() {
       expect(result.ok, isFalse);
       expect(result.stoppedByEmergency, isTrue);
       expect(sent, isEmpty);
+    });
+
+    test('단일 탭 정지 경로(EmergencyStopService)로 정지해도 잔여 명령이 나가지 않는다', () async {
+      // 실행 중 화면의 버튼은 EmergencyStopService.stopActiveDevice()를 부른다.
+      // 그 경로가 BleService.sendEmergencyStop → motionEpoch 증가로 이어져
+      // 시퀀스가 끊기는지 서비스 수준에서 확인한다.
+      final sent = <String>[];
+      BleService.instance.setTestOverrides(connect: (_) async => true);
+      await ActiveDeviceService.instance.setActiveDevice(
+        deviceId: 'device-1',
+        bleId: 'AA:BB:CC:DD:EE:01',
+      );
+      addTearDown(() => BleService.instance.clearTestOverrides());
+      BleService.instance.setSendRawOverride((cmd) async {
+        sent.add(cmd);
+        if (cmd.startsWith('G1 Z')) {
+          final outcome = await EmergencyStopService.instance.stopActiveDevice();
+          expect(outcome.acknowledged, isTrue);
+        }
+        return true;
+      });
+
+      final result = await MappingExecutionService.instance.pressSequence(
+        deviceId: 'device-1',
+        profile: profile,
+        buttonIds: const ['BT-04', 'BT-05'],
+      );
+
+      expect(result.ok, isFalse);
+      expect(result.stoppedByEmergency, isTrue);
+      expect(sent.last, startsWith('G1 Z'));
+      expect(sent.where((c) => c.startsWith('G0 X')).length, 1);
     });
 
     test('정지가 없으면 두 버튼 시퀀스가 끝까지 전송된다 (회귀 방지)', () async {

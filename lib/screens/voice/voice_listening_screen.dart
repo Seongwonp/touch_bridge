@@ -18,6 +18,7 @@ import '../../services/app_logger.dart';
 import '../../services/ai_backend_service.dart';
 import '../../services/active_device_service.dart';
 import '../../services/ble_service.dart';
+import '../../services/emergency_intent.dart';
 import '../../services/emergency_stop_service.dart';
 import '../../services/help_intent.dart';
 import '../../services/microwave_command_service.dart';
@@ -31,6 +32,8 @@ import '../../services/feedback_service.dart';
 import '../../services/voice_device_resolver.dart';
 import '../../services/voice_intent_router.dart';
 import '../../services/mapping_execution_service.dart';
+import '../../services/single_tap_stop_controller.dart';
+import 'widgets/press_progress_view.dart';
 import '../../services/home_device_store.dart';
 import '../../services/accessibility_settings.dart';
 import '../../theme/app_colors.dart';
@@ -55,10 +58,12 @@ class VoiceListeningScreen extends StatefulWidget {
   final bool autoStart;
 
   @override
-  State<VoiceListeningScreen> createState() => _VoiceListeningScreenState();
+  State<VoiceListeningScreen> createState() => VoiceListeningScreenState();
 }
 
-class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
+/// 공개 State: 위젯 테스트가 실행 중 화면(단일 탭 정지)까지 도달할 수 있도록
+/// [handleCommandForTest] 등 테스트 전용 진입점을 둔다.
+class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   final TtsService _tts = TtsService();
   final math.Random _random = math.Random();
   // 공용 STT 세션: 화면별 개별 초기화는 패키지 싱글톤 특성상 콜백이 최초
@@ -119,8 +124,42 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
   /// 누르기가 끝난 뒤 잠시 띄우는 완료 화면 문구. 비어 있으면 표시하지 않는다.
   String _pressDoneLabel = '';
+
+  /// 직전 시퀀스가 비상 정지로 끊겼는가. 정지 뒤 늦게 돌아온 실행 결과가
+  /// 정지 안내(liveRegion·TTS·효과음)를 덮지 않게 하는 데 쓴다.
+  bool _lastSequenceStopped = false;
+
+  /// 전송 시퀀스가 아직 도는 중인가 (정지 미확인 화면 유지 판단용).
+  bool _sequenceRunning = false;
+
+  /// 시퀀스는 끝났지만 정지가 확인되지 않은 상태 — 진행 뷰를 재시도 UI로 유지한다.
+  bool get _awaitingStopResolution =>
+      _lastSequenceStopped &&
+      !_sequenceRunning &&
+      (_stopController.inFlight || _stopController.canRetry);
+
+  @visibleForTesting
+  bool get isExecutingForTest => _isExecuting;
+
+  @visibleForTesting
+  String get statusMessageForTest => _statusMessage;
+
+  @visibleForTesting
+  bool get lastSequenceStoppedForTest => _lastSequenceStopped;
+
+  /// 테스트에서 해석된 명령을 직접 넣어 실행 화면까지 진행시킨다.
+  @visibleForTesting
+  Future<void> handleCommandForTest(Map<String, dynamic> data) =>
+      _handleCommand(data, recognizedText: 'test');
   Timer? _pressDoneTimer;
   static const _kExamplesSeenKey = 'voice_examples_announced';
+
+  /// 실행 중 화면의 단일 탭 비상 정지. 확인 단계 없이 우선 정지 경로를 부른다.
+  /// (리뷰 #3: 실행 구간에는 마이크가 닫혀 음성 "멈춰"가 안 되고, 전역 비상 버튼은
+  /// 두 번 탭이 필요했다. 실행 중 음성 "멈춰" 지원은 별도 미해결 항목.)
+  late final SingleTapStopController _stopController = SingleTapStopController(
+    stop: () => EmergencyStopService.instance.stopActiveDevice(),
+  );
 
   @override
   void initState() {
@@ -144,6 +183,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     _silenceTimer?.cancel();
     _actionResetTimer?.cancel();
     _pressDoneTimer?.cancel();
+    _stopController.dispose();
     // TtsService는 앱 전역 싱글톤 큐라 여기서 stop()을 부르면 다음 화면이
     // 막 넣은 안내까지 지워버린다(화면 전환 시 안내가 잘리는 문제).
     // 공용 STT 세션 스택에서도 빠져 이전 화면이 이벤트를 이어받게 한다.
@@ -491,6 +531,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   Future<void> _beginPress(String label) async {
     _pressDoneTimer?.cancel();
     if (!mounted) return;
+    _stopController.reset(); // 이전 실행의 정지 결과를 새 실행 화면에 남기지 않는다.
     setState(() {
       _isExecuting = true;
       _executingLabel = label;
@@ -520,6 +561,24 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   /// 완료 화면 대신 타이머 화면으로 곧바로 넘어갈 때 쓴다.
   void _clearPress() {
     if (mounted) setState(() => _isExecuting = false);
+  }
+
+  /// 시퀀스가 전송되지 않은 뒤 공통 처리. 비상 정지로 끊긴 경우에는 실패 효과음을
+  /// 내지 않는다 — 정지 결과 안내(효과음·TTS·liveRegion)가 이미 나갔고, 늦게 돌아온
+  /// 실행 결과가 그것을 덮으면 안 된다. 타이머 화면 이동은 전송 성공 분기에만 있다.
+  void _afterSequenceNotSent() {
+    if (_lastSequenceStopped) {
+      // 정지가 확인됐으면 정지 경로가 완료 화면으로 옮긴다. 미확인·실패·요청 중이면
+      // 진행 뷰를 "정지 확인 필요" 상태로 유지해 재시도 버튼이 사라지지 않게 한다.
+      if (_awaitingStopResolution) {
+        if (mounted) setState(() => _executingLabel = '정지 확인이 필요합니다');
+      } else {
+        _clearPress();
+      }
+      return;
+    }
+    _clearPress();
+    FeedbackService.instance.playFailure();
   }
 
   /// 버튼을 연달아 누르는 구간의 안내 문구.
@@ -827,7 +886,30 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     // 대상 결정 → 재연결 → STOP 전송 → ACK 해석은 EmergencyStopService가
     // 단일하게 책임진다(과거 3개 화면 복제 로직 통합).
     final outcome = await EmergencyStopService.instance.stopActiveDevice();
+    await _announceStopOutcome(outcome);
+  }
 
+  /// 실행 중 화면의 단일 탭 정지. 확인창·두 번째 탭 없이 바로 우선 정지 경로를
+  /// 부른다. 진행 중 중복 탭은 컨트롤러가 무시하고, 실패·미확인 뒤에는 재시도할 수 있다.
+  Future<void> _onSingleTapStop() async {
+    if (_stopController.inFlight) return;
+    FeedbackService.instance.vibrateError();
+    AppLogger.warn('voice.single_tap_stop.requested', {
+      'executing': _isExecuting,
+      'attempt': _stopController.requestCount + 1,
+    });
+    final outcome = await _stopController.requestStop();
+    if (outcome == null) return; // 이미 진행 중이던 요청이 있었다.
+    await _announceStopOutcome(outcome);
+    // 미확인·실패인데 시퀀스가 이미 끝났으면 재시도 UI를 유지한 채 문구만 갱신.
+    if (mounted && !outcome.acknowledged && _awaitingStopResolution) {
+      setState(() => _executingLabel = '정지 확인이 필요합니다');
+    }
+  }
+
+  /// 정지 결과 안내. ACK 확인 / 전송만 됨(미확인) / 전송 실패를 그대로 말하며,
+  /// acknowledged일 때만 완료 화면으로 간다(거짓 완료 금지).
+  Future<void> _announceStopOutcome(EmergencyStopOutcome outcome) async {
     if (outcome.acknowledged) {
       FeedbackService.instance.playSuccess();
     } else {
@@ -843,6 +925,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     );
     if (!mounted) return;
     if (outcome.acknowledged) {
+      _clearPress();
       Navigator.push(
         context,
         MaterialPageRoute<void>(builder: (_) => const StopDoneScreen()),
@@ -853,6 +936,16 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
   /// 버튼 시퀀스를 기기에 전송한다. 전송 성공 시 true, 실패 시(연결/매핑 실패 등)
   /// 사용자에게 원인을 안내하고 false를 반환한다. 호출부는 이 값으로 성공 피드백을 건다.
   Future<bool> _sendBleSequence(List<dynamic> commands) async {
+    _lastSequenceStopped = false;
+    _sequenceRunning = true;
+    try {
+      return await _sendBleSequenceInner(commands);
+    } finally {
+      _sequenceRunning = false;
+    }
+  }
+
+  Future<bool> _sendBleSequenceInner(List<dynamic> commands) async {
     // [DEMO PRIORITY] 이미 연결된 기기가 있다면 즉시 사용
     String deviceId = BleService.instance.connectedDeviceId;
 
@@ -904,6 +997,12 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         buttonIds: commands.cast<String>(),
       );
       if (!result.ok) {
+        if (result.stoppedByEmergency) {
+          // 정지 결과(ACK 기준) 안내가 liveRegion·TTS를 맡는다. 늦게 돌아온 이
+          // 결과로 상태 문구를 덮거나 다시 말하지 않는다.
+          _lastSequenceStopped = true;
+          return false;
+        }
         if (mounted) setState(() => _statusMessage = result.userMessage);
         _speak(result.userMessage);
         return false;
@@ -920,6 +1019,10 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
       final result = await MappingExecutionService.instance
           .pressPhysicalSequence(commands.cast<String>());
       if (!result.ok) {
+        if (result.stoppedByEmergency) {
+          _lastSequenceStopped = true;
+          return false;
+        }
         if (mounted) setState(() => _statusMessage = result.userMessage);
         _speak(result.userMessage);
         return false;
@@ -973,8 +1076,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         await _beginPress(_toPressingMessage(pressBase));
         final immediateSent = await _sendBleSequence(commands);
         if (!immediateSent) {
-          _clearPress();
-          FeedbackService.instance.playFailure(); // 실패 안내는 _sendBleSequence가 함
+          _afterSequenceNotSent(); // 실패 안내는 _sendBleSequence가, 정지 안내는 정지 경로가 함
           return;
         }
         _consecutiveFailures = 0;
@@ -1028,8 +1130,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         await _beginPress(_pressingLabelForSequence(commands));
         final microwaveSent = await _sendBleSequence(commands);
         if (!microwaveSent) {
-          _clearPress();
-          FeedbackService.instance.playFailure(); // 실패: 성공 피드백/이동 금지
+          _afterSequenceNotSent(); // 실패 안내는 _sendBleSequence가, 정지 안내는 정지 경로가 함
           return;
         }
         _consecutiveFailures = 0;
@@ -1076,8 +1177,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         await _beginPress(_pressingLabelForSequence(commands));
         final washerSent = await _sendBleSequence(commands);
         if (!washerSent) {
-          _clearPress();
-          FeedbackService.instance.playFailure();
+          _afterSequenceNotSent(); // 실패 안내는 _sendBleSequence가, 정지 안내는 정지 경로가 함
           return;
         }
         _consecutiveFailures = 0;
@@ -1100,8 +1200,7 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
         await _beginPress(_pressingLabelForSequence(commands));
         final acSent = await _sendBleSequence(commands);
         if (!acSent) {
-          _clearPress();
-          FeedbackService.instance.playFailure();
+          _afterSequenceNotSent(); // 실패 안내는 _sendBleSequence가, 정지 안내는 정지 경로가 함
           return;
         }
         _consecutiveFailures = 0;
@@ -1157,57 +1256,17 @@ class _VoiceListeningScreenState extends State<VoiceListeningScreen> {
     }
   }
 
-  /// 누르는 중(진행) / 눌렀습니다(완료)를 같은 레이아웃으로 보여준다.
+  /// 누르는 중(진행) / 전달 완료를 같은 레이아웃으로 보여준다. 진행 중에는
+  /// 단일 탭 비상 정지 버튼이 항상 보인다 ([PressProgressView]).
   Widget _buildPressStatusView(double rs) {
     final done = _pressDoneLabel.isNotEmpty;
-    final label = done ? _pressDoneLabel : _executingLabel;
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 24 * rs),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 140 * rs,
-            height: 140 * rs,
-            child: done
-                ? Icon(
-                    Icons.check_circle,
-                    size: 128 * rs,
-                    color: AppColors.success,
-                  )
-                : CircularProgressIndicator(
-                    strokeWidth: 8 * rs,
-                    color: AppColors.primary,
-                  ),
-          ),
-          SizedBox(height: 32 * rs),
-          Semantics(
-            liveRegion: true,
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: done ? AppColors.success : AppColors.primary,
-                fontSize: 30 * rs,
-                fontWeight: FontWeight.w900,
-                height: 1.25,
-                letterSpacing: -0.5,
-              ),
-            ),
-          ),
-          SizedBox(height: 16 * rs),
-          Text(
-            done ? '잠시 후 음성 화면으로 돌아갑니다.' : '기기가 버튼을 누르고 있습니다. 잠시만 기다려 주세요.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 17 * rs,
-              fontWeight: FontWeight.w500,
-              height: 1.5,
-            ),
-          ),
-        ],
-      ),
+    return PressProgressView(
+      label: done ? _pressDoneLabel : _executingLabel,
+      done: done,
+      stopController: _stopController,
+      onStopTap: _onSingleTapStop,
+      awaitingStopResolution: _awaitingStopResolution,
+      scale: rs,
     );
   }
 
