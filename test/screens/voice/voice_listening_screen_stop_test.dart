@@ -250,4 +250,83 @@ void main() {
         reason: 'dispose된 ChangeNotifier에 notifyListeners·setState가 가면 안 된다');
     expect(find.byType(StopDoneScreen), findsNothing, reason: '내려간 화면이 화면 전환을 하면 안 된다');
   });
+
+  /// 시퀀스 쪽 기기 연결(첫 호출)만 1초 걸리게 한다. 정지 버튼은 이미 떠 있지만
+  /// 실행 토큰은 아직 잡히지 않은 구간을 테스트에서 열기 위함이다. 실제로는
+  /// 실행 안내 음성(1~2초)·BLE 연결·매핑 로드가 이 구간이다.
+  void slowFirstConnect() {
+    var calls = 0;
+    BleService.instance.setTestOverrides(connect: (_) async {
+      calls++;
+      if (calls == 1) await Future<void>.delayed(const Duration(seconds: 1));
+      return true;
+    });
+  }
+
+  testWidgets('정지 버튼이 뜬 뒤 전송 시작 전(연결 중)에 정지하면 버튼을 하나도 누르지 않는다', (tester) async {
+    // 회귀: 정지가 epoch를 올려도, 아직 시작 전인 시퀀스가 올라간 값을 새 기준으로
+    // 잡아 전부 눌렀다. "기기를 멈췄습니다. 안전합니다." 안내 뒤 G-code 20줄
+    // (Z 하강 포함)이 나가고 조리 타이머 화면까지 진입했다.
+    slowFirstConnect();
+    stubStopAck('STOPPED');
+    final state = await pumpScreen(tester);
+    await startExecution(tester, state);
+    expect(rawSent, isEmpty, reason: '전제: 아직 연결 중이라 전송 전');
+
+    await tester.tap(find.byKey(PressProgressView.stopButtonKey));
+    await tester.pump();
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(seconds: 1));
+    }
+
+    expect(stopCalls, ['TEST-BLE-0001']);
+    expect(rawSent, isEmpty, reason: '정지 확인 뒤 기기가 움직이면 안 된다');
+    expect(find.byType(StopDoneScreen), findsOneWidget);
+    expect(find.byType(EmergencyStopScreen, skipOffstage: false), findsNothing,
+        reason: '정지했는데 조리 타이머로 들어가면 안 된다');
+    expect(state.statusMessageForTest, '기기를 멈췄습니다. 안전합니다.');
+  });
+
+  testWidgets('화면 밖(전역 비상 버튼 등)에서 온 정지도 전송 시작 전 구간에서 시퀀스를 막는다', (tester) async {
+    slowFirstConnect();
+    stubStopAck('STOPPED');
+    final state = await pumpScreen(tester);
+    await startExecution(tester, state);
+
+    // 앱바의 전역 비상 버튼은 이 화면을 거치지 않고 정지 경로를 직접 부른다.
+    // ignore: unawaited_futures
+    BleService.instance.sendEmergencyStop('TEST-BLE-0001');
+    await tester.pump();
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(seconds: 1));
+    }
+
+    expect(rawSent, isEmpty);
+    expect(find.byType(EmergencyStopScreen, skipOffstage: false), findsNothing);
+    expect(state.lastSequenceStoppedForTest, isTrue);
+  });
+
+  testWidgets('정지하지 않았는데 실행 중 연결이 끊기면 침묵하지 않고 끝까지 전달하지 못했다고 알린다', (tester) async {
+    // epoch는 BLE 링크 끊김에도 바뀐다. 이전에는 이것을 비상 정지로 오인해
+    // "정지 경로가 안내한다"고 보고 아무 말 없이 실행 화면만 닫았다.
+    final state = await pumpScreen(tester);
+    await startExecution(tester, state);
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // 사용자 정지 없이 연결만 끊긴다.
+    // ignore: unawaited_futures
+    BleService.instance.disconnect();
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(seconds: 1));
+    }
+
+    expect(stopCalls, isEmpty, reason: '전제: 사용자는 정지하지 않았다');
+    expect(state.lastSequenceStoppedForTest, isFalse,
+        reason: '연결 끊김을 사용자 정지로 취급하면 안 된다');
+    expect(state.statusMessageForTest, contains('연결이 끊겨'));
+    expect(TtsService().getRecentLog().join('\n'), contains('연결이 끊겨'));
+    expect(find.byType(StopDoneScreen), findsNothing);
+    expect(find.byType(EmergencyStopScreen, skipOffstage: false), findsNothing);
+    expect(state.isExecutingForTest, isFalse);
+  });
 }

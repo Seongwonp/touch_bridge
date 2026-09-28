@@ -132,6 +132,19 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   /// 전송 시퀀스가 아직 도는 중인가 (정지 미확인 화면 유지 판단용).
   bool _sequenceRunning = false;
 
+  /// 이번 실행(`_beginPress` 이후)에 정지 요청이 있었는가.
+  ///
+  /// 정지 버튼은 실행 토큰(epoch)이 잡히기 **전**부터 보인다 — 안내 음성,
+  /// 기기 연결, 매핑 로드가 먼저 돈다. 그 사이에 정지하면 epoch는 올라가지만
+  /// 아직 시작 전인 시퀀스가 **올라간 값을 새 기준으로 잡아** 버튼을 전부
+  /// 누른다. "기기를 멈췄습니다. 안전합니다." 안내 뒤 조리 타이머까지 진입하는
+  /// 것이 재현됐다. 그래서 epoch와 별개로 화면이 직접 기록한다.
+  ///
+  /// epoch는 BLE 링크 끊김에도 바뀐다. 이 값으로 "사용자 정지"와 "연결 끊김"을
+  /// 구분해, 끊김을 정지로 오인하고 아무 안내 없이 끝내지 않게 한다.
+  bool _stopRequestedThisRun = false;
+  StreamSubscription<String>? _stopRequestSub;
+
   /// 시퀀스는 끝났지만 정지가 확인되지 않은 상태 — 진행 뷰를 재시도 UI로 유지한다.
   bool get _awaitingStopResolution =>
       _lastSequenceStopped &&
@@ -164,6 +177,11 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   @override
   void initState() {
     super.initState();
+    // 전역 비상 버튼 등 이 화면 밖에서 보낸 정지도 이번 실행을 무효화한다.
+    // (broadcast·sync 스트림이라 정지 명령이 나가는 즉시 동기적으로 들어온다.)
+    _stopRequestSub = BleService.instance.stopRequests.listen((_) {
+      if (_isExecuting) _stopRequestedThisRun = true;
+    });
     if (!AiBackendService.instance.isConfigured) {
       _statusMessage = 'AI_BACKEND_URL이 설정되지 않았습니다.';
       _speak(_statusMessage);
@@ -184,6 +202,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     _actionResetTimer?.cancel();
     _pressDoneTimer?.cancel();
     _stopController.dispose();
+    _stopRequestSub?.cancel();
     // TtsService는 앱 전역 싱글톤 큐라 여기서 stop()을 부르면 다음 화면이
     // 막 넣은 안내까지 지워버린다(화면 전환 시 안내가 잘리는 문제).
     // 공용 STT 세션 스택에서도 빠져 이전 화면이 이벤트를 이어받게 한다.
@@ -532,6 +551,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     _pressDoneTimer?.cancel();
     if (!mounted) return;
     _stopController.reset(); // 이전 실행의 정지 결과를 새 실행 화면에 남기지 않는다.
+    _stopRequestedThisRun = false;
     setState(() {
       _isExecuting = true;
       _executingLabel = label;
@@ -882,6 +902,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   /// 어떤 흐름에서도 공용으로 쓰는 정직한 비상 정지 처리.
   /// 실제 하드웨어에 정지 명령을 보내고, 확인 결과에 따라 안내를 분기한다.
   Future<void> _handleEmergencyStop() async {
+    if (_isExecuting) _stopRequestedThisRun = true;
     FeedbackService.instance.vibrateError();
     // 대상 결정 → 재연결 → STOP 전송 → ACK 해석은 EmergencyStopService가
     // 단일하게 책임진다(과거 3개 화면 복제 로직 통합).
@@ -893,6 +914,9 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   /// 부른다. 진행 중 중복 탭은 컨트롤러가 무시하고, 실패·미확인 뒤에는 재시도할 수 있다.
   Future<void> _onSingleTapStop() async {
     if (_stopController.inFlight) return;
+    // 정지 경로는 연결을 기다린 뒤에야 명령을 보낼 수 있다. 그 전에 시퀀스가
+    // 시작되지 않도록 탭한 순간 기록한다.
+    _stopRequestedThisRun = true;
     FeedbackService.instance.vibrateError();
     AppLogger.warn('voice.single_tap_stop.requested', {
       'executing': _isExecuting,
@@ -945,13 +969,42 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     }
   }
 
+  /// 이번 실행에 정지가 요청됐으면 전송을 시작하지 않는다(안내는 정지 경로가 맡는다).
+  /// 호출 직후 await 없이 전송 함수를 불러야 이 확인과 실행 토큰 캡처 사이에
+  /// 틈이 생기지 않는다.
+  bool _stopRequestedBeforeSend() {
+    if (!_stopRequestedThisRun) return false;
+    _lastSequenceStopped = true;
+    AppLogger.info('voice.sequence.aborted_before_send');
+    return true;
+  }
+
+  /// 실행 토큰이 바뀌어 시퀀스가 도중에 끊겼을 때. 사용자가 정지했으면 정지 결과
+  /// 안내에 맡기고, 아니면(= BLE 링크 끊김) 끝까지 전달하지 못했다고 알린다.
+  bool _onSequenceInterrupted() {
+    if (_stopRequestedThisRun) {
+      // 정지 결과(ACK 기준) 안내가 liveRegion·TTS를 맡는다. 늦게 돌아온 이
+      // 결과로 상태 문구를 덮거나 다시 말하지 않는다.
+      _lastSequenceStopped = true;
+      return false;
+    }
+    const msg = '기기 연결이 끊겨 동작을 끝까지 전달하지 못했습니다. 기기 상태를 확인해 주세요.';
+    AppLogger.warn('voice.sequence.interrupted_without_stop');
+    if (mounted) setState(() => _statusMessage = msg);
+    _speak(msg);
+    return false;
+  }
+
   Future<bool> _sendBleSequenceInner(List<dynamic> commands) async {
+    if (_stopRequestedBeforeSend()) return false;
+
     // [DEMO PRIORITY] 이미 연결된 기기가 있다면 즉시 사용
     String deviceId = BleService.instance.connectedDeviceId;
 
     if (deviceId.isEmpty) {
       // 연결된 게 없을 때만 자동 선택 및 재연결 시도
       await ActiveDeviceService.instance.autoPickFirstDevice();
+      if (_stopRequestedBeforeSend()) return false;
       final activeBleId = ActiveDeviceService.instance.getActiveBleId();
       if (activeBleId == null) {
         // 실패 원인을 _statusMessage에도 반영해 liveRegion(스크린리더 채널)으로
@@ -966,6 +1019,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
       if (mounted) setState(() => _statusMessage = '기기에 연결 중입니다...');
       _speak('기기에 연결 중입니다...');
       final connected = await BleService.instance.ensureConnected(activeBleId);
+      if (_stopRequestedBeforeSend()) return false;
       if (!connected) {
         if (mounted) {
           setState(() => _statusMessage = '연결에 실패했습니다. 기기 전원을 확인하세요.');
@@ -980,6 +1034,8 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     final activeApplianceId =
         ActiveDeviceService.instance.getActiveDeviceId() ?? '';
     final profile = await DeviceMappingService.instance.load(activeApplianceId);
+    // 여기부터 전송 함수 호출까지 await가 없어야 한다(위 확인과 토큰 캡처 사이 틈 방지).
+    if (_stopRequestedBeforeSend()) return false;
     final useProfileMapping =
         activeApplianceId.isNotEmpty &&
         (profile.buttonMap.isNotEmpty ||
@@ -997,12 +1053,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
         buttonIds: commands.cast<String>(),
       );
       if (!result.ok) {
-        if (result.stoppedByEmergency) {
-          // 정지 결과(ACK 기준) 안내가 liveRegion·TTS를 맡는다. 늦게 돌아온 이
-          // 결과로 상태 문구를 덮거나 다시 말하지 않는다.
-          _lastSequenceStopped = true;
-          return false;
-        }
+        if (result.stoppedByEmergency) return _onSequenceInterrupted();
         if (mounted) setState(() => _statusMessage = result.userMessage);
         _speak(result.userMessage);
         return false;
@@ -1019,10 +1070,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
       final result = await MappingExecutionService.instance
           .pressPhysicalSequence(commands.cast<String>());
       if (!result.ok) {
-        if (result.stoppedByEmergency) {
-          _lastSequenceStopped = true;
-          return false;
-        }
+        if (result.stoppedByEmergency) return _onSequenceInterrupted();
         if (mounted) setState(() => _statusMessage = result.userMessage);
         _speak(result.userMessage);
         return false;
