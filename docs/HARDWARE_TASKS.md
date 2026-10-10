@@ -1,11 +1,14 @@
 ﻿> [최신화 주석 2026-08-21] 본문 일부에 SG90 서보/DRV8825 등 구세대 부품 기준이 남아 있습니다.
-> **정정(2026-09-04):** 현행 부품 기준은 FIT0482 X/Y 2개 + ESP32 폐루프 PID + 스위치봇 누름부입니다.
+> **정정(2026-10-10):** 현행 부품 기준은 FIT0482 X/Y 2개(CoreXY) + TB6612FNG + ESP32 폐루프 PID +
+> 5V 솔레노이드 누름부이며, 펌웨어는 `hardware/touchbridge_corexy/`(v3)입니다.
+> (2026-09-04 기준에서는 누름부가 스위치봇이었습니다.)
 > 안전 원칙(E-STOP NC 회로, 전원 분리, 공통 GND, 퓨즈)은 부품과 무관하게 유효합니다.
 
 # 하드웨어 작업 및 안전 체크리스트
 
-> **현행 기준(2026-09-04):** 부품·구동 관련 항목은
-> [XY_SWITCHBOT_SOFTWARE_PLAN.md](XY_SWITCHBOT_SOFTWARE_PLAN.md)의 FIT0482 X/Y + 스위치봇 구성을 우선합니다.
+> **현행 기준(2026-10-10):** 부품·구동 관련 항목은 펌웨어 v3의
+> [`hardware/touchbridge_corexy/README.md`](../hardware/touchbridge_corexy/README.md)와 `config.h`를 우선합니다.
+> 설계 배경은 [XY_SWITCHBOT_SOFTWARE_PLAN.md](XY_SWITCHBOT_SOFTWARE_PLAN.md)(누름부는 이후 솔레노이드로 변경).
 > 아래 TB6600/NK1704S 항목은 레거시 참고이며, 공통 안전 원칙만 계속 유효합니다.
 
 이 문서는 Touch Bridge 하드웨어를 설치·운영·유지보수할 때 반드시 작업자가 직접 수행해야 하는 물리적 작업과 안전 권고사항을 정리한 체크리스트입니다.
@@ -14,24 +17,26 @@
 
 1. FIT0482의 정지전류를 축별로 실측하고 H-브리지·전원·퓨즈 정격 확정
 2. 6V 모터 전원과 ESP32 로직 전원 분리, 공통 GND 연결
-3. 엔코더 A/B상과 X/Y 리미트 스위치의 방향·노이즈·단선 실패 상태 검증
-4. 비상정지 회로 구성 — MCU 불능 상태에서도 모터 파워를 차단
-5. 홈 완료 전 이동 금지와 허용 오차·위치 토큰 밖 스위치봇 작동 금지
+3. 엔코더 A/B상의 방향·노이즈·단선 실패 상태 검증 (리밋 스위치는 기본 미사용 — 벽 감지 원점 복귀)
+4. 비상정지 회로 구성 — MCU 불능 상태에서도 모터·솔레노이드 전원을 차단
+5. 홈 완료 전 이동 금지와 허용 오차·위치 토큰 밖 솔레노이드 작동 금지
 6. 전류·온도·장시간 반복 정밀도 실측 기록
 
-## 현행 FIT0482 X/Y + 스위치봇 체크리스트
+## 현행 FIT0482 X/Y + 솔레노이드 체크리스트
 
 - [ ] DFRobot 공식 정격(6V, 50:1, 310RPM, 0.35kg·cm 정격 토크)을 출발점으로 삼되 실제 하중에서 전류·속도·오차를 측정
 - [ ] H-브리지는 두 모터의 정지전류와 PWM 주파수, 보호 기능을 만족한 뒤 부품 확정
-- [ ] X/Y 각각 정·역회전, 엔코더 카운트 방향, 리미트 입력을 단독 시험
+- [ ] X/Y 각각 정·역회전, 엔코더 카운트 방향을 단독 시험 (벨트 걸기 전 `M` 명령 — 펌웨어 README 순서)
+- [ ] 리밋 스위치를 달 경우: `config.h`의 `PIN_LIMIT_X/Y`(현재 30, 100 — ESP32에 없는 핀)를 실제 핀으로 고친 뒤 입력 단독 시험
 - [ ] `home → move_only → 오차 기록 → 위치 토큰 발급 → 단일 누름` 순서로만 초기 시운전
-- [ ] 허용 오차 초과, 홈 유실, 리미트 감지, 통신 단절, 중복 `commandId`에서 누름이 발생하지 않음 확인
-- [ ] 스위치봇 부착 실패·배터리 부족·복귀 실패 시 수동 해제 경로 확보
+- [ ] 허용 오차 초과, 홈 유실, 작업영역 밖 목표(`ERROR_LIMIT`), 추종 오차(걸림), 통신 단절,
+      이미 쓴 위치 토큰 재사용에서 누름이 발생하지 않음 확인
+- [ ] 솔레노이드 구동부: 플라이백 다이오드 장착, 누른 채 멈춤·과열 시 전원 차단으로 수동 해제 가능한지 확인
 - [ ] 전체 버튼 연속 누름 대신 한 점씩 검증하고 사람의 손을 이동 범위 밖에 둠
 
 공식 모터 사양 출처: [DFRobot FIT0482 제품 페이지](https://www.dfrobot.com/product-1432.html).
-소프트웨어·프로토콜 기준: [XY_SWITCHBOT_SOFTWARE_PLAN.md](XY_SWITCHBOT_SOFTWARE_PLAN.md),
-[ESP32_MOTION_PROTOCOL_V2.md](ESP32_MOTION_PROTOCOL_V2.md).
+소프트웨어·프로토콜 기준: 펌웨어 [`hardware/touchbridge_corexy/`](../hardware/touchbridge_corexy/),
+[ESP32_MOTION_PROTOCOL_V2.md](ESP32_MOTION_PROTOCOL_V2.md), 설계 배경 [XY_SWITCHBOT_SOFTWARE_PLAN.md](XY_SWITCHBOT_SOFTWARE_PLAN.md).
 
 ---
 
@@ -87,12 +92,13 @@
 - E‑STOP 인터럽트 처리: 하드웨어 입력에 ISR 바인딩하여 즉시 모터 드라이버 비활성화
 - MCU 재시작 시 안전모드(모터 파워 OFF)로 시작
 - UART 버퍼/동기화: SET_GRID/TOUCH_OK 응답을 명확히 처리하도록 ACK 로직 강화
+  *(v1 레거시 — ESP32↔AVR 구조 기준. v3는 ESP32 단독이며 v2 상태(`COMPLETED`/`ERROR_*`)로 응답)*
 - 전력 오류 감지(입력 전압 모니터링) 시 안전한 상태로 전환
 
 ## 시운전 체크리스트
 
 1. 전원 연결 전 회로·배선 재확인(GND 포함)
-2. ESP/Arduino 간 레벨시프터 설치 확인
+2. ESP/Arduino 간 레벨시프터 설치 확인 *(v1 레거시 — v3는 Arduino 없음. 대신 엔코더를 3.3V로 구동하는지 확인)*
 3. 모터 전원 분리(테스트 시에는 전류제한 전원 사용)
 4. 시리얼 통신 확인: Serial Monitor로 GRBL/UNO 출력 확인
 5. nRF Connect로 BLE 연결 후 `SET_GRID` → `PRESS x y` 명령으로 동작 검증

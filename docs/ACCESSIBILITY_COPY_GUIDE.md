@@ -2,7 +2,7 @@
 
 > 작성일: 2026-06-25
 > 목적: 시각장애인/저시력 사용자가 화면을 보지 않고도 모든 흐름을 이해할 수 있도록 TTS·햅틱·오류 문구의 원칙과 화면별 추천 문구를 정리한다.
-> 관련 문서: [ACCESSIBILITY_REDESIGN_PLAN.md](ACCESSIBILITY_REDESIGN_PLAN.md), [MAPPING_VOICE_STABILIZATION_TODO.md](MAPPING_VOICE_STABILIZATION_TODO.md)
+> 관련 문서: [ACCESSIBILITY_REDESIGN_PLAN.md](ACCESSIBILITY_REDESIGN_PLAN.md), [MAPPING_VOICE_STABILIZATION_TODO.md](archive/MAPPING_VOICE_STABILIZATION_TODO.md)
 > 이 문서는 코드를 수정하지 않는다. 코드 반영이 필요한 항목은 "추천 변경안"으로 표시했으며, 실제 적용은 Codex/추후 작업에서 진행한다.
 
 ---
@@ -133,7 +133,7 @@
 
 ## 6. 권한/모드별 화면·기능 표
 
-> 출처: [ACCESSIBILITY_REDESIGN_PLAN.md](ACCESSIBILITY_REDESIGN_PLAN.md) P0/P1 구조 + [MAPPING_VOICE_STABILIZATION_TODO.md](MAPPING_VOICE_STABILIZATION_TODO.md) 0단계 정책 기준. 코드는 Codex가 이미 구현 완료한 상태이며 이 표는 정책 문서화 목적.
+> 출처: [ACCESSIBILITY_REDESIGN_PLAN.md](ACCESSIBILITY_REDESIGN_PLAN.md) P0/P1 구조 + [MAPPING_VOICE_STABILIZATION_TODO.md](archive/MAPPING_VOICE_STABILIZATION_TODO.md) 0단계 정책 기준. 코드는 Codex가 이미 구현 완료한 상태이며 이 표는 정책 문서화 목적.
 
 | 화면/기능 | 사용자 모드 | 보호자 모드 | 개발자/시연 모드 |
 |---|---|---|---|

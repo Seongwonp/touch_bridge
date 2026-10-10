@@ -1,7 +1,8 @@
 ﻿# 하드웨어 마이그레이션 계획서: 28BYJ-48 -> NEMA17급 XYZ
 
-> **레거시 v1 문서:** 2026-09-04에 FIT0482 X/Y + 스위치봇 방향으로 대체되었습니다.
-> 신규 구현 기준은 [XY_SWITCHBOT_SOFTWARE_PLAN.md](XY_SWITCHBOT_SOFTWARE_PLAN.md)이며,
+> **레거시 v1 문서:** 2026-09-04에 FIT0482 X/Y + 스위치봇 방향으로 대체되었고, 현행 하드웨어는
+> FIT0482 X/Y(CoreXY) + 솔레노이드 펌웨어 v3(`hardware/touchbridge_corexy/`)입니다.
+> v3는 이 문서의 GRBL G-code 명령을 호환 경로로 계속 받습니다(Z축은 솔레노이드로 해석).
 > 이 문서는 기존 GRBL XYZ 코드의 호환·철거 판단용으로만 사용합니다.
 
 이 문서는 기존 `28BYJ-48 + ULN2003` 기반 프로토타입에서, 발표/실기기 안정성을 높이기 위한 `NK1704S 42각 스텝모터 + TB6600 + Arduino Uno GRBL` 기반 XYZ 구조로 전환했던 당시의 기준 문서입니다.

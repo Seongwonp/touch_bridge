@@ -2,11 +2,22 @@
 
 본 문서는 현재 구현된 BLE 챌린지-리스폰스(provision/challenge/auth) 방식을 설명하고, 프로덕션에서 필요한 보안 강화 항목을 정리합니다.
 
-## 현재 구현 요약
+## 현재 구현 요약 (펌웨어 v3, `hardware/touchbridge_corexy/` 기준)
 
-- 앱 ↔ ESP 간: 프로비저닝(provision)으로 공유 비밀(secret)을 ESP NVS에 저장
+- 앱 ↔ ESP 간: 프로비저닝(provision)으로 공유 비밀(secret, 최소 8자)을 ESP NVS에 저장.
+  소스 코드에는 기본 비밀값이 없다.
 - 세션 인증: 앱이 `challenge` 요청 → ESP가 NONCE 반환 → 앱이 HMAC_SHA256(secret, nonce) 계산 후 `auth` 전송 → ESP가 검증하면 세션 인증(5분)
-- 인증되지 않은 세션에서는 `press`/`set_grid` 등 주요 명령을 거부. `stop`은 인증 없이 항상 허용(안전)
+- 키가 등록된 기기에서는 인증되지 않은 BLE 세션의 물리 동작(`press`, 이동, `SET_GRID` 등)을 거부한다.
+- `stop`은 인증 없이 항상 허용(안전).
+- 이미 등록된 키는 유효한 세션이나 USB 시리얼에서만 교체할 수 있다.
+- 부팅·상태 로그에는 키 자체가 아니라 등록 여부(`set`/`none`)와 세션 상태(`ok`/`locked`)만 찍힌다.
+
+### 인증의 예외 — 반드시 알고 있어야 할 것
+
+- **키 등록 전에는 인증이 없다.** 키가 없는 기기는 BLE 범위 안의 누구든 동작시킬 수 있고,
+  **첫 키도 누구나 등록할 수 있다**(trust on first use). 공개 장소 시연 전에는 키를 먼저 등록할 것.
+- **USB 시리얼은 항상 인증 없이 허용된다.** 기기에 물리적으로 케이블을 꽂을 수 있으면
+  모든 명령을 보낼 수 있고, 시리얼 전용 `KEYRESET`으로 페어링 키를 지울 수도 있다.
 
 ## 앱 개발자/운영자 지침
 
@@ -27,13 +38,12 @@
 
 1. 프로비저닝: 앱에서 임시 secret 전송 → ESP가 PROVISION_OK 반환
 2. 인증: `challenge` → `auth`(HMAC) → AUTH_OK
-3. 명령: `press` 후 TOUCH_OK 수신 확인
-4. 비상상황: 인증 없이 `stop`이 동작하는지 확인
+3. 명령: `move_only`로 `POSITIONED`와 `positionToken`을 받은 뒤, 그 토큰으로 `press` →
+   `COMPLETED` 수신 확인 (펌웨어 v3는 옛 `TOUCH_OK` 응답을 보내지 않는다)
+4. 거부: 인증 없이 `press` → `ERROR_PROTOCOL`(`AUTH_REQUIRED`)로 거부되는지 확인
+5. 비상상황: 인증 없이 `stop`이 동작하는지 확인
 
 ## 로그·민감정보
 
 - 개발 빌드에서는 디버그 로그(Serial/노티파이)를 남길 수 있으나, 프로덕션 빌드에서는 민감정보(Secret/키/풀텍스트 로그)를 남기지 않도록 제거
-
----
-
-추가로 HSM/secure element(예: ATECC608A) 연동 설계가 필요하면 도와드리겠습니다.
+- 키를 안전 요소에 보관하는 방식(예: ATECC608A 같은 secure element)은 프로덕션 전환 시 검토 대상이다.

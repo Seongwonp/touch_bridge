@@ -300,33 +300,50 @@ lib/
 
 ## 하드웨어 연동
 
-현재 하드웨어 방향은 소형화를 위해 **FIT0482 엔코더 DC 기어모터 2개(X/Y) + ESP32 폐루프 PID + 스위치봇 누름부**로 전환하는 것입니다. 상세 구현 순서는 [`docs/XY_SWITCHBOT_SOFTWARE_PLAN.md`](docs/XY_SWITCHBOT_SOFTWARE_PLAN.md)를 따릅니다.
+현재 하드웨어는 소형화를 위해 **FIT0482 엔코더 DC 기어모터 2개(X/Y, CoreXY) + ESP32 폐루프 PID + 솔레노이드 누름부**로 구성합니다. 펌웨어(v3)는 [`hardware/touchbridge_corexy/`](hardware/touchbridge_corexy/)에 있고, 배선과 첫 구동 순서는 그 폴더의 README를 따릅니다. 설계 배경은 [`docs/XY_SWITCHBOT_SOFTWARE_PLAN.md`](docs/XY_SWITCHBOT_SOFTWARE_PLAN.md)이며, 그 계획의 누름부(스위치봇)는 이후 솔레노이드로 바뀌었습니다.
 
 **현재 구성:**
-- X/Y: `FIT0482` 6V 310RPM 50:1 엔코더 DC 기어모터 2개
-- 제어: ESP32가 엔코더 피드백을 받아 축별 위치 PID 수행
-- 원점: X/Y 리미트 스위치; 홈 완료 전 이동 금지
-- 누름: 별도 Z축 대신 스위치봇 사용
-- 통신: 앱 → BLE/Wi-Fi → ESP32
+- X/Y: `FIT0482` 6V 310RPM 50:1 엔코더 DC 기어모터 2개, CoreXY 구동
+- 드라이버: JMOD-MOTOR-1 (TB6612FNG)
+- 제어: ESP32가 엔코더 피드백을 받아 위치 PID 수행 (1kHz)
+- 원점: 벽 감지(스톨) 원점 복귀가 기본, 리밋 스위치는 선택; 홈 완료 전 이동 금지
+- 누름: 별도 Z축 대신 5V 솔레노이드 (SparkFun ROB-11015)
+- 통신: 앱 → BLE → ESP32 (USB 시리얼은 디버깅용)
 - 전원: 모터 전원과 MCU 전원 분리, 공통 GND 유지
 
 **권장 실행 흐름:**
 - AI는 물리 좌표를 만들지 않고 논리 버튼 ID(`BT-xx`)만 반환합니다.
 - 사진 분석은 버튼 중심의 정규화 좌표와 신뢰도만 만들고, 보호자 캘리브레이션을 거쳐 X/Y mm로 확정합니다.
 - 앱은 `BT-xx → buttonMachinePositions → X/Y 목표 mm`를 전달합니다.
-- ESP32는 목표 위치 오차가 허용 범위 안에 들어온 뒤에만 스위치봇을 작동시키고 완료 상태를 회신합니다.
-- 현재 앱의 GRBL XYZ G-code와 `BTN_n`, `SET_GRID`, `PRESS x y`는 v2 펌웨어 확정 전까지 레거시 호환 경로로만 유지합니다.
+- ESP32는 목표 위치 오차가 허용 범위 안에 들어온 뒤에만 솔레노이드를 작동시키고 완료 상태를 회신합니다.
+- 펌웨어 v3는 앱 v2 JSON과 함께 GRBL 호환 G-code(Z축 명령을 솔레노이드로 해석)·`BTN_n`·`SET_GRID`도 받으므로, 음성 경로의 G-code 전송도 그대로 동작합니다.
 
-**v2 명령 예시(초안):**
+**v2 명령 흐름 (이동과 누름은 두 단계):**
+
+1) 이동만 — 도착하면 `POSITIONED`와 1회용 `positionToken`을 돌려줍니다.
 ```json
 {
   "version": 2,
-  "commandId": "uuid",
-  "action": "move_and_press",
+  "commandId": "c-001",
+  "action": "move_only",
+  "deviceId": "microwave_1",
   "target": {"xMm": 42.5, "yMm": 18.25},
+  "toleranceMm": 1.0
+}
+```
+
+2) 받은 토큰으로 누름 — 토큰은 한 번만 쓸 수 있고, 그 사이 위치가 밀렸으면 거부됩니다(`ERROR_INVALID_TOKEN`).
+```json
+{
+  "version": 2,
+  "commandId": "c-002",
+  "action": "press",
+  "deviceId": "microwave_1",
+  "positionToken": "9f3a1c...",
   "pressActuator": "switchbot"
 }
 ```
+`pressActuator`는 앱이 예전 표기대로 보내는 값이며 펌웨어는 읽지 않습니다. 명세: [`docs/ESP32_MOTION_PROTOCOL_V2.md`](docs/ESP32_MOTION_PROTOCOL_V2.md)
 
 ---
 
@@ -379,7 +396,9 @@ lib/
   한 점씩 검증·실측 오차 기록, 촬영 전 방향 안내, 드래그 대체 미세 조정 버튼,
   화면읽기 단순 내비게이션 확인 최적화. 상세:
   [`docs/XY_SWITCHBOT_SOFTWARE_PLAN.md`](docs/XY_SWITCHBOT_SOFTWARE_PLAN.md)
-- [ ] ESP32 모션 v2 펌웨어 구현 및 FIT0482 실기 PID/ACK 검증
+- [x] **ESP32 펌웨어 v3 (2026-10-10)** — CoreXY 모션 + 솔레노이드 누름, 앱 v2 JSON·G-code
+  호환, HMAC 인증. [`hardware/touchbridge_corexy/`](hardware/touchbridge_corexy/)
+- [ ] FIT0482 실기 PID 튜닝·ACK 검증과 앱 연동 E2E
 - [ ] 전맹·저시력 참여자를 분리한 실제 과업 평가
 - [ ] BLE 실기기 E2E 검증 (sendPress / sendEmergencyStop ACK)
 - [x] 기기별 4점 X/Y 투영 캘리브레이션 UI와 버튼별 실제 mm 저장
@@ -398,7 +417,8 @@ lib/
 - [접근성 지침·법률 조사 (WCAG 2.2 / KS X 3253 / 장애인차별금지법)](docs/ACCESSIBILITY_GUIDELINES_RESEARCH.md)
 - [2026-09-04 근거자료 출처 감사](docs/SOURCE_AUDIT_2026-09-04.md)
 - [시각장애인 당사자 검증 계획/기록 양식](docs/USER_VALIDATION_PLAN.md)
-- [FIT0482 X/Y + 스위치봇 소프트웨어 계획](docs/XY_SWITCHBOT_SOFTWARE_PLAN.md)
+- [ESP32 펌웨어 v3 (CoreXY + 솔레노이드)](hardware/touchbridge_corexy/README.md)
+- [FIT0482 X/Y + 스위치봇 소프트웨어 계획](docs/XY_SWITCHBOT_SOFTWARE_PLAN.md) — 설계 배경 (누름부는 이후 솔레노이드로 변경)
 - [앱-하드웨어 연동 계약서 (BLE/Wi-Fi, XYZ G-code, 레거시 명령)](docs/HW_APP_INTEGRATION_CONTRACT_KO.md)
 - [하드웨어 마이그레이션 계획서](docs/HARDWARE_MIGRATION_PLAN.md)
 - [하드웨어 작업 및 안전 체크리스트](docs/HARDWARE_TASKS.md)
@@ -411,7 +431,9 @@ flutter analyze
 flutter test
 ```
 
-- Flutter 자동 테스트 **318개 통과 (2026-09-06)**: 명령 규칙, 시간 계산, 실제 mm 좌표·4점 보정,
+- 자동 테스트 **446개 통과 (Flutter 391 + 백엔드 55, 2026-10-10)** — GitHub Actions가
+  푸시마다 `flutter analyze --fatal-infos`·`flutter test`·백엔드 테스트를 실행합니다.
+  Flutter 테스트 범위: 명령 규칙, 시간 계산, 실제 mm 좌표·4점 보정,
   ESP32 모션 v2 상태 머신, 안전 검증 기록, BLE 재연결·명령 큐, 보안 세션(HMAC),
   Z축 복구, 셀 충돌 검출, TTS 억제 계약, 화면읽기 내비게이션, 촬영 안내,
   보호자 자유 배치·조이스틱 위치 맞추기, 드래그 대체 조그, 색상 대비(WCAG), STT 타임아웃
@@ -438,8 +460,10 @@ flutter test
 간단히 확인해야 할 항목:
 - FIT0482 X/Y 모터 2개의 실측 정지전류를 기준으로 H-브리지와 전류 제한을 선정
 - 6V 모터 전원과 ESP32 로직 전원을 분리하고 공통 GND 연결
-- 엔코더 A/B상 방향·카운트와 X/Y 리미트 스위치의 fail-safe 동작 확인
-- 홈 완료 전 이동 금지, 허용 오차 밖에서는 스위치봇 누름 금지 확인
+- 엔코더 A/B상 방향·카운트 확인, 벽 감지 원점 복귀와 추종 오차(걸림) 감지 동작 확인
+  (리밋 스위치를 달 경우 fail-safe 동작도 확인)
+- 홈 완료 전 이동 금지, 허용 오차 밖에서는 솔레노이드 누름 금지 확인
+- 솔레노이드 구동부의 플라이백 다이오드 확인
 - 적정 퓨즈 장착
 - 하드웨어 비상정지(E‑STOP) 회로 구성(필수)
 

@@ -1,8 +1,9 @@
 # Touch Bridge 앱-하드웨어 연동 계약서 (실무 기준)
 
-> 이 문서는 GRBL XYZ 기반 v1 계약이다. FIT0482 X/Y + 스위치봇 v2 전환 계획은
-> `XY_SWITCHBOT_SOFTWARE_PLAN.md`를 따른다. v2 펌웨어 계약이 확정되기 전까지
-> v1 런타임 호환을 유지한다.
+> 이 문서는 GRBL XYZ 기반 v1 계약이다. 현행 펌웨어 v3(`hardware/touchbridge_corexy/`,
+> FIT0482 X/Y CoreXY + 솔레노이드)는 v2 JSON 계약(`ESP32_MOTION_PROTOCOL_V2.md`)을
+> 구현하면서 이 문서의 v1 G-code 명령도 계속 받는다 — Z축 명령은 솔레노이드
+> 누름/뗌으로 해석한다. 그래서 음성 경로의 v1 G-code 전송은 v3에서도 그대로 동작한다.
 
 ## 1) 목적
 앱(STT/AI)과 하드웨어(ESP32/AVR) 간 명령 포맷을 고정해, 기기별 매핑(2x2/3x3 등)이 바뀌어도 코드가 깨지지 않게 한다.

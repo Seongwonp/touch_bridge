@@ -1,7 +1,11 @@
 ﻿> [최신화 주석 2026-08-21] 3장의 하드웨어 3단계 전략(키캡/SG90/CoreXY)은 **폐기된 구버전**입니다.
-> **레거시 설명 포함:** 현행 전환 방향은 FIT0482 X/Y + ESP32 PID + 스위치봇이며
-> [XY_SWITCHBOT_SOFTWARE_PLAN.md](XY_SWITCHBOT_SOFTWARE_PLAN.md)를 기준으로 합니다.
-> 4~6장(프로토콜, AI 논리 ID 원칙, 가변 그리드)은 현행과 일치합니다.
+> **레거시 설명 포함:** 현행 하드웨어는 FIT0482 X/Y + ESP32 PID + 솔레노이드이며 펌웨어는
+> `hardware/touchbridge_corexy/`(v3)입니다. 구동 방식은 3장에서 폐기했던 **CoreXY를 v3가 다시
+> 채택**했지만, 3장의 부품 구성(키캡/SG90 등)은 여전히 구버전입니다.
+> 설계 배경은 [XY_SWITCHBOT_SOFTWARE_PLAN.md](XY_SWITCHBOT_SOFTWARE_PLAN.md).
+> 5~6장(AI 논리 ID 원칙, 가변 그리드)의 원칙은 현행과 같습니다.
+> **4장(프로토콜)은 v1 레거시입니다** — ESP32→AVR 2단 구조와 v1 JSON 기준이며, 펌웨어 v3는
+> ESP32 단독으로 v2 JSON과 G-code를 직접 받습니다. 현행 명세는 `ESP32_MOTION_PROTOCOL_V2.md`.
 
 # Touch Bridge: AI 시스템 통합 가이드 (AI System Overview)
 
@@ -43,6 +47,10 @@ graph TD
 ---
 
 ## 4. 통신 프로토콜 (Protocol Contract)
+
+> ⚠️ 이 장은 v1 레거시다. 현행: 앱 → ESP32 직접(AVR 없음), v2 JSON(`move_only` → `press` + 1회용
+> `positionToken`)과 GRBL 호환 G-code. `PRESS x y`·`BT-n` 텍스트 명령은 펌웨어 v3가 받지 않는다.
+> 명세는 [ESP32_MOTION_PROTOCOL_V2.md](ESP32_MOTION_PROTOCOL_V2.md), 구현은 `hardware/touchbridge_corexy/`.
 
 ### 4-1. 앱 -> ESP32 (BLE JSON)
 앱에서 ESP32로 전송하는 BLE 채널입니다. 현재 제어 경로는 텍스트 명령을 우선 사용하고, JSON 액션은 레거시/보안 제어용으로 유지합니다.
@@ -95,7 +103,7 @@ ESP32가 하드웨어 컨트롤러로 전달하는 직렬 명령입니다.
 ## 7. AI 협업 시 유의사항
 1.  **고정 전제 금지**: 모든 가전이 3x3 그리드라고 가정하지 마세요. 반드시 `SET_GRID`와 매핑 테이블을 확인해야 합니다.
 2.  **안전 우선**: `EMERGENCY_STOP` 명령은 가장 높은 우선순위를 가집니다.
-3.  **피드백 루프**: 하드웨어에서 전송되는 `TOUCH_OK` 또는 `ERROR` 응답을 확인하여 앱 로그와 TTS로 사용자에게 알려야 합니다.
+3.  **피드백 루프**: 하드웨어 응답(v2 JSON의 `COMPLETED`/`STOPPED`/`ERROR_*` 상태, G-code 경로의 `ok`)을 확인하여 앱 로그와 TTS로 사용자에게 알려야 합니다. ACK가 없는 경로에서는 완료를 단정하지 않습니다. (펌웨어 v3는 옛 `TOUCH_OK`를 보내지 않습니다.)
 
 ---
 *최종 업데이트: 2026-06-23*
