@@ -99,8 +99,9 @@ SW 발표(9/23)는 끝났다. 발표 자료·대본·브리프는 `docs/SW_PRESE
 
 - `docs/XY_SWITCHBOT_SOFTWARE_PLAN.md`는 앱 쪽 X/Y 이동·매핑 설계 근거로는 여전히 유효하지만,
   **누름부를 스위치봇으로 가정한 부분은 펌웨어 v3에서 솔레노이드로 바뀌었다.**
-- 앱 코드에는 아직 스위치봇 표기가 남아 있다(아래 TODO 참고). 프로토콜상으로는 문제없다 —
-  앱이 보내는 `pressActuator: 'switchbot'`을 펌웨어가 읽지 않고 솔레노이드로 누른다.
+- 보호자 화면 문구는 장치 중립어("터치봉")로 정리했지만, 코드의 클래스명·프로토콜 값에는
+  `switchbot`이 남아 있다(아래 TODO). 동작에는 문제없다 — 앱이 보내는
+  `pressActuator: 'switchbot'`을 펌웨어가 읽지 않고 솔레노이드로 누른다.
 - 구 GRBL 경로(`NK1704S + TB6600 + Arduino Uno`)는 펌웨어 v3가 **G-code 호환 명령으로 흡수**했다
   (Z축 명령을 솔레노이드 누름/뗌으로 해석). 구 계획: `docs/HARDWARE_MIGRATION_PLAN.md`
 
@@ -224,7 +225,8 @@ lib/
 - 진입 시 버튼을 자동 선택하지 않는다. 사용자가 명시적으로 선택한 뒤에만 `선택한 버튼 위치 저장`을 활성화한다.
 - 패널 그림은 등록 버튼과 앱이 성공적으로 전송한 이동 명령 기준의 현재 위치를 함께 표시한다.
 - 1/5/10mm 조이스틱과 SwitchBot 눌러보기는 보호자 위치 보정 용도이며, raw G-code와 Z축 제어는 고급/개발자 영역으로 분리한다.
-  (화면 문구는 아직 "스위치봇"이지만 실제 누름부는 **솔레노이드**다 — 하드웨어 절·TODO 참고.)
+  (화면 문구는 "현재 위치 눌러보기". 코드의 `SwitchBot` 이름은 옛 표기이고 실제 누름부는
+  **솔레노이드**다 — 하드웨어 절 참고.)
 
 ## 음성 명령 (Gemini AI)
 
@@ -447,12 +449,14 @@ BLE 연동 구현 파일: `lib/services/ble_service.dart`
   - 파일: `lib/services/ble_service.dart`, `lib/services/mapping_execution_service.dart`
   - 펌웨어: `hardware/touchbridge_corexy/` (v3). 앱 v2 action 5종은 펌웨어가 전부 처리함을
     코드상 확인(2026-10-10) — 실기에서 notify 흐름과 `positionToken` 왕복을 검증할 것.
-- [ ] **누름부 표기 정리 (스위치봇 → 솔레노이드)** — 앱이 아직 스위치봇 기준이다.
-  보호자가 누르기 실패 시 "허브 연결을 확인하세요"라는 안내를 받는데, 솔레노이드 구성에는
-  허브가 없어 엉뚱한 곳을 점검하게 된다.
-  - 문구: `manual_mapping_screen.dart`("스위치봇 눌러보기", 실패 안내의 "허브")
-  - 이름: `Esp32SwitchBotActuator`(`motion_controller.dart`), `pressActuator: 'switchbot'`
-    (`esp32_motion_protocol.dart` — 펌웨어가 읽지 않으므로 값 변경은 동작에 영향 없음)
+- [x] **누름부 화면 문구 정리** (2026-10-10) — 보호자 화면의 "스위치봇"을 장치 중립어
+  "터치봉"/"현재 위치 눌러보기"로 바꿨다(`manual_mapping_screen.dart`).
+  참고: 앱에서 **"허브"는 Touch Bridge 기기(ESP32) 자체**를 뜻하므로 "허브 연결을 확인하세요"는
+  솔레노이드 구성에서도 맞는 안내다. 스위치봇 허브와 혼동하지 말 것.
+- [ ] (선택) **내부 이름 정리** — 동작에는 영향 없어 남겨 두었다.
+  `Esp32SwitchBotActuator`(`motion_controller.dart`), `_testSwitchBotAtCurrentPosition`·
+  `id: 'switchbot_test'`(`manual_mapping_screen.dart`), `pressActuator: 'switchbot'`
+  (`esp32_motion_protocol.dart` — 펌웨어가 읽지 않음. 바꾸면 `ESP32_MOTION_PROTOCOL_V2.md`와 테스트도 함께)
 - [ ] **펌웨어 리밋 스위치 핀 수정** — `config.h`의 `PIN_LIMIT_X = 30` / `PIN_LIMIT_Y = 100`은
   ESP32에 없는 GPIO. 리밋 스위치를 달기 전에 고칠 것(하드웨어 담당).
 - [ ] **ESP32 모션 v2 상태 번역·실기 검증** — `homing/moving/positioned/pressing/completed/error` 상태와 ACK를 한국어 TTS로 전달

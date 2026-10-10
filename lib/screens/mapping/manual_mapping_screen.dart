@@ -76,7 +76,7 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
     _tts.speak(
       widget.showCompletionCheck
           ? '터치봉 위치를 맞춥니다. 패널 그림의 노란 표시를 확인하며 화살표로 조정하고, '
-                '스위치봇 눌러보기 후 저장하세요.'
+                '눌러보기로 확인한 뒤 저장하세요.'
           : '위치 맞추기 화면입니다. 패널 그림의 현재 위치를 확인하고 화살표로 조정하세요.',
       source: 'ManualMappingScreen',
       interrupt: true,
@@ -348,7 +348,7 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
     final ok = await _testPress(grid.col, grid.row);
     if (!mounted) return;
     await _tts.speak(
-      ok ? '스위치봇 누르기 명령을 전송했습니다.' : '스위치봇 테스트에 실패했습니다. 허브 연결을 확인하세요.',
+      ok ? '현재 위치를 누르도록 기기에 전달했습니다.' : '눌러보기에 실패했습니다. 허브 연결을 확인하세요.',
       source: 'ManualMappingScreen',
       priority: TtsPriority.result,
     );
@@ -561,8 +561,8 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
               rs: rs,
               id: 'switchbot_test',
               icon: Icons.touch_app_rounded,
-              label: '스위치봇 눌러보기',
-              guide: '스위치봇 테스트입니다. 한 번 더 누르면 실제로 버튼을 누릅니다.',
+              label: '현재 위치 눌러보기',
+              guide: '현재 위치를 눌러 봅니다. 한 번 더 누르면 터치봉이 실제로 패널을 누릅니다.',
               onConfirmed: _testSwitchBotAtCurrentPosition,
               secondary: true,
             ),

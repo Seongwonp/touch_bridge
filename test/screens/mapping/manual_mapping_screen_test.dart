@@ -29,7 +29,7 @@ void main() {
     expect(find.text('현재 위치 · 앱 기준'), findsOneWidget);
     expect(find.text('버튼 선택 · 0개 등록됨'), findsOneWidget);
     expect(find.text('버튼 추가'), findsOneWidget);
-    expect(find.text('스위치봇 눌러보기'), findsOneWidget);
+    expect(find.text('현재 위치 눌러보기'), findsOneWidget);
     expect(find.text('고급 그리드 설정'), findsOneWidget);
     expect(find.text('Z+10'), findsNothing);
     expect(find.text('Z-10'), findsNothing);
