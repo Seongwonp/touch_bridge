@@ -14,7 +14,7 @@
 
 주의: 게이트웨이가 제공자 네이티브 전체 API를 지원하는 것은 아니다.
 사진 입력(image_url data URI)은 OpenAI 호환 형식으로 구성했지만
-**실호출 검증 전까지 미검증 상태**다 (docs/WORK_LOG.md 참조).
+실호출 검증 전까지 미검증 상태다 (docs/WORK_LOG.md 참조).
 """
 
 import base64
@@ -197,7 +197,7 @@ def chat_vision(
     """사진 + 프롬프트 1회 호출 → 응답 텍스트.
 
     OpenAI 호환 image_url(data URI) 형식으로 구성한다.
-    **게이트웨이의 사진 입력 지원은 실호출 검증 전까지 미검증** — 미지원이면
+    게이트웨이의 사진 입력 지원은 실호출 검증 전까지 미검증이다. 미지원이면
     게이트웨이 오류로 실패하며, 다른 제공자로 조용히 우회하지 않는다.
     """
     encoded = base64.b64encode(image_bytes).decode("ascii")

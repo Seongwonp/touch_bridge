@@ -675,7 +675,7 @@ class PhotoMappingViewModel extends ChangeNotifier {
       _applyAiMappingResult(res);
 
   /// AI가 다룰 수 있는 최대 버튼 수. 논리 버튼 ID 체계(BT-01~09)와 일치한다.
-  /// 초과분은 저장 시 조용히 버려지는 문제가 있었으므로 적용 시점에 자르고 고지한다.
+  /// 초과분은 저장 시 ID를 받지 못하므로 적용 시점에 자르고 알린다.
   static const int maxAiButtons = 9;
 
   /// 그리드 행/열 상한 — AI가 rows:1000 같은 값을 줘도 그대로 수용하지 않는다.
@@ -683,8 +683,8 @@ class PhotoMappingViewModel extends ChangeNotifier {
 
   void _applyAiMappingResult(Map<String, dynamic> res) {
     // AI 응답은 신뢰할 수 없는 외부 입력이다. 전부 파싱에 성공한 뒤에만 기존
-    // 포인트를 교체한다 — 중간에 예외가 나면 기존 수동 포인트가 이미 지워진
-    // 채 부분 적용 상태로 남던 버그(과거 `_points.clear()` 선행) 방지.
+    // 포인트를 교체해, 중간에 예외가 나도 수동 포인트가 지워진 채 부분 적용
+    // 상태로 남지 않게 한다.
     final items =
         (res['buttons'] ?? res['items'] ?? res['detections']) as List<dynamic>?;
     if (items == null || items.isEmpty) {
@@ -761,7 +761,7 @@ class PhotoMappingViewModel extends ChangeNotifier {
         : 0;
     final applied = parsed.take(maxAiButtons).toList();
 
-    // 빈 id는 순번 기반으로 보정한다(이전에는 DateTime 문자열이 들어갔다).
+    // 빈 id는 순번 기반으로 보정한다.
     final usedIds = <String>{};
     for (var i = 0; i < applied.length; i++) {
       var point = applied[i];
@@ -883,7 +883,7 @@ class PhotoMappingViewModel extends ChangeNotifier {
         bleName: bleName,
       );
 
-      // Register to home devices if needed
+      // 홈 기기 목록에 없으면 등록한다.
       final devices = await HomeDeviceStore.loadDevices();
       if (!devices.any((d) => d['id'] == deviceId)) {
         devices.add({
@@ -900,7 +900,7 @@ class PhotoMappingViewModel extends ChangeNotifier {
           'bleName': bleName,
         });
         await HomeDeviceStore.saveDevices(devices);
-        ActiveDeviceService.instance.notifyDeviceListChanged(); // 목록 갱신 알림 트리거
+        ActiveDeviceService.instance.notifyDeviceListChanged();
       }
 
       if (BleService.instance.isConnected) {
@@ -929,8 +929,8 @@ class PhotoMappingViewModel extends ChangeNotifier {
     int cols,
     String deviceId,
   ) async {
-    // waiter 선등록 방식: 전송과 응답 대기를 한 호출로 묶어, write 직후 도착한
-    // 하드웨어 확인 응답이 유실되던 경쟁(구 sendSetGrid+readResponse)을 없앤다.
+    // 전송과 응답 대기를 한 호출로 묶어 waiter를 먼저 등록한다. 그래야 write
+    // 직후 도착한 하드웨어 확인 응답을 놓치지 않는다.
     final response = await BleService.instance.sendSetGridWithResponse(
       rows: newProfile.rows,
       cols: newProfile.cols,
@@ -957,7 +957,7 @@ class PhotoMappingViewModel extends ChangeNotifier {
     _disposed = true;
     _motionController.dispose();
     // TtsService는 앱 전역 싱글톤 큐라 여기서 stop()을 부르면 다음 화면이
-    // 막 넣은 안내까지 지워버린다(화면 전환 시 안내가 잘리는 문제).
+    // 막 넣은 안내까지 지워진다.
     _deviceService.disconnect();
     super.dispose();
   }

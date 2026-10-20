@@ -208,8 +208,7 @@ class BleLoadingHelper {
         builder: (_, setState) {
           rebuild = setState;
           // 작업은 최초 1회만 시작한다. builder는 진행률 setState마다 재실행되므로
-          // 여기서 무조건 실행하면 BLE 업로드가 갱신 때마다 중복 시작되는 버그가
-          // 있었다(과거 결함).
+          // 여기서 무조건 실행하면 BLE 업로드가 갱신 때마다 중복 시작된다.
           if (!started) {
             started = true;
             Future<void>(() async {

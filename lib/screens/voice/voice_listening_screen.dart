@@ -66,9 +66,9 @@ class VoiceListeningScreen extends StatefulWidget {
 class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   final TtsService _tts = TtsService();
   final math.Random _random = math.Random();
-  // 공용 STT 세션: 화면별 개별 초기화는 패키지 싱글톤 특성상 콜백이 최초
-  // 1회만 등록돼, 다른 화면(비상 정지)의 이벤트를 이 화면이 받거나 그 반대의
-  // 오염이 있었다. 이벤트는 스택 최상단 화면에만 전달된다.
+  // 공용 STT 세션: STT 패키지가 싱글톤이라 콜백이 최초 1회만 등록된다.
+  // 화면마다 따로 초기화하면 다른 화면(비상 정지)과 이벤트가 섞이므로,
+  // 이벤트는 스택 최상단 화면에만 전달한다.
   final SpeechSessionService _speechSession = SpeechSessionService.instance;
 
   bool _isRecording = false;
@@ -134,11 +134,10 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
   /// 이번 실행(`_beginPress` 이후)에 정지 요청이 있었는가.
   ///
-  /// 정지 버튼은 실행 토큰(epoch)이 잡히기 **전**부터 보인다 — 안내 음성,
-  /// 기기 연결, 매핑 로드가 먼저 돈다. 그 사이에 정지하면 epoch는 올라가지만
-  /// 아직 시작 전인 시퀀스가 **올라간 값을 새 기준으로 잡아** 버튼을 전부
-  /// 누른다. "기기를 멈췄습니다. 안전합니다." 안내 뒤 조리 타이머까지 진입하는
-  /// 것이 재현됐다. 그래서 epoch와 별개로 화면이 직접 기록한다.
+  /// 정지 버튼은 실행 토큰(epoch)이 잡히기 전부터 보인다(안내 음성, 기기 연결,
+  /// 매핑 로드가 먼저 돈다). 그 사이에 정지하면 epoch는 올라가지만, 아직 시작
+  /// 전인 시퀀스는 올라간 값을 새 기준으로 잡아 버튼을 전부 누르게 된다.
+  /// 그래서 epoch와 별개로 화면이 직접 기록한다.
   ///
   /// epoch는 BLE 링크 끊김에도 바뀐다. 이 값으로 "사용자 정지"와 "연결 끊김"을
   /// 구분해, 끊김을 정지로 오인하고 아무 안내 없이 끝내지 않게 한다.
@@ -168,8 +167,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   static const _kExamplesSeenKey = 'voice_examples_announced';
 
   /// 실행 중 화면의 단일 탭 비상 정지. 확인 단계 없이 우선 정지 경로를 부른다.
-  /// (리뷰 #3: 실행 구간에는 마이크가 닫혀 음성 "멈춰"가 안 되고, 전역 비상 버튼은
-  /// 두 번 탭이 필요했다. 실행 중 음성 "멈춰" 지원은 별도 미해결 항목.)
+  /// 실행 구간에는 마이크가 닫혀 있어 음성 "멈춰"로는 정지할 수 없다.
   late final SingleTapStopController _stopController = SingleTapStopController(
     stop: () => EmergencyStopService.instance.stopActiveDevice(),
   );
@@ -204,7 +202,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     _stopController.dispose();
     _stopRequestSub?.cancel();
     // TtsService는 앱 전역 싱글톤 큐라 여기서 stop()을 부르면 다음 화면이
-    // 막 넣은 안내까지 지워버린다(화면 전환 시 안내가 잘리는 문제).
+    // 막 넣은 안내까지 지운다.
     // 공용 STT 세션 스택에서도 빠져 이전 화면이 이벤트를 이어받게 한다.
     _speechSession.detach('VoiceListeningScreen');
     _speechSession.stop();
@@ -271,8 +269,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
   /// 이 화면의 발화는 대부분 명령 결과·실패·확인 질문이다. 기본값을 result로
   /// 두어 스크린리더 활성 시에도 들리게 하고, 화면 진입 안내처럼 스크린리더가
-  /// 대신 읽는 것만 호출부에서 navigation을 명시한다. (이전에는 기본값이
-  /// navigation이라 43곳 중 35곳의 실패·취소 안내가 스크린리더에서 무음이었다.)
+  /// 대신 읽는 것만 호출부에서 navigation을 명시한다.
   Future<void> _speak(
     String message, {
     String source = 'voicelisteningScreen',
@@ -294,7 +291,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
       () {
       if (!mounted || !_isRecording) return;
 
-      // 만약 이미 명령이 인식되어 처리 중이라면 침묵 타이머 무시
+      // 인식된 말이 있으면 녹음을 끝내고 분석으로 넘긴다.
       if (_lastWords.isNotEmpty) {
         AppLogger.info('voice.silence_timer.trigger_stop', {
           'lastWords': _lastWords,
@@ -317,7 +314,6 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   }
 
   void _onSttNaturalEnd() {
-    // 이미 처리 중이거나 녹음 중이 아니면 무시
     if (!_isRecording || _isProcessing) return;
 
     AppLogger.info('voice.stt_natural_end', {'lastWords': _lastWords});
@@ -442,8 +438,8 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
         await Future<void>.delayed(const Duration(milliseconds: 200));
         if (_speechSession.isListening || _isRecording) {
           _startWaveAnimation();
-          FeedbackService.instance.playDing(); // "띵" 소리 추가
-          FeedbackService.instance.vibrateSuccess(); // 짧은 진동 추가
+          FeedbackService.instance.playDing();
+          FeedbackService.instance.vibrateSuccess();
           _speak('녹음을 시작합니다.', priority: TtsPriority.navigation);
 
           // 멘트가 끝날 때까지 기다린 후(약 1.5초) 침묵 감지 시작
@@ -513,13 +509,6 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     );
   }
 
-  /// 안내/질문 발화가 끝난 뒤 자동으로 청취를 재개한다.
-  ///
-  /// "예/아니오로 답하세요"라고 말해놓고 마이크가 꺼져 있으면 전맹 사용자는
-  /// 마이크 버튼을 다시 찾아 두 번 눌러야 하는 dead-end에 빠진다. 모든
-  /// 확인·되묻기 경로는 발화 후 이 메서드를 호출해야 한다.
-  /// TTS 큐가 빌 때까지 기다렸다가 마이크를 열어, 질문 소리가 STT에 섞이거나
-  /// 질문을 듣는 중에 침묵 타이머가 도는 문제를 막는다.
   /// "2번 버튼을 누릅니다." → "2번 버튼을 누르는 중입니다."
   static String _toPressingMessage(String base) =>
       base.contains('누릅니다') ? base.replaceAll('누릅니다', '누르는 중입니다') : base;
@@ -527,7 +516,6 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   /// "2번 버튼을 누릅니다." → "2번 버튼을 누르도록 기기에 전달했습니다."
   ///
   /// BLE write 성공은 기기가 눌렀다는 확인이 아니다(이 경로에는 ACK가 없다).
-  /// 이전 문구 "눌렀습니다"는 화면을 볼 수 없는 사용자에게 거짓 완료였다.
   /// 완료 확인은 비상 정지(ACK 기반)에서만 말한다.
   static String _toDoneMessage(String base) => base.contains('누릅니다')
       ? base.replaceAll('누릅니다', '누르도록 기기에 전달했습니다')
@@ -544,9 +532,8 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     return '기기에 동작을 전달했습니다.';
   }
 
-  /// 하드웨어가 실제로 움직이는 구간을 화면과 음성으로 함께 알린다.
-  /// 전송이 끝난 뒤에야 "누릅니다"라고 말하던 때는 이 구간(로그 기준 약 1.9초)
-  /// 동안 아무 안내가 없어, 화면을 못 보는 사용자가 진행 여부를 알 수 없었다.
+  /// 하드웨어가 실제로 움직이는 구간(로그 기준 버튼당 약 1.9초)을 화면과 음성으로
+  /// 함께 알린다. 안내가 없으면 화면을 못 보는 사용자는 진행 여부를 알 수 없다.
   Future<void> _beginPress(String label) async {
     _pressDoneTimer?.cancel();
     if (!mounted) return;
@@ -609,6 +596,12 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
       ? '버튼 ${commands.length}개를 누르는 중입니다.'
       : '버튼을 누르는 중입니다.';
 
+  /// 안내·질문 발화가 끝난 뒤 자동으로 청취를 재개한다.
+  ///
+  /// 질문만 하고 마이크가 꺼져 있으면 전맹 사용자는 마이크 버튼을 다시 찾아
+  /// 두 번 눌러야 한다. 확인·되묻기 경로는 발화 뒤 반드시 이 메서드를 부른다.
+  /// TTS 큐가 빈 뒤에 마이크를 열어, 질문 소리가 STT에 섞이거나 질문을 듣는
+  /// 중에 침묵 타이머가 돌지 않게 한다.
   void _restartListeningAfterPrompt() {
     if (!_speechEnabled || !mounted) return;
     Future<void>(() async {
@@ -822,7 +815,6 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     // 아래 간단 규칙 → AI 백엔드까지 흘려보낸다. VoiceDeviceResolver의 키워드
     // 목록은 20개 남짓이라 "햇반 돌려줘" 같은 목록 밖 표현을 잡지 못하는데,
     // 그걸 게이트로 쓰면 정작 그런 표현을 해석하라고 둔 백엔드에 도달조차 못 한다.
-    // ("돌려"가 "들려"로 오인식되자 같은 질문만 무한 반복된 사고가 있었다.)
     if (resolution.needsClarification) {
       _followUpAttempts++;
       AppLogger.info('voice.device_resolution.follow_up', {
@@ -904,8 +896,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   Future<void> _handleEmergencyStop() async {
     if (_isExecuting) _stopRequestedThisRun = true;
     FeedbackService.instance.vibrateError();
-    // 대상 결정 → 재연결 → STOP 전송 → ACK 해석은 EmergencyStopService가
-    // 단일하게 책임진다(과거 3개 화면 복제 로직 통합).
+    // 대상 결정 → 재연결 → STOP 전송 → ACK 해석은 EmergencyStopService가 맡는다.
     final outcome = await EmergencyStopService.instance.stopActiveDevice();
     await _announceStopOutcome(outcome);
   }
@@ -998,7 +989,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   Future<bool> _sendBleSequenceInner(List<dynamic> commands) async {
     if (_stopRequestedBeforeSend()) return false;
 
-    // [DEMO PRIORITY] 이미 연결된 기기가 있다면 즉시 사용
+    // 이미 연결된 기기가 있으면 그대로 쓴다.
     String deviceId = BleService.instance.connectedDeviceId;
 
     if (deviceId.isEmpty) {
@@ -1062,8 +1053,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     }
 
     // 저장 매핑이 없을 때만 검증된 데모 목데이터 물리 좌표를 fallback으로 쓴다.
-    // 실제 G-code 조립/전송은 MappingExecutionService.pressPhysical에 있다
-    // (이전엔 여기 인라인으로 중복돼 있었다).
+    // 실제 G-code 조립·전송은 MappingExecutionService.pressPhysical이 한다.
     // 버튼 사이 대기까지 하나의 실행 토큰으로 묶는다 — 화면에서 pressPhysical을
     // 직접 반복하면 대기 중 비상 정지가 다음 버튼을 막지 못한다.
     {
@@ -1119,8 +1109,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     switch (action) {
       case 'IMMEDIATE_PRESS':
         final pressBase = message.isNotEmpty ? message : '버튼을 누릅니다.';
-        // 전송 "전"에 누르는 중임을 알린다. 이전에는 전송이 끝난 뒤에야
-        // "누릅니다"라고 말해 시제도 결과도 어긋났다.
+        // 전송 "전"에 누르는 중임을 알린다.
         await _beginPress(_toPressingMessage(pressBase));
         final immediateSent = await _sendBleSequence(commands);
         if (!immediateSent) {
@@ -1355,10 +1344,9 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
                           child: BleStatusBanner(),
                         ),
                         SizedBox(height: 28 * rs),
-                        // liveRegion: true — 스크린리더 활성 시 이 상태 변화는
-                        // 억제되는 navigation 우선순위 TTS를 대신해 스크린리더
-                        // 자체 채널로 안내된다(억제만 하고 대체 채널이 없으면
-                        // 사용자에게 아무 정보도 안 남는 문제를 막는다).
+                        // liveRegion: true — 스크린리더 활성 시 억제되는
+                        // navigation 우선순위 TTS 대신 스크린리더 채널로
+                        // 상태 변화를 알린다.
                         Semantics(
                           liveRegion: true,
                           child: Text(

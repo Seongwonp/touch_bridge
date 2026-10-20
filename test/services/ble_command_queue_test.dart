@@ -7,9 +7,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('BLE 명령 직렬화 큐 (_withCommandLock)', () {
-    // 배경: 단일 GATT characteristic에 여러 경로가 동시에 쓰면 응답이 엉뚱한
-    // 호출로 배달되거나 유실됐다(공유 completer 경쟁). 모든 write/응답 대기는
-    // 큐로 직렬화되며, 이 계약이 깨지면 그 경쟁이 재발한다.
+    // 단일 GATT characteristic에 여러 경로가 동시에 쓰면 응답이 엉뚱한 호출로
+    // 배달되거나 유실된다. 그래서 모든 write/응답 대기는 큐로 직렬화한다.
 
     test('명령은 요청 순서대로 하나씩 실행된다', () async {
       final order = <String>[];

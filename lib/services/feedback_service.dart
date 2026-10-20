@@ -51,7 +51,7 @@ class FeedbackService {
   /// 실패 earcon (하강 저음 2음)
   Future<void> playFailure() => _playEarcon('failure.wav');
 
-  /// (구버전 호환) 인식 시작/완료 알림 — 수신음으로 매핑한다.
+  /// 인식 시작/완료 알림 — 수신음과 같다(호환용).
   Future<void> playDing() => playReceived();
 
   /// 짧고 강한 진동 (성공/확인)

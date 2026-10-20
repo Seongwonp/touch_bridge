@@ -136,8 +136,8 @@ void main() {
   });
 
   group('DeviceMappingService.mergeGridUpdate (수동 매핑 병합 저장)', () {
-    // 과거 버그: 수동 매핑 저장이 빈 프로필로 덮어써서 사진 매핑의 버튼/라벨/
-    // 모션/이미지가 재보정 한 번에 전부 소실됐다. 병합이 이를 보존해야 한다.
+    // 수동 매핑 저장이 빈 프로필로 덮어쓰면 재보정 한 번에 사진 매핑의
+    // 버튼/라벨/모션/이미지가 전부 사라진다. 병합으로 이를 보존해야 한다.
     const existing = DeviceMappingProfile(
       rows: 3,
       cols: 3,
@@ -185,7 +185,7 @@ void main() {
       expect(p.pitchY, 21);
       expect(p.homeRow, 1);
       expect(p.homeCol, 2);
-      // 사진 매핑 산출물 보존 검증 — 이게 깨지면 데이터 손실 버그 재발.
+      // 사진 매핑 산출물이 보존되는지 확인한다.
       expect(p.buttonMap, existing.buttonMap);
       expect(p.buttonPositions, existing.buttonPositions);
       expect(p.customLabels, existing.customLabels);

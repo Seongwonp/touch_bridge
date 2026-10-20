@@ -33,8 +33,8 @@ class EmergencyStopScreen extends StatefulWidget {
 class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     with SingleTickerProviderStateMixin {
   final TtsService _tts = TtsService();
-  // 공용 STT 세션: 화면별 SpeechToText 개별 초기화는 패키지 싱글톤 특성상
-  // 콜백이 최초 1회만 등록돼 "멈춰" 재청취 루프가 조용히 죽는 문제가 있었다.
+  // 공용 STT 세션: SpeechToText는 패키지 싱글톤이라 콜백이 최초 1회만 등록된다.
+  // 화면마다 따로 초기화하면 "멈춰" 재청취 루프가 조용히 죽는다.
   final SpeechSessionService _speechSession = SpeechSessionService.instance;
 
   late final AnimationController _holdController;
@@ -202,12 +202,10 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   Future<void> _onHoldCompleted() async {
     if (!mounted || _stopInProgress) return;
     _stopInProgress = true;
-    // 홀드 진행 햅틱을 여기서 반드시 멈춘다. 이 타이머는 _onHoldEnd에서만
-    // 취소됐는데, 완주 직후 _isHolding이 false가 되어 _onHoldEnd가 조기
-    // 반환하므로 주기 타이머가 그대로 남았다. 정지를 한 번 쓸 때마다 1초
-    // 주기 타이머가 누적되고, 다음 홀드에서 _isHolding이 true가 되는 순간
-    // 누수된 타이머들이 함께 발화해 진행 햅틱이 중복된다 — 화면을 볼 수 없는
-    // 사용자가 3초 경과를 촉각으로 가늠하는 신호가 깨진다.
+    // 홀드 진행 햅틱 타이머는 여기서 반드시 멈춘다. 완주 직후에는 _isHolding이
+    // false라 _onHoldEnd가 조기 반환하므로 거기서는 취소되지 않는다. 남겨 두면
+    // 다음 홀드에서 타이머가 중복 발화해, 화면을 볼 수 없는 사용자가 3초 경과를
+    // 촉각으로 가늠하는 신호가 깨진다.
     _holdHapticTimer?.cancel();
     setState(() {
       _isHolding = false;
@@ -221,7 +219,6 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     HapticFeedback.heavyImpact();
 
     // 실제 하드웨어로 중단 명령을 보내고, 확인 결과를 정직하게 안내한다.
-    // (이전 구현은 아무 명령도 보내지 않고 "멈췄습니다"라고만 말했다.)
     final outcome = await _sendStop();
     if (outcome.acknowledged) {
       FeedbackService.instance.playSuccess();
@@ -250,8 +247,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     }
   }
 
-  // 대상 결정 → 재연결 → STOP 전송 → ACK 해석은 EmergencyStopService가
-  // 단일하게 책임진다(과거 3개 화면 복제 로직 통합).
+  // 대상 결정 → 재연결 → STOP 전송 → ACK 해석은 EmergencyStopService가 담당한다.
   Future<EmergencyStopOutcome> _sendStop() =>
       EmergencyStopService.instance.stopActiveDevice();
 

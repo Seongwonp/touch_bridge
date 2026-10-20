@@ -95,8 +95,8 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
       return;
     }
 
-    // 기기를 찾은 경우에도 안내한다 — 이전에는 목록 시트가 무음으로 열려
-    // 전맹 사용자가 검색 후 침묵 상태에 놓였다.
+    // 기기를 찾은 경우에도 안내한다. 목록 시트만 무음으로 열리면 전맹 사용자는
+    // 검색이 끝났는지 알 수 없다.
     _tts.speak(
       '기기 ${devices.length}개를 찾았습니다. 목록에서 선택하세요.',
       source: 'DeviceConnectScreen',
@@ -227,9 +227,8 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
 
   /// NFC 태그에서 기기 코드를 읽어 등록한다.
   ///
-  /// 이전 구현은 3초 기다렸다가 무조건 "찾을 수 없습니다"를 말하는 가짜였다.
-  /// 시각장애인 사용자에게 NFC는 카메라 조준이 필요한 QR보다 훨씬 적합한
-  /// 방식이므로(갖다 대면 끝) 실제 nfc_manager 세션으로 교체했다.
+  /// 시각장애인 사용자에게는 카메라 조준이 필요한 QR보다 갖다 대기만 하면 되는
+  /// NFC가 더 적합하다.
   /// 태그 페이로드는 QR/코드 입력과 동일하게 기기 코드 문자열로 취급한다.
   Future<void> _onNfcTagTap() async {
     if (kIsWeb ||
@@ -370,7 +369,6 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
         ? preferredDeviceId!.trim()
         : _newDeviceId(name.replaceAll(' ', '_'));
 
-    // Check if device with same ID or BLE ID already exists
     if (devices.any((d) => d['id'] == candidateId)) {
       if (context.mounted) {
         _tts.speak('$name 기기는 이미 등록되어 있습니다.', source: 'DeviceConnectScreen');
@@ -430,7 +428,7 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
   @override
   void dispose() {
     // TtsService는 앱 전역 싱글톤 큐라 여기서 stop()을 부르면 다음 화면이
-    // 막 넣은 안내까지 지워버린다(화면 전환 시 안내가 잘리는 문제).
+    // 막 넣은 안내까지 지워버린다.
     _nfcTimeoutTimer?.cancel();
     if (_nfcSessionActive) {
       _stopNfcSession();

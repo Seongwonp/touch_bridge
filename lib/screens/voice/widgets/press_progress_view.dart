@@ -5,7 +5,7 @@ import '../../../theme/app_colors.dart';
 
 /// 버튼을 누르는 중 / 전달 완료 화면.
 ///
-/// 실행 중에는 화면 아래에 **한 번 탭으로 동작하는 비상 정지 버튼**을 항상 둔다.
+/// 실행 중에는 화면 아래에 한 번 탭으로 동작하는 비상 정지 버튼을 항상 둔다.
 /// 확인창·두 번째 탭·길게 누르기가 없다. 정지 결과는 [SingleTapStopController]의
 /// `lastOutcome`으로 받아 ACK 확인 / 미확인 / 실패를 구분해 보여준다.
 /// 위젯 테스트가 가능하도록 화면 상태는 전부 인자로 받는다.
@@ -133,10 +133,8 @@ class PressProgressView extends StatelessWidget {
               ),
             ),
           ),
-        // FilledButton이 버튼 역할·활성 상태를 스스로 노출하고 자식(라벨 Text)의
-        // 시맨틱을 자기 노드로 병합한다. 그래서 hint는 바깥이 아니라 **버튼 안쪽**
-        // 라벨에 붙여야 버튼 노드에 남는다(바깥 Semantics의 hint는 버려졌다 —
-        // 위젯 테스트로 확인).
+        // FilledButton은 자식(라벨 Text)의 시맨틱을 자기 노드로 병합한다.
+        // 그래서 hint는 바깥 Semantics가 아니라 버튼 안쪽 라벨에 붙여야 남는다.
         Semantics(
           label: buttonLabel,
           child: ConstrainedBox(

@@ -1,8 +1,8 @@
 # backend/ai_provider.py
 """AI 제공자 선택과 학교 게이트웨이 경로의 명령 해석/사진 분석.
 
-제공자 선택은 환경 변수 AI_PROVIDER로 **명시적으로** 한다:
-- "google" (기본값): 기존 google.generativeai 직접 호출 (main.py의 기존 경로)
+제공자 선택은 환경 변수 AI_PROVIDER로 명시적으로 한다:
+- "google" (기본값): google.generativeai 직접 호출 (main.py)
 - "school": 수원대학교 API Gateway (school_gateway.py)
 
 원칙: 학교 API를 선택한 상태에서 호출이 실패하면 Google로 조용히 우회하지
@@ -28,7 +28,7 @@ _VALID_PROVIDERS = {PROVIDER_GOOGLE, PROVIDER_SCHOOL}
 def resolve_provider(environ) -> tuple[str, bool]:
     """(provider, is_valid)를 돌려준다.
 
-    - 미설정 → ("google", True): 기존 배포와의 호환 기본값.
+    - 미설정 → ("google", True): 기본값.
     - 알 수 없는 값 → (원문 소문자, False): 조용히 기본값으로 덮지 않는다 —
       호출 시점에 설정 오류로 실패시켜 오설정을 드러낸다.
     """
@@ -99,7 +99,7 @@ def vision_with_school(
     실패 시 SchoolGatewayError를 그대로 올린다 — 호출부(main.py)가 HTTP
     상태 코드로 매핑한다. Google로 우회하지 않는다.
 
-    ⚠ 게이트웨이의 사진 입력 지원은 실호출 검증 전까지 **미검증**이다.
+    게이트웨이의 사진 입력 지원은 아직 실호출로 검증되지 않았다.
     """
     content = school_gateway.chat_vision(
         config,

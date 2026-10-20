@@ -45,8 +45,8 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
   Timer? _armResetTimer;
 
   // 이 세션에서 누른 시간 프리셋 버튼(10초/30초/1분/5분)의 누적 초.
-  // 시작 버튼을 누르면 이 값으로만 카운트다운을 연다 — 알 수 없는 시간을
-  // 고정 30초로 가정하고 "끝났다"고 거짓 안내하던 문제의 수정.
+  // 시작 버튼을 누르면 이 값으로만 카운트다운을 연다. 시간을 임의로 가정하면
+  // 기기가 아직 도는데 "끝났다"고 안내하게 된다.
   int _accumulatedSeconds = 0;
 
   @override
@@ -168,8 +168,8 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
       buttonId: btId,
     );
     // 시작 버튼은 아래에서 타이머 화면 진입이나 "시간을 알 수 없다" 안내를
-    // 따로 하므로 범용 "전달했습니다" 안내를 겹치지 않는다. 두 안내가 22ms
-    // 간격으로 나가면서 interrupt로 서로를 끊어 문장이 잘려 들렸다.
+    // 따로 하므로 범용 "전달했습니다" 안내를 겹치지 않는다. 두 안내가 연달아
+    // 나가면 interrupt로 서로를 끊어 문장이 잘린다.
     final isStartButton = btId == 'BT-05' && label == '시작';
     if (!isStartButton || !result.ok) {
       await CommandFeedbackService.instance.announce(
@@ -192,8 +192,6 @@ class _ImageControlScreenState extends State<ImageControlScreen> {
     }
 
     // 시작 버튼: 누적된 시간이 있을 때만 실제 시간으로 카운트다운을 연다.
-    // (이전에는 무조건 30초 고정 타이머를 돌린 뒤 "작동이 끝났습니다"라고
-    // 거짓 안내했다 — 실제 기기는 계속 돌고 있을 수 있는 상태였다.)
     if (isStartButton && mounted) {
       final seconds = _accumulatedSeconds;
       _accumulatedSeconds = 0;

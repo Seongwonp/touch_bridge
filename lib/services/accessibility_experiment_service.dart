@@ -104,8 +104,8 @@ class AccessibilityExperimentService extends ChangeNotifier {
   }
 
   Future<void> recordTaskAborted() async {
-    // 이전 구현은 저장하지 않고 시작 시각만 지워서, 중단된 작업이 영구
-    // "미완료"로 남고 완료율 해석이 모호했다 — 중단도 셈해서 저장한다.
+    // 중단도 셈해서 저장한다. 시작 시각만 지우면 중단된 작업이 영구
+    // "미완료"로 남아 완료율 해석이 모호해진다.
     _abortedTasks += 1;
     _activeTaskStartedAt = null;
     _activeTaskMode = null;

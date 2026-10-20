@@ -15,10 +15,9 @@ import 'widgets/mapping_form_controls.dart';
 /// 사진 없이 좌표(행/열/원점/간격)와 조이스틱, 테스트 눌러보기만으로 버튼
 /// 위치를 설정하는 화면.
 ///
-/// 기존에는 이미 등록된 기기를 재조정하는 용도로만(control_mode_sheet 경유)
-/// 쓰였는데, [deviceId]/[deviceName]을 넘기고 [showCompletionCheck]를 켜면
-/// 최초 기기 등록 흐름(사진 매핑의 대안)으로도 쓸 수 있다 — 시각 확인 없이
-/// 소리·진동만으로 버튼 위치를 맞출 수 있는 유일한 경로이기 때문이다.
+/// 등록된 기기 재조정(control_mode_sheet 경유)에 쓰이고, [deviceId]/[deviceName]을
+/// 넘기고 [showCompletionCheck]를 켜면 최초 기기 등록 흐름으로도 쓸 수 있다.
+/// 시각 확인 없이 소리·진동만으로 버튼 위치를 맞출 수 있는 유일한 경로다.
 class ManualMappingScreen extends StatefulWidget {
   const ManualMappingScreen({
     super.key,
@@ -27,8 +26,7 @@ class ManualMappingScreen extends StatefulWidget {
     this.showCompletionCheck = false,
   });
 
-  /// 지정하지 않으면 [ActiveDeviceService]의 현재 활성 기기를 사용한다
-  /// (기존 재조정 진입 경로와의 호환을 위함).
+  /// 지정하지 않으면 [ActiveDeviceService]의 현재 활성 기기를 사용한다.
   final String? deviceId;
   final String? deviceName;
 
@@ -98,7 +96,7 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
   }
 
   // 물리 동작 전 dead-man 확인 패턴.
-  // 첫 탭: TTS 안내 + arm. 두 번째 탭: 실행. 20초 초과: 자동 취소 (WCAG 2.2.1 통일).
+  // 첫 탭: TTS 안내 + arm. 두 번째 탭: 실행. 20초 초과: 자동 취소 (WCAG 2.2.1).
   Future<void> _armAndRun({
     required String id,
     required String guide,
@@ -178,8 +176,7 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
       final hc = int.tryParse(_hcCtrl.text) ?? 0;
 
       // 기존 프로필에 그리드 값만 병합한다. 새 프로필로 덮어쓰면 사진 매핑이
-      // 만들어 둔 buttonMap/buttonPositions/라벨/모션 파라미터/이미지가 재보정
-      // 한 번에 전부 소실된다(과거 데이터 손실 버그).
+      // 만들어 둔 buttonMap/buttonPositions/라벨/모션 파라미터/이미지가 모두 사라진다.
       final loaded = await DeviceMappingService.instance.load(deviceId);
       final existing = _withFreeButtonPositions(loaded);
       final merge = DeviceMappingService.mergeGridUpdate(

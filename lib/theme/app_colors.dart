@@ -8,12 +8,12 @@ import 'package:flutter/material.dart';
 class AppColors {
   AppColors._();
 
-  // ✅ Primary Colors (핵심)
+  // Primary Colors (핵심)
   /// 순수 검정 — 배경
   static const Color background = Color(0xFF000000);
 
   /// 다크 서피스 — 카드/컨테이너
-  static const Color surface = Color(0xFF020617); // 변경: 더 검은색
+  static const Color surface = Color(0xFF020617);
 
   /// 한 단계 더 밝은 서피스 — 카드가 배경에서 떠 보이도록 (모달/강조 카드)
   static const Color surfaceElevated = Color(0xFF0B1220);
@@ -28,12 +28,12 @@ class AppColors {
   static const Color textPrimary = Color(0xFFFFFFFF); // 흰색
 
   /// 텍스트 — 보조
-  static const Color textSecondary = Color(0xFFCBD5E1); // 더 밝은 회색
+  static const Color textSecondary = Color(0xFFCBD5E1); // 밝은 회색
 
   /// 텍스트 — 약화 (보조 설명). 비활성(disabled)과 달리 본문 대비 AA(4.5:1)를 만족해야 한다.
   static const Color textTertiary = Color(0xFF94A3B8); // 검정 대비 약 8:1
 
-  // ✅ Semantic Colors
+  // Semantic Colors
   /// 성공/완료
   static const Color success = Color(0xFF22C55E); // 초록
 
@@ -46,7 +46,7 @@ class AppColors {
   /// 정보/안내
   static const Color info = Color(0xFF3B82F6); // 파랑
 
-  // ✅ Functional Colors
+  // Functional Colors
   /// 비활성 상태
   static const Color disabled = Color(0xFF64748B);
 
@@ -59,11 +59,11 @@ class AppColors {
   /// 구분선
   static const Color divider = Color(0x14FFFFFF); // 흰색 + 투명도
 
-  // ✅ Brand Colors
+  // Brand Colors
   /// 브랜드 컬러 (로고/헤더)
   static const Color brand = Color(0xFFFFEB00); // 노랑
 
-  // ✅ Container/Background
+  // Container/Background
   /// 다크 컨테이너
   static const Color darkContainer = Color(0x0F0F172A);
 
@@ -73,7 +73,7 @@ class AppColors {
   /// 모달 배경
   static const Color modalOverlay = Color(0x99000000);
 
-  // ✅ Border & Outline (구버전과 호환)
+  // Border & Outline (구버전과 호환)
   static const Color outline = Color(0xFF8A8A8A);
 
   /// 활성 상태 테두리
@@ -85,7 +85,7 @@ class AppColors {
   /// 강조 테두리 (포커스)
   static const Color borderFocus = Color(0x4DFFEB00);
 
-  // ✅ Shadow Colors
+  // Shadow Colors
   /// 주요 그림자 (노랑)
   static const Color shadowPrimary = Color(0x26FFEB00);
 
@@ -98,7 +98,7 @@ class AppColors {
   /// 보조색 그림자 (청록 글로우)
   static const Color shadowSecondaryGlow = Color(0x2622D3EE);
 
-  // ✅ Gradients
+  // Gradients
   /// 주요 CTA 버튼용 그라디언트 (노랑 → 진한 골드, 입체감)
   static const List<Color> primaryGradient = [
     Color(0xFFFFF066),
@@ -111,7 +111,7 @@ class AppColors {
     Color(0xFF22D3EE),
   ];
 
-  // ✅ Utility Methods
+  // Utility Methods
 
   /// 상태에 따른 버튼 색상
   static Color getButtonColor({

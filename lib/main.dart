@@ -15,7 +15,7 @@ void main() async {
   } catch (_) {}
   await AccessibilitySettings.instance.load();
   await AccessibilityExperimentService.instance.load();
-  await ActiveDeviceService.instance.init(); // 서비스 초기화 추가
+  await ActiveDeviceService.instance.init();
   await DemoSeed.seed();
   BleService.instance.warmUp();
   runApp(const TouchBridgeApp());

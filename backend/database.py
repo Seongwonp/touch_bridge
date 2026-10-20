@@ -1,4 +1,3 @@
-# backend/database.py
 import os
 import asyncio
 import json
@@ -20,7 +19,6 @@ _MEMORY_DB = {}
 
 async def init_db():
     """DB 연결 확인 및 인덱스 설정"""
-    # 샘플 데이터 정의
     samples = [
         {
             "device_id": "MW-BASE-001",
@@ -54,11 +52,9 @@ async def init_db():
     ]
 
     try:
-        # 연결 확인
         await asyncio.wait_for(client.admin.command('ping'), timeout=2.0)
         print("MongoDB 연결 성공!")
         
-        # device_id에 유니크 인덱스 생성
         await collection.create_index("device_id", unique=True)
         
         for sample in samples:
@@ -87,9 +83,9 @@ async def get_device_profile(device_id: str):
 async def save_device_profile(device_id, device_type, description, grid, buttons):
     """새로운 기기 프로필 저장.
 
-    주의: 현재 API 경로에서는 사용하지 않는다 — /vision-mapping의 save_as_id가
-    무인증 프로필 덮어쓰기(물리 안전 결함)라 제거됐다. 프로필 저장이 다시
-    필요해지면 인증된 관리자 경로에서만 호출할 것.
+    주의: 현재 API 경로에서는 호출하지 않는다. 인증 없이 프로필을 덮어쓰면
+    잘못된 좌표로 버튼이 눌릴 수 있으므로, 다시 필요해지면 인증된 관리자
+    경로에서만 호출할 것.
     """
     profile = {
         "device_id": device_id,

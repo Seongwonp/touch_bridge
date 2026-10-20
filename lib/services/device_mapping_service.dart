@@ -135,7 +135,7 @@ class DeviceMappingProfile {
   /// 캘리브레이션을 거친 실제 장치 좌표(mm).
   ///
   /// 값이 있으면 실행 계층은 rows/cols 기반 좌표보다 이 값을 우선한다.
-  /// 기존 프로필은 이 필드가 없으므로 종전 그리드 계산으로 자동 폴백한다.
+  /// 이 필드가 없는 프로필은 그리드 계산으로 폴백한다.
   final Map<String, ({double xMm, double yMm})> buttonMachinePositions;
   final PanelCalibration? panelCalibration;
 
@@ -354,13 +354,11 @@ class DeviceMappingService {
     await prefs.setString(_profileKey(deviceId), jsonEncode(profile.toJson()));
   }
 
-  /// 좌표(그리드) 수동 설정을 기존 프로필에 **병합**한다.
+  /// 좌표(그리드) 수동 설정을 기존 프로필에 병합한다.
   ///
-  /// 수동 매핑 화면은 행/열/원점/간격/홈 위치만 편집하는데, 이전 구현은 빈
-  /// 프로필을 새로 만들어 저장해서 사진 매핑이 만들어 둔 buttonMap ·
-  /// buttonPositions · customLabels · 모션 파라미터 · imagePath가 재보정 한
-  /// 번에 전부 소실됐다(데이터 손실 버그). 이 함수는 그리드 값만 갱신하고
-  /// 나머지는 보존한다.
+  /// 수동 매핑 화면은 행/열/원점/간격/홈 위치만 편집하므로 그리드 값만 갱신하고,
+  /// 사진 매핑이 만든 buttonMap·buttonPositions·customLabels·모션 파라미터·
+  /// imagePath는 보존한다.
   ///
   /// 그리드가 줄어 새 범위(rows×cols)를 벗어나게 된 버튼은 잘못된 물리
   /// 좌표로 눌리는 것을 막기 위해 제거하고, 제거된 ID 목록을 함께 반환한다 —
@@ -476,6 +474,6 @@ class DeviceMappingService {
     return map[t];
   }
 
-  /// Public helper: convert a human label (from AI or user) into a logical button id (e.g. 'BT-02').
+  /// 사람이 쓰는 라벨(AI 응답·사용자 입력)을 논리 버튼 ID(예: 'BT-02')로 바꾼다.
   String? labelToButtonId(String label) => _labelToButtonId(label);
 }

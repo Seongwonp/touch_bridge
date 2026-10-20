@@ -5,10 +5,8 @@ import 'tts_service.dart';
 /// 명령 실행 결과(수신/전송/확인/실패)를 TTS·진동·소리로 일관되게 전달하는
 /// 단일 창구.
 ///
-/// 이전에는 화면마다 FeedbackService+TtsService 조합을 제각각 만들어 써서,
-/// "BLE 전송 성공"을 "기기 확인 완료"인 것처럼 성공음으로 안내하는 문제가
-/// 반복해서 생겼다(비상정지 ACK 스푸핑과 같은 종류의 문제). 이 서비스가
-/// [CommandPhase]별 소리·진동·안내 우선순위를 한 곳에서 결정한다.
+/// "BLE 전송 성공"을 "기기 확인 완료"처럼 안내하지 않도록 [CommandPhase]별
+/// 소리·진동·안내 우선순위를 이 서비스가 한 곳에서 결정한다.
 class CommandFeedbackService {
   CommandFeedbackService._();
   static final CommandFeedbackService instance = CommandFeedbackService._();

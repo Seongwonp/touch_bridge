@@ -4,10 +4,8 @@ import 'emergency_intent.dart';
 
 /// 비상 정지 실행의 단일 창구.
 ///
-/// 이전에는 같은 로직(대상 결정 → 재연결 → STOP 전송 → ACK 해석)이
-/// EmergencyAccessScreen · EmergencyStopScreen · VoiceListeningScreen 세 곳에
-/// 복제돼 있었다. 전역 비상 버튼(GlobalEmergencyAction) 도입을 계기로 한 곳으로
-/// 모은다 — 정지 경로는 안전 직결이라 사본이 서로 어긋나면 안 된다.
+/// 대상 결정 → 재연결 → STOP 전송 → ACK 해석을 이곳에서만 한다. 정지 경로는
+/// 안전과 직결되므로 화면마다 사본을 두어 서로 어긋나면 안 된다.
 class EmergencyStopService {
   EmergencyStopService._();
   static final EmergencyStopService instance = EmergencyStopService._();

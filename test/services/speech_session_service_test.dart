@@ -10,9 +10,9 @@ void main() {
   tearDown(service.resetForTest);
 
   group('SpeechSessionService 이벤트 위임 (스택 최상단 화면만 수신)', () {
-    // 배경: SpeechToText는 패키지 싱글톤이라 콜백이 최초 1회만 등록된다.
-    // 화면별 개별 초기화 시 (a) 나중 화면의 콜백 미등록, (b) 스택 아래 화면이
-    // 위 화면의 listen 이벤트를 받아 상태가 오염되는 문제가 있었다.
+    // SpeechToText는 패키지 싱글톤이라 콜백이 최초 1회만 등록된다. 화면별로
+    // 따로 초기화하면 (a) 나중 화면의 콜백이 등록되지 않고, (b) 스택 아래 화면이
+    // 위 화면의 listen 이벤트를 받아 상태가 오염된다.
     test('이벤트는 가장 나중에 attach한 화면에만 전달된다', () {
       final received = <String>[];
       service.attach(

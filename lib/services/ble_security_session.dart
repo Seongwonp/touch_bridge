@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// BLE 명령 전송 전 HMAC challenge-response 인증 세션을 담당한다.
-/// `BleService`에서 분리됨 — 연결/스캔 로직과 보안 로직을 섞지 않기 위함.
+/// 연결/스캔 로직과 섞이지 않도록 `BleService`와 분리해 둔다.
 class BleSecuritySession {
   BleSecuritySession({required this.onLog});
 
@@ -47,15 +47,14 @@ class BleSecuritySession {
 
   /// 물리 동작(raw G-code / BTN_n / SET_GRID) 전송 허용 여부 정책.
   ///
-  /// - 페어링 키가 **프로비저닝된** 기기: 유효한 HMAC 세션이 있어야만 허용
+  /// - 페어링 키가 프로비저닝된 기기: 유효한 HMAC 세션이 있어야만 허용
   ///   (fail-closed). 세션이 없으면 여기서 자동으로 challenge/auth 핸드셰이크를
   ///   시도하고, 실패하면 차단한다.
-  /// - 키가 **없는** 기기(데모/미프로비저닝): 경고 로그와 함께 허용(fail-open).
+  /// - 키가 없는 기기(데모/미프로비저닝): 경고 로그와 함께 허용(fail-open).
   ///   데모 펌웨어가 인증을 구현하지 않은 현실을 반영한 정책이며, 프로덕션
   ///   전환 시 fail-closed로 바꿔야 한다(SECURITY.md 로드맵 참조).
   ///
-  /// 이전에는 이 게이트가 JSON 명령 경로에만 있어, 정작 물리 동작을 일으키는
-  /// raw 경로 전체가 인증을 우회했다 — 세션이 사실상 장식이었던 버그의 수정.
+  /// JSON 명령뿐 아니라 물리 동작을 일으키는 raw 경로도 반드시 이 게이트를 거친다.
   Future<bool> authorizePhysicalAction({
     required Future<String> Function(
       Map<String, dynamic> payload, {

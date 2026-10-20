@@ -6,10 +6,9 @@ import '../../widgets/top_app_bar.dart';
 
 /// QR 스캔 화면 — 현재 비활성화 상태.
 ///
-/// mobile_scanner 의존성이 제거되면서 스캔 기능이 빠졌는데, 이전 구현은
-/// 화면만 열리고 아무 음성 안내가 없어 전맹 사용자가 카메라를 조준하며
-/// 기다리는 dead-end였다. 재활성화 전까지는 상태를 정직하게 안내하고
-/// 대안 경로(블루투스 허브 / 기기 코드 입력)로 유도한다.
+/// mobile_scanner 의존성이 없어 스캔 기능이 빠져 있다. 화면만 열고 침묵하면
+/// 전맹 사용자가 카메라를 조준하며 기다리게 되므로, 재활성화 전까지는 상태를
+/// 그대로 안내하고 대안 경로(블루투스 허브 / 기기 코드 입력)로 유도한다.
 class QrScanScreen extends StatefulWidget {
   const QrScanScreen({super.key});
 

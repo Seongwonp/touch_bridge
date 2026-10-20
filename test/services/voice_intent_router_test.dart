@@ -2,10 +2,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:touch_bridge/services/voice_intent_router.dart';
 
-/// 음성 발화 하나가 어떤 흐름으로 가는지의 **순서 계약** 검증.
+/// 음성 발화 하나가 어떤 흐름으로 가는지의 순서 계약 검증.
 ///
-/// 이 판정은 원래 `VoiceListeningScreen._sendTextToGemini` 안의 중첩 if였고
-/// 커버리지가 0.2%였다. 순서가 틀려도 앱은 조용히 잘못 동작한다 — 예를 들어
+/// 순서가 틀려도 앱은 조용히 잘못 동작한다. 예를 들어
 /// 확인 질문 대기 중에 "멈춰"가 "아니오(취소)"로 먹히면, 사용자는 기기를
 /// 멈추려 했는데 질문만 취소되고 기기는 계속 돈다.
 void main() {
@@ -36,7 +35,7 @@ void main() {
 
     test('명령 확인 대기 중의 "멈춰"는 취소가 아니라 비상 정지다', () {
       // "멈춰"는 VoiceTextMatcher의 부정 응답 토큰이기도 하다. 순서가 뒤집히면
-      // 확인 질문만 취소되고 기기는 계속 돌아간다 — 안전 직결 회귀.
+      // 확인 질문만 취소되고 기기는 계속 돌아간다.
       final d = route('멈춰', hasPendingCommand: true);
       expect(d.kind, VoiceIntentKind.emergencyStop);
       expect(d.kind, isNot(VoiceIntentKind.pendingRejected));

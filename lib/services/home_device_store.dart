@@ -4,10 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// 홈 화면에 등록된 기기 목록(SharedPreferences `home_devices` 키)의 단일 접근 지점.
 ///
-/// 이전에는 home_screen/device_management_screen/device_connect_screen/
-/// photo_mapping_view_model/voice_listening_screen/active_device_service 6곳에서
-/// 각자 `prefs.getString('home_devices')` + `jsonDecode`를 반복하고 있었음 —
-/// 저장 형식을 바꾸려면 6곳을 동시에 고쳐야 하는 구조였음. 이 서비스로 단일화.
+/// 저장 형식을 바꿀 때 이 파일만 고치면 되도록, 다른 곳에서 `home_devices`를
+/// 직접 읽지 않는다.
 class HomeDeviceStore {
   HomeDeviceStore._();
 

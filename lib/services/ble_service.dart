@@ -34,9 +34,9 @@ class BleService {
 
   /// ESP32 notify 원문 스트림.
   ///
-  /// 기존 [_responseWaiter]는 레거시 명령의 "첫 응답 한 줄" 계약을 유지한다.
-  /// v2 모션 프로토콜은 한 명령에서 RECEIVED -> MOVING -> COMPLETED처럼 여러
-  /// 상태를 보내므로 이 broadcast 스트림에서 commandId가 같은 응답만 추적한다.
+  /// 레거시 명령은 [_responseWaiter]로 첫 응답 한 줄만 받는다.
+  /// v2 모션 프로토콜은 한 명령에 RECEIVED -> MOVING -> COMPLETED처럼 여러
+  /// 상태를 보내므로, 이 broadcast 스트림에서 commandId가 같은 응답만 추적한다.
   final _responseController = StreamController<String>.broadcast();
   Stream<String> get responseStream => _responseController.stream;
   final _stopRequests = StreamController<String>.broadcast(sync: true);
@@ -46,10 +46,10 @@ class BleService {
   /// 비상 정지·연결 끊김·명시적 해제 때마다 1 증가하는 안전 카운터.
   ///
   /// 긴 시퀀스(여러 버튼 누름, 여러 G-code 줄)를 보내는 쪽은 시작 시점의 값을
-  /// 기억해 두고 매 전송 전에 비교해야 한다. 값이 바뀌었으면 정지 이후에 준비된
-  /// 명령이므로 보내지 않는다. (v2 [sendProtocolPayload]는 내부에서 같은 검사를
-  /// 하고, 레거시 [sendRaw]도 큐 안에서 검사하지만, 데모 모드·테스트 오버라이드
-  /// 경로까지 일관되게 막으려면 호출부도 이 값을 봐야 한다.)
+  /// 기억해 두고 매 전송 전에 비교해야 한다. 값이 바뀌었으면 정지 이전에 준비된
+  /// 명령이므로 보내지 않는다. [sendProtocolPayload]와 [sendRaw]도 내부에서 같은
+  /// 검사를 하지만, 데모 모드·테스트 오버라이드 경로까지 막으려면 호출부도 이
+  /// 값을 확인해야 한다.
   int get motionEpoch => _motionEpoch;
 
   final _connectionStateController =
@@ -84,15 +84,14 @@ class BleService {
 
   // ── 명령 직렬화 + 응답 대기 ──────────────────────────────────────────────
   // 단일 GATT characteristic에 여러 경로(JSON ACK, raw, 상태 질의)가 동시에
-  // 쓰면 응답이 엉뚱한 호출로 배달되거나 유실된다(과거: 공유 _ackCompleter를
-  // 서로 덮어쓰는 경쟁). 모든 write와 응답 대기는 [_withCommandLock]으로
-  // 직렬화하고, 응답 waiter 등록은 반드시 write **전에** 한다.
+  // 쓰면 응답이 엉뚱한 호출로 배달되거나 유실된다. 모든 write와 응답 대기는
+  // [_withCommandLock]으로 직렬화하고, 응답 waiter는 반드시 write 전에 등록한다.
   Completer<String>? _responseWaiter;
   Future<void> _commandLockTail = Future<void>.value();
 
   /// 명령 큐 잠금: body들이 요청 순서대로 하나씩 실행된다.
-  /// 주의: body 안에서 다시 _withCommandLock을 잡는 재진입은 데드락이다 —
-  /// 인증 핸드셰이크(ensureAuthenticated)는 반드시 잠금 **밖**에서 수행할 것.
+  /// body 안에서 다시 _withCommandLock을 잡으면 데드락이므로,
+  /// 인증 핸드셰이크(ensureAuthenticated)는 반드시 잠금 밖에서 수행한다.
   Future<T> _withCommandLock<T>(Future<T> Function() body) {
     final previous = _commandLockTail;
     final release = Completer<void>();
@@ -287,11 +286,9 @@ class BleService {
       // 저장하지 않으면 연결을 바꿀 때마다 리스너가 누적되어 이전 기기의
       // disconnected 이벤트가 현재 연결을 잘못 초기화할 수 있다.
       //
-      // 가드는 "이 구독이 아직 활성 구독인가"로 판단한다. 이전 구현은
-      // `_connectedDevice?.remoteId != target.remoteId`로 가드했는데,
-      // _connectedDevice는 discoverServices까지 끝난 뒤에야 설정되므로
-      // 연결 직후 플랫폼이 밀어주는 connected 이벤트가 그 사이에 도착하면
-      // 드롭되어 UI가 "연결됨" 안내를 영영 못 받는 문제가 있었다.
+      // 가드는 기기 ID가 아니라 "이 구독이 아직 활성 구독인가"로 판단한다.
+      // _connectedDevice는 discoverServices가 끝난 뒤에야 설정되므로, ID로
+      // 비교하면 연결 직후 도착하는 connected 이벤트가 버려진다.
       _connectionSub?.cancel();
       late final StreamSubscription<BluetoothConnectionState> sub;
       sub = target.connectionState.listen((state) {
@@ -472,7 +469,7 @@ class BleService {
   Future<String> _sendAndWaitAck(
     Map<String, dynamic> payload, {
     Duration timeout = const Duration(seconds: 5),
-    bool waitAck = true, // ACK 대기 여부 추가
+    bool waitAck = true,
   }) async {
     if (_demoMode) {
       _addLog('DEMO ACK: ${payload['action']}');
@@ -570,7 +567,6 @@ class BleService {
 
     // 물리 동작 인증 게이트: 페어링 키가 프로비저닝된 기기는 유효한 HMAC
     // 세션 없이는 raw 명령(G-code/BTN_n/SET_GRID)을 보내지 않는다.
-    // (이전에는 JSON 명령만 인증을 거치고 이 경로가 전부 우회됐다.)
     final authorized = await _security.authorizePhysicalAction(
       sendAndWaitAck: _sendAndWaitAck,
     );
@@ -601,11 +597,10 @@ class BleService {
     });
   }
 
-  /// raw 명령을 보내고 **다음 notify 응답 한 줄**을 기다린다.
+  /// raw 명령을 보내고 다음 notify 응답 한 줄을 기다린다.
   ///
-  /// waiter를 write 전에 등록하고 전체를 명령 큐로 직렬화한다 — 이전의
-  /// "sendRaw 후 readResponse" 패턴은 write 직후 도착한 응답이 waiter가 없어
-  /// 버려지고 타임아웃으로 끝나는 경쟁이 있었다(sendGetStatus/SET_GRID 확인).
+  /// waiter를 write 전에 등록하고 전체를 명령 큐로 직렬화해, write 직후 도착한
+  /// 응답이 waiter 없이 버려지지 않게 한다.
   Future<String?> sendRawWithResponse(
     String command, {
     Duration timeout = const Duration(seconds: 2),
@@ -663,9 +658,6 @@ class BleService {
     final okReset = await sendRaw('G90');
     return okMode && okMove && okReset;
   }
-
-  // (제거됨) readResponse: "보낸 뒤 waiter 등록" 패턴은 응답 유실 경쟁이 있어
-  // sendRawWithResponse / sendSetGridWithResponse로 대체했다.
 
   Future<bool> sendPress({
     required int x,
@@ -742,8 +734,8 @@ class BleService {
   }
 
   Future<String?> sendGetStatus() async {
-    // 하드웨어 상태를 요청하는 텍스트 명령 '$$' 전송 — waiter 선등록 방식으로
-    // write 직후 도착한 응답이 유실되지 않는다.
+    // 하드웨어 상태를 요청하는 텍스트 명령 '$$'. waiter를 먼저 등록하므로
+    // write 직후 도착한 응답도 유실되지 않는다.
     return sendRawWithResponse('\$\$', timeout: const Duration(seconds: 2));
   }
 

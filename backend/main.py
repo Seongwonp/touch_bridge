@@ -14,7 +14,6 @@ from dotenv import load_dotenv
 import google.generativeai as genai
 from fastapi.middleware.cors import CORSMiddleware
 
-# 모듈화된 로직 임포트
 from prompts import MICROWAVE_SYSTEM_PROMPT
 from microwave_logic import infer_food_command, check_simple_rules
 from database import init_db, get_device_profile
@@ -22,7 +21,6 @@ from validation import sanitize_command_response, sanitize_vision_mapping_respon
 import ai_provider
 from school_gateway import SchoolGatewayConfig, SchoolGatewayError
 
-# .env 파일 로드
 load_dotenv()
 
 logger = logging.getLogger("touch_bridge.backend")
@@ -34,7 +32,7 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """서버 시작 시 DB 초기화 (deprecated on_event 대체)"""
+    """서버 시작 시 DB를 초기화한다."""
     await init_db()
     logger.info("Database initialized.")
     yield
@@ -139,8 +137,7 @@ else:
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 _MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 
-# 음성 명령 해석용: 전자레인지 시스템 프롬프트를 system_instruction으로.
-# (이전에는 get_interpret_prompt("")로 빈 '사용자 입력: ""' 꼬리까지 들어갔다.)
+# 음성 명령 해석용: 전자레인지 시스템 프롬프트를 system_instruction으로 넘긴다.
 ai_model = genai.GenerativeModel(
     model_name=_MODEL_NAME,
     system_instruction=MICROWAVE_SYSTEM_PROMPT,
@@ -207,7 +204,7 @@ async def fetch_profile(device_id: str):
 
 
 def _interpret_with_google_sync(text: str):
-    """Google Gemini 직접 호출로 텍스트를 앱 명령 JSON으로 변환 (기존 호환 경로)."""
+    """Google Gemini 직접 호출로 텍스트를 앱 명령 JSON으로 변환한다."""
     try:
         response = ai_model.generate_content(f"사용자 입력: \"{text}\"")
         if not response.text:
@@ -274,8 +271,8 @@ async def parse_command(req: CommandRequest):
     if not text:
         return {"action": "NONE", "commands": [], "target": None, "message": "명령이 비어 있습니다."}
 
-    # 어느 경로에서 나왔든 응답은 같은 스키마 검증을 통과한다. 이전에는 규칙·음식
-    # 추론 결과가 검증 없이 그대로 나가서 "300분 데워줘"가 61회 누름으로 통과했다.
+    # 어느 경로에서 나왔든 응답은 같은 스키마 검증을 거친다. 규칙·음식 추론
+    # 결과도 검증해야 "300분 데워줘" 같은 요청이 과도한 누름으로 이어지지 않는다.
     # 1. 간단 규칙
     rule_result = check_simple_rules(text)
     if rule_result:
@@ -334,9 +331,9 @@ row/col은 보조 분류값일 뿐이며 x/y를 대신할 수 없습니다.
 
 @app.post("/vision-mapping", dependencies=[Depends(require_api_key)])
 async def vision_mapping(image: UploadFile = File(...)):
-    # 주의: save_as_id 파라미터는 제거됨 — 무인증 프로필 덮어쓰기(임의 이미지로
-    # 기존 기기의 시작↔취소 배치를 바꿔치기)가 가능했던 물리 안전 결함.
-    # 프로필 저장이 필요해지면 별도의 인증된 관리자 경로로 추가할 것.
+    # 이 경로는 프로필을 저장하지 않는다. 무인증 저장을 허용하면 임의 이미지로
+    # 기존 기기의 시작↔취소 배치를 덮어쓸 수 있어 물리적으로 위험하다.
+    # 저장이 필요하면 별도의 인증된 관리자 경로로 추가한다.
     image_bytes = await image.read()
     if len(image_bytes) > _MAX_IMAGE_BYTES:
         raise HTTPException(status_code=413, detail="이미지가 너무 큽니다. 5MB 이하로 보내주세요.")
@@ -347,7 +344,7 @@ async def vision_mapping(image: UploadFile = File(...)):
         mime_type = "image/jpeg"
 
     # ── 학교 게이트웨이 경로 ─────────────────────────────────────────────
-    # ⚠ 게이트웨이의 사진 입력 지원은 실호출 검증 전까지 미검증이다.
+    # 게이트웨이의 사진 입력 지원은 아직 실호출로 검증되지 않았다.
     # 실패해도 Google로 우회하지 않고 오류로 보고한다.
     if AI_PROVIDER == ai_provider.PROVIDER_SCHOOL:
         try:
@@ -380,7 +377,7 @@ async def vision_mapping(image: UploadFile = File(...)):
             detail="AI 서비스 설정에 문제가 있습니다. 관리자에게 확인을 요청해 주세요.",
         )
 
-    # ── Google 직접 호출 경로 (기존 호환) ────────────────────────────────
+    # ── Google 직접 호출 경로 ────────────────────────────────
     prompt = _VISION_PROMPT
     try:
         response = await asyncio.wait_for(
@@ -427,6 +424,5 @@ async def process_voice(file: UploadFile = File(...)):
 
 if __name__ == "__main__":
     import uvicorn
-    # 포트는 문서 전반(README/.env_ex/REPRO_RUNBOOK)과 8000으로 통일 —
-    # 과거 8000/8001 혼재로 재현 실패 여지가 있었다.
+    # 포트는 문서(README/.env_ex/REPRO_RUNBOOK)와 같은 8000을 쓴다.
     uvicorn.run(app, host="0.0.0.0", port=8000)

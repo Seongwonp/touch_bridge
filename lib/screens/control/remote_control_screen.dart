@@ -92,7 +92,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen>
       FeedbackService.instance.vibrateSuccess();
 
       _actionResetTimer?.cancel();
-      // WCAG 2.2.1: 이중 탭 대기(armed)는 앱 전체 20초로 통일.
+      // WCAG 2.2.1: 이중 탭 대기(armed)는 앱 전체에서 20초다.
       _actionResetTimer = Timer(kDoubleTapArmTimeout, () {
         if (!mounted) return;
         setState(() {
@@ -205,7 +205,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen>
     // 되는 edge case가 생기면 카운트다운 화면이 즉시 완료로 보이므로 막는다.
     if (sequence.actualSeconds <= 0) {
       // 여기서 그냥 return하면 _isSending이 true로 남아 시작 버튼이 영구
-      // 무반응이 된다(과거 잠재 버그) — 반드시 해제하고 나간다.
+      // 무반응이 되므로 반드시 해제하고 나간다.
       setState(() => _isSending = false);
       _speak(
         '시간을 10초 이상 입력해 주세요.',
@@ -479,7 +479,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen>
                         ),
                       ),
                     ),
-                    SizedBox(height: 16 * rs), // 하단 여백 추가
+                    SizedBox(height: 16 * rs),
                   ],
                 ),
               ),

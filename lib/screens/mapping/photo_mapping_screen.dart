@@ -395,8 +395,8 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
 
     if (!message.startsWith('매핑 저장')) return;
 
-    // 저장만 하고 홈으로 돌아가는 대신, "사용자가 정말 혼자 쓸 수 있는지"
-    // 확인하는 인수 점검 화면을 거친다(Codex Part B 보호자→사용자 핸드오프 갭).
+    // 저장만 하고 홈으로 돌아가는 대신, 보호자가 설정한 기기를 사용자가 정말
+    // 혼자 쓸 수 있는지 확인하는 인수 점검 화면을 거친다.
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => GuardianHandoffScreen(

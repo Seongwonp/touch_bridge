@@ -33,7 +33,7 @@ class _EmergencyAccessScreenState extends State<EmergencyAccessScreen> {
   @override
   void dispose() {
     // TtsService는 앱 전역 싱글톤 큐라 여기서 stop()을 부르면 다음 화면이
-    // 막 넣은 안내까지 지워버린다(화면 전환 시 안내가 잘리는 문제).
+    // 막 넣은 안내까지 지워버린다.
     super.dispose();
   }
 
@@ -48,8 +48,7 @@ class _EmergencyAccessScreenState extends State<EmergencyAccessScreen> {
       interrupt: true,
     );
 
-    // 대상 결정 → 재연결 → STOP 전송 → ACK 해석은 EmergencyStopService가
-    // 단일하게 책임진다(과거 3개 화면 복제 로직 통합).
+    // 대상 결정 → 재연결 → STOP 전송 → ACK 해석은 EmergencyStopService가 담당한다.
     // 전송 성공만으로 "완료"라고 말하지 않는다 — outcome이 문구를 분기한다.
     final outcome = await EmergencyStopService.instance.stopActiveDevice();
     if (outcome.acknowledged) {

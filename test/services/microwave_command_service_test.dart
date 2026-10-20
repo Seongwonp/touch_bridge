@@ -77,7 +77,7 @@ void main() {
 
     test('1~4초 입력은 0초로 반올림되지 않고 10초로 올림 처리한다', () {
       // ((1~4)+5)~/10 == 0 이므로 반올림하면 0초가 돼 BT-05(시작)만 눌린다.
-      // 카운트다운 화면이 즉시 완료로 보이는 버그를 막기 위해 최소 10초로 올린다.
+      // 카운트다운 화면이 즉시 완료로 보이지 않도록 최소 10초로 올린다.
       for (final t in [1, 2, 3, 4]) {
         final r = MicrowaveCommandService.buildStartSequence(t);
         expect(

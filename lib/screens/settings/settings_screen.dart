@@ -59,14 +59,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void dispose() {
     // TtsService는 앱 전역 싱글톤 큐라 여기서 stop()을 부르면 다음 화면이
-    // 막 넣은 안내까지 지워버린다(화면 전환 시 안내가 잘리는 문제).
+    // 막 넣은 안내까지 지운다.
     super.dispose();
   }
 
-  /// 비상 연락처에 실제로 전화 앱을 연다.
+  /// 비상 연락처로 전화 앱을 연다.
   ///
-  /// 이전 구현은 TTS로 "연결합니다"라고 말만 하고 아무것도 하지 않는 가짜
-  /// 동작이었다 — 비상 상황에서 최악의 신뢰 붕괴 패턴이라 실구현으로 교체.
   /// tel: 스킴은 다이얼러를 번호가 입력된 상태로 열고, 실제 발신은 사용자가
   /// 통화 버튼으로 확정한다(오발신 방지 — 이중 확인 원칙과 일치).
   Future<void> _callEmergencyContact() async {

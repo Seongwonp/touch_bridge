@@ -83,7 +83,7 @@ class MicrowaveCommandService {
     };
   }
 
-  // 물리 좌표 전송을 위한 헬퍼 추가
+  // 버튼 ID → 물리 좌표
   static (double x, double y)? btnToPhysical(String btn) {
     return switch (btn) {
       'BT-01' => (2.0, 20.0),
@@ -100,11 +100,11 @@ class MicrowaveCommandService {
   }
 
   /// 부정·거절 표현이 있으면 앱 규칙은 실행 명령을 만들지 않고 백엔드(AI)로
-  /// 넘긴다 — "30초 시작하지마"를 30초 시작으로 실행하던 문제.
+  /// 넘긴다. "30초 시작하지마"가 30초 시작으로 실행되면 안 된다.
   ///
-  /// 공백을 지운 문자열에서 토큰 포함 여부를 보면 "30초 동안 해줘"의 "안해",
-  /// "국에 밥 말아 데워줘"의 "말아"가 오탐된다(재리뷰 P2). 그래서 원문 어절
-  /// 단위로 본다. 백엔드 `microwave_logic.has_negation`과 같은 규칙이다.
+  /// 공백을 지운 문자열에서 토큰을 찾으면 "30초 동안 해줘"의 "안해",
+  /// "국에 밥 말아 데워줘"의 "말아"가 오탐되므로 원문 어절 단위로 본다.
+  /// 백엔드 `microwave_logic.has_negation`과 같은 규칙이다.
   static final _negationSuffixRe = RegExp(
     r'(하지마|하지말|하지않|하지마세요|않을래|않을게|안할래|안할게|싫어|싫은데|말래|안돼|안되|않아|말고)(요|여|야)?$',
   );
@@ -138,8 +138,8 @@ class MicrowaveCommandService {
   }
 
   /// 'n번', 'n번 버튼', 'n번 눌러줘' — 문장 전체가 이 형태일 때만 즉시 누름.
-  /// 이전의 앵커 없는 firstMatch는 "3번째 만두 데워줘"도 3번 버튼 즉시 누름으로
-  /// 확정해 AI 통제층을 건너뛰었다.
+  /// 앵커 없이 매칭하면 "3번째 만두 데워줘"도 3번 버튼 누름으로 확정해
+  /// AI 해석을 건너뛰게 된다.
   static final _pressOnlyRe =
       RegExp(r'^(\d{1,2})번(버튼)?(을|를)?(눌러줘|눌러|눌러주세요|누르기)?$');
   static final _start30Re = RegExp(r'^(30초|삼십초)(으로|로)?시작(해|해줘|해주세요)?$');

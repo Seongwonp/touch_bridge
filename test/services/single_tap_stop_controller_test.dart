@@ -5,7 +5,7 @@ import 'package:touch_bridge/services/emergency_intent.dart';
 import 'package:touch_bridge/services/single_tap_stop_controller.dart';
 
 void main() {
-  group('SingleTapStopController (실행 중 단일 탭 정지 — 리뷰 #3)', () {
+  group('SingleTapStopController (실행 중 단일 탭 정지)', () {
     test('한 번 탭으로 확인 없이 정지 경로를 부르고 결과를 돌려준다', () async {
       var calls = 0;
       final c = SingleTapStopController(stop: () async {

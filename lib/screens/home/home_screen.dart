@@ -45,7 +45,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadDevices();
-    // 기기 목록 갱신 감지 리스너 등록
     ActiveDeviceService.instance.deviceListUpdateNotifier.addListener(
       _loadDevices,
     );
@@ -53,8 +52,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // 홈 안내는 최초 로드에만 발화한다.
   // 홈은 IndexedStack에 상주하므로, 기기 목록 갱신(deviceListUpdateNotifier)마다
-  // interrupt 안내를 하면 (a) 보호자가 기기 관리 화면에 있는데 백그라운드 홈이
-  // 현재 안내를 선점하고, (b) 첫 실행 온보딩 TTS를 지워버리는 레이스가 있었다.
+  // interrupt 안내를 하면 백그라운드 홈이 다른 화면(기기 관리 등)의 안내나
+  // 첫 실행 온보딩 TTS를 끊는다.
   bool _announcedOnce = false;
 
   Future<void> _loadDevices() async {
@@ -102,15 +101,15 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _quickVoiceTapTimer?.cancel();
-    // 롱프레스 도중 화면이 사라지면 5초 뒤 죽은 context로 다이얼로그를 띄우려던
-    // 누수(타이머 미취소) 방지.
+    // 롱프레스 도중 화면이 사라지면 5초 뒤 죽은 context로 다이얼로그를 띄우지
+    // 않도록 타이머를 취소한다.
     _deleteTimer?.cancel();
     _pageController.dispose();
     ActiveDeviceService.instance.deviceListUpdateNotifier.removeListener(
       _loadDevices,
     );
     // TtsService는 앱 전역 싱글톤 큐라 여기서 stop()을 부르면 다음 화면이
-    // 막 넣은 안내까지 지워버린다(화면 전환 시 안내가 잘리는 문제).
+    // 막 넣은 안내까지 지운다.
     super.dispose();
   }
 

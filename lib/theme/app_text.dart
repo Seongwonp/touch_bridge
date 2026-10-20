@@ -10,7 +10,7 @@ import 'app_colors.dart';
 class AppText {
 	AppText._();
 
-	// ✅ Display Styles (매우 큰 텍스트 — 제목/모달)
+	// Display Styles (매우 큰 텍스트 — 제목/모달)
 	/// 초대형 제목 (34pt) — 완료/오류 화면, 모달 타이틀
 	static const TextStyle displayLarge = TextStyle(
 		fontSize: 34,
@@ -38,7 +38,7 @@ class AppText {
 		letterSpacing: -0.4,
 	);
 
-	// ✅ Headline Styles (큰 텍스트 — 화면 제목)
+	// Headline Styles (큰 텍스트 — 화면 제목)
 	/// 대형 헤드라인 (32pt)
 	static const TextStyle headlineLarge = TextStyle(
 		fontSize: 32,
@@ -66,7 +66,7 @@ class AppText {
 		letterSpacing: -0.2,
 	);
 
-	// ✅ Title Styles (보조 제목)
+	// Title Styles (보조 제목)
 	/// 대형 타이틀 (22pt)
 	static const TextStyle titleLarge = TextStyle(
 		fontSize: 22,
@@ -94,7 +94,7 @@ class AppText {
 		letterSpacing: 0.1,
 	);
 
-	// ✅ Body Styles (본문 텍스트)
+	// Body Styles (본문 텍스트)
 	/// 대형 본문 (18pt)
 	static const TextStyle bodyLarge = TextStyle(
 		fontSize: 18,
@@ -122,7 +122,7 @@ class AppText {
 		letterSpacing: 0.2,
 	);
 
-	// ✅ Label Styles (라벨/버튼 텍스트)
+	// Label Styles (라벨/버튼 텍스트)
 	/// 대형 라벨 (18pt) — 버튼 텍스트
 	static const TextStyle labelLarge = TextStyle(
 		fontSize: 18,
@@ -150,7 +150,7 @@ class AppText {
 		letterSpacing: 1.2,
 	);
 
-	// ✅ Semantic Styles (상태별)
+	// Semantic Styles (상태별)
 	
 	/// 비활성 텍스트
 	static const TextStyle disabled = TextStyle(
@@ -192,7 +192,7 @@ class AppText {
 		height: 1.5,
 	);
 
-	// ✅ Flutter Material TextTheme (호환성)
+	// Flutter Material TextTheme (호환성)
 	static const TextTheme textTheme = TextTheme(
 		headlineLarge: headlineLarge,
 		headlineMedium: headlineMedium,
@@ -203,7 +203,7 @@ class AppText {
 		labelLarge: labelLarge,
 	);
 
-	// ✅ Utility: 상태별 텍스트 스타일 반환
+	// Utility: 상태별 텍스트 스타일 반환
 	static TextStyle getStyle({
 		required bool isDisabled,
 		required bool isSecondary,

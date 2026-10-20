@@ -119,7 +119,7 @@ void main() {
       expect(MicrowaveCommandService.hasNegation('못 하겠어'), isTrue);
       expect(MicrowaveCommandService.hasNegation('만두 말고 밥'), isTrue);
       expect(MicrowaveCommandService.hasNegation('누르지 말아'), isTrue);
-      // 문장부호·붙여쓰기 (재리뷰 P2 회귀)
+      // 문장부호·붙여쓰기
       expect(MicrowaveCommandService.hasNegation('30초 시작하지마.'), isTrue);
       expect(MicrowaveCommandService.hasNegation('만두말고 밥 데워줘'), isTrue);
       expect(mw('30초 시작하지마.'), isNull);

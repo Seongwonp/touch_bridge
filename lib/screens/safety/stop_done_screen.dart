@@ -12,9 +12,9 @@ import '../../services/tts_service.dart';
 import '../../theme/app_colors.dart';
 
 /// 비상 정지 완료 화면
-/// - 이중 탭 확인 패턴 구현
-/// - 단일 "홈으로 돌아가기" 버튼만 제공 (별도 하단 탭은 두지 않음 —
-///   이 화면에서 다른 탭으로 이동해도 실제로 화면이 바뀌지 않아 음성 안내와 동작이 불일치하는 문제가 있었음)
+/// - 이중 탭 확인 패턴
+/// - "홈으로 돌아가기" 버튼 하나만 둔다. 하단 탭을 두면 다른 탭으로 이동해도
+///   화면이 바뀌지 않아 음성 안내와 동작이 어긋난다.
 /// - 시각장애인 접근성 최우선
 class StopDoneScreen extends StatefulWidget {
   const StopDoneScreen({super.key, this.completed = false});
@@ -91,7 +91,7 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
   @override
   void dispose() {
     // TtsService는 앱 전역 싱글톤 큐라 여기서 stop()을 부르면 다음 화면(홈)이
-    // 막 넣은 안내까지 지워버린다(화면 전환 시 안내가 잘리는 문제).
+    // 막 넣은 안내까지 지워진다.
     super.dispose();
   }
 

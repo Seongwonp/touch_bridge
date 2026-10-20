@@ -97,7 +97,7 @@ class AiBackendService {
   }
 
   /// POST JSON 요청. 일시적 네트워크 예외(SocketException/ClientException)면
-  /// 250ms 후 1회 재시도한다. (이전에는 같은 요청 블록이 3중 복붙돼 있었다.)
+  /// 250ms 후 1회 재시도한다.
   Future<http.Response> _postJsonWithRetry(
     String path,
     Map<String, dynamic> body, {
@@ -204,8 +204,7 @@ class AiBackendService {
         deviceId,
       ],
     );
-    // 전역 http.get이 아니라 타임아웃/프록시 설정이 적용된 _client를 쓴다
-    // (이전에는 이 메서드만 무한정 대기가 가능했다).
+    // 전역 http.get이 아니라 타임아웃/프록시 설정이 적용된 _client를 쓴다.
     final res = await _client
         .get(uri, headers: _authHeaders)
         .timeout(const Duration(seconds: 15));

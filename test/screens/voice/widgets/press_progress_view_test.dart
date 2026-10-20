@@ -6,7 +6,7 @@ import 'package:touch_bridge/screens/voice/widgets/press_progress_view.dart';
 import 'package:touch_bridge/services/emergency_intent.dart';
 import 'package:touch_bridge/services/single_tap_stop_controller.dart';
 
-/// 실행 중 화면의 단일 탭 비상 정지 (리뷰 #3).
+/// 실행 중 화면의 단일 탭 비상 정지.
 ///
 /// 음성 화면 전체는 STT·TTS·저장소 싱글톤에 묶여 있어 여기서는 진행 뷰 위젯만
 /// 띄운다. 검증: 실행 중 버튼 노출, 한 번 탭으로 정지 경로 호출, 진행 중 중복 탭

@@ -84,8 +84,6 @@ class MappingExecutionService {
   /// [epoch]: 상위 시퀀스가 시작 시점에 잡은 실행 토큰([BleService.motionEpoch]).
   /// 넘기지 않으면 이 호출이 시작될 때 잡는다. 모든 대기(`await`) 뒤에 같은 토큰을
   /// 다시 비교해, 대기 중 들어온 비상 정지 이후로는 어떤 줄도 보내지 않는다.
-  /// (첫 구현은 하위 전송 함수가 토큰을 새로 잡아, 전송 전 대기 중의 정지가
-  /// 무시되는 빈틈이 있었다 — 2026-09-27 재리뷰 P1.)
   Future<MappingExecutionResult> pressButton({
     required String deviceId,
     required DeviceMappingProfile profile,
@@ -162,7 +160,7 @@ class MappingExecutionService {
 
     await Future<void>.delayed(afterGridDelay);
     if (BleService.instance.motionEpoch != token) {
-      // 전송 전 대기 중에 비상 정지가 들어왔다. 한 줄도 보내지 않는다.
+      // 전송 전 대기 중에 비상 정지가 들어왔으면 한 줄도 보내지 않는다.
       AppLogger.warn('mapping.press.cancelled_by_stop', {
         'device_id': deviceId,
         'button_id': buttonId,
@@ -217,12 +215,11 @@ class MappingExecutionService {
     }
 
     if (!send.ok) {
-      // Z 하강 라인(G1 Z<pressZ>)이 이미 전송된 뒤 실패했다면 누름 핀이
-      // 버튼을 누른 채 멈춰 있을 수 있다 — best-effort로 안전 높이 복구를
-      // 시도하고, 복구 실패 시에는 사용자에게 물리 상태 확인을 명시 안내한다.
-      // >=: 하강 라인 자체에서 실패한 경우도 포함한다. write 실패 후에도 실제
-      // 하드웨어에 전달됐을 가능성을 배제할 수 없고, 절대 좌표 복구(G0 Z안전높이)는
-      // 핀이 올라가 있는 상태에서는 무해한 no-op이므로 보수적으로 시도한다.
+      // Z 하강 라인(G1 Z<pressZ>) 이후에 실패하면 누름 핀이 버튼을 누른 채
+      // 멈춰 있을 수 있다. best-effort로 안전 높이 복구를 시도하고, 복구도
+      // 실패하면 사용자에게 물리 상태 확인을 안내한다.
+      // >=: 하강 라인 자체의 실패도 포함한다. write가 실패해도 하드웨어에 전달됐을
+      // 수 있고, 절대 좌표 복구(G0 Z안전높이)는 핀이 올라가 있으면 무해하다.
       final zDownIndex = gcode.indexWhere((line) => line.startsWith('G1 Z'));
       final zMayBeDown = zDownIndex >= 0 && send.failedIndex >= zDownIndex;
       var recovered = true;
@@ -244,7 +241,7 @@ class MappingExecutionService {
         });
       }
       if (stoppedDuringRecovery) {
-        // 복구 도중 정지: 남은 복구 줄을 보내지 않았다. 핀 상태는 미확인이다.
+        // 복구 도중 정지: 남은 복구 줄은 보내지 않는다. 핀 상태는 알 수 없다.
         return MappingExecutionResult(
           ok: false,
           message: '복구 중 비상 정지로 남은 복구 명령을 취소했습니다. '
@@ -346,8 +343,8 @@ class MappingExecutionService {
   }
 
   /// 저장 매핑이 없을 때 여러 버튼을 목데이터 좌표로 연달아 누른다.
-  /// 버튼 사이 대기 중의 비상 정지도 같은 실행 토큰으로 막는다 — 호출부가
-  /// [pressPhysical]을 직접 반복하면 대기 구간이 보호되지 않는다(재리뷰 P1).
+  /// 버튼 사이 대기 중의 비상 정지도 같은 실행 토큰으로 막는다. 호출부가
+  /// [pressPhysical]을 직접 반복하면 대기 구간이 보호되지 않는다.
   Future<MappingExecutionResult> pressPhysicalSequence(
     List<String> buttonIds, {
     Duration betweenPressDelay = const Duration(milliseconds: 800),
@@ -383,7 +380,6 @@ class MappingExecutionService {
   /// 저장된 매핑 프로필이 없을 때 쓰는 데모/목데이터 물리 좌표 기반 누름.
   /// [MicrowaveCommandService.btnToPhysical]에 정의된 검증된 좌표로 직접
   /// G-code를 조립해 전송한다. 저장 매핑이 있으면 [pressButton]을 쓴다.
-  /// (이전에는 이 로직이 voice_listening_screen.dart에 인라인으로 중복돼 있었다.)
   Future<MappingExecutionResult> pressPhysical(
     String buttonId, {
     int? epoch,
@@ -400,9 +396,9 @@ class MappingExecutionService {
     final targetX = phys.$1;
     final targetY = phys.$2;
 
-    // 각 전송 결과를 즉시 확인하고 실패 시 즉시 반환한다. Dart의 &=는 단락평가를
-    // 하지 않으므로 ok &= await ... 패턴은 첫 실패 후에도 이후 명령을 계속 전송한다.
-    // Z축이 내려간 채로 원점 복귀 명령이 전송되지 않으면 물리적으로 위험한 상태가 된다.
+    // 각 전송 결과를 바로 확인하고 실패하면 즉시 반환한다. Dart의 &=는 단락 평가를
+    // 하지 않아 ok &= await ... 로 쓰면 첫 실패 뒤에도 명령이 계속 나간다.
+    // Z축이 내려간 채 원점 복귀가 빠지면 물리적으로 위험하다.
     //
     // zDown: Z 하강 명령 전송 이후 ~ 상승 명령 성공 전까지 true. 이 구간에서
     // 실패하면 누름 핀이 버튼을 누른 채일 수 있으므로 best-effort 복구를 시도한다.
@@ -454,7 +450,7 @@ class MappingExecutionService {
           'recovered': recovered,
           'stopped': recovery.stopped,
         });
-        // 복구 도중 정지: 남은 복구 줄을 보내지 않았다.
+        // 복구 도중 정지: 남은 복구 줄은 보내지 않는다.
         if (recovery.stopped) return stoppedResult(detail: '복구 중 정지');
       }
       return MappingExecutionResult(

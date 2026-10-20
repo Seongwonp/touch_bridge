@@ -20,9 +20,9 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   /// 전역 비상 정지 버튼 노출 여부.
   ///
-  /// 기본 true — 어떤 화면에서든 두 번 탭이면 즉시 중단할 수 있어야 한다
-  /// (기존에는 비상 탭까지 다단계 이동이 필요했다). 비상 정지 자체를 다루는
-  /// 화면(비상 탭·카운트다운·완료 화면)만 중복을 피해 끈다.
+  /// 기본 true — 어떤 화면에서든 두 번 탭으로 즉시 중단할 수 있어야 한다.
+  /// 비상 정지 자체를 다루는 화면(비상 탭·카운트다운·완료 화면)만 중복을
+  /// 피해 끈다.
   final bool showEmergency;
 
   @override

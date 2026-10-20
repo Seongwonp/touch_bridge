@@ -8,8 +8,7 @@ void main() {
     // 계약: 억제는 호출부가 명시한 priority로만 판단한다.
     // - navigation/info → 스크린리더 활성 시 억제 (interrupt:true여도 동일)
     // - result/emergency → 절대 억제되지 않음
-    // 이 계약이 깨지면 TalkBack 사용자가 비상정지 결과·arm 안내를 듣지 못하는
-    // 회귀(2026-08 발견 버그)가 재발한다.
+    // 이 계약이 깨지면 TalkBack 사용자가 비상정지 결과·arm 안내를 듣지 못한다.
     final tts = TtsService();
 
     tearDown(() {

@@ -22,8 +22,8 @@ import '../../widgets/top_app_bar.dart';
 /// 2. 비상 정지 3초 홀드
 /// 3. 음성 명령 (로컬 규칙만으로 해석 — "30초 시작" 등)
 ///
-/// 시연 관점 보너스: 하드웨어가 없는 발표장에서도 앱의 UX를 그대로 보여주는
-/// 플랜 B가 된다 (DEMO_SCRIPT 실패 대응표 참조).
+/// 하드웨어가 없는 시연 환경에서는 앱 UX를 보여주는 대체 경로로도 쓴다
+/// (DEMO_SCRIPT 실패 대응표 참조).
 class PracticeScreen extends StatefulWidget {
   const PracticeScreen({super.key});
 

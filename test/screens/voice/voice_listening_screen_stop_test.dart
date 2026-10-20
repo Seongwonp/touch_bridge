@@ -13,7 +13,7 @@ import 'package:touch_bridge/services/run_status_service.dart';
 import 'package:touch_bridge/services/speech_session_service.dart';
 import 'package:touch_bridge/services/tts_service.dart';
 
-/// 음성 화면에 단일 탭 정지 위젯을 **연결한 상태**의 검증 (리뷰 #3).
+/// 음성 화면에 단일 탭 정지 위젯을 연결한 상태의 검증.
 ///
 /// 위젯 단독 테스트(press_progress_view_test)와 달리, 여기서는 실제 화면이
 /// 명령을 받아 실행 화면으로 들어간 뒤 버튼 한 번으로 우선 정지 경로
@@ -264,9 +264,9 @@ void main() {
   }
 
   testWidgets('정지 버튼이 뜬 뒤 전송 시작 전(연결 중)에 정지하면 버튼을 하나도 누르지 않는다', (tester) async {
-    // 회귀: 정지가 epoch를 올려도, 아직 시작 전인 시퀀스가 올라간 값을 새 기준으로
-    // 잡아 전부 눌렀다. "기기를 멈췄습니다. 안전합니다." 안내 뒤 G-code 20줄
-    // (Z 하강 포함)이 나가고 조리 타이머 화면까지 진입했다.
+    // 아직 시작 전인 시퀀스가 정지로 올라간 epoch를 새 기준으로 잡으면 안 된다.
+    // 그러면 "기기를 멈췄습니다. 안전합니다." 안내 뒤에도 G-code(Z 하강 포함)가
+    // 나가고 조리 타이머 화면까지 진입한다.
     slowFirstConnect();
     stubStopAck('STOPPED');
     final state = await pumpScreen(tester);
@@ -307,8 +307,8 @@ void main() {
   });
 
   testWidgets('정지하지 않았는데 실행 중 연결이 끊기면 침묵하지 않고 끝까지 전달하지 못했다고 알린다', (tester) async {
-    // epoch는 BLE 링크 끊김에도 바뀐다. 이전에는 이것을 비상 정지로 오인해
-    // "정지 경로가 안내한다"고 보고 아무 말 없이 실행 화면만 닫았다.
+    // epoch는 BLE 링크 끊김에도 바뀐다. 이를 비상 정지로 오인하면 정지 경로가
+    // 안내한다고 보고 아무 말 없이 실행 화면만 닫게 된다.
     final state = await pumpScreen(tester);
     await startExecution(tester, state);
     await tester.pump(const Duration(milliseconds: 300));

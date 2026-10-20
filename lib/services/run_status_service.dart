@@ -2,9 +2,8 @@ import 'package:flutter/foundation.dart';
 
 /// 현재 작동 중인 기기의 카운트다운 상태를 앱 어디서든 조회할 수 있는 단일 저장소.
 ///
-/// 남은 시간은 원래 EmergencyStopScreen의 로컬 상태여서, 다른 화면(음성 명령 등)
-/// 에서 "얼마나 남았어?"에 답할 방법이 없었다. 카운트다운 화면이 이 서비스에
-/// 상태를 보고하고, [StatusIntent]가 여기서 읽어 답한다.
+/// 카운트다운 화면이 이 서비스에 상태를 보고하고, 다른 화면(음성 명령 등)에서는
+/// [StatusIntent]가 여기서 읽어 "얼마나 남았어?"에 답한다.
 class RunStatusService {
   RunStatusService._();
   static final RunStatusService instance = RunStatusService._();

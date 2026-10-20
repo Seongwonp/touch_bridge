@@ -20,9 +20,8 @@ class _Utterance {
 
 /// 앱 전체 단일 TTS 중재자(Speech Arbiter).
 ///
-/// 이전 구현은 "이미 말하는 중"이면 안내를 드롭하거나 interrupt로 잘라 겹침·끊김·
-/// 유실이 발생했다. 이제 **직렬 큐**로 순서대로 재생하고, 높은 우선순위(interrupt/
-/// emergency)만 현재 발화를 선점한다.
+/// 발화를 직렬 큐로 순서대로 재생하고, 높은 우선순위(interrupt/emergency)만
+/// 현재 발화를 선점한다.
 class TtsService {
   factory TtsService() => _instance;
   TtsService._internal() {
@@ -125,10 +124,9 @@ class TtsService {
 
   /// 테스트 전용: 발화 로그·대기 큐와 중복 억제 상태를 초기화한다.
   ///
-  /// [TtsService]는 싱글톤이라 상태가 테스트 사이에 남는다. 특히 "동일 멘트
-  /// 8초 반복 억제"는 실제 벽시계(DateTime.now())를 쓰므로, 같은 문구를
-  /// 검증하는 테스트 두 개가 8초 안에 연달아 돌면 두 번째 발화가 조용히
-  /// DROPPED 되어 테스트가 원인 불명으로 실패한다. setUp에서 호출할 것.
+  /// [TtsService]는 싱글톤이라 상태가 테스트 사이에 남는다. 동일 멘트 8초 반복
+  /// 억제는 실제 시각(DateTime.now())을 쓰므로, 같은 문구를 검증하는 테스트가
+  /// 연달아 돌면 두 번째 발화가 DROPPED 된다. setUp에서 호출할 것.
   @visibleForTesting
   void resetForTest() {
     _speakLog.clear();
@@ -147,10 +145,9 @@ class TtsService {
         .toList();
   }
 
-  /// 발화 요청. 기존 호출부 호환을 위해 [force]/[interrupt]/[source]를 유지하고,
-  /// [priority]를 추가했다. interrupt=true는 큐에서 최소 result 우선순위(선점)로
-  /// 처리되지만, **스크린리더 억제 판단에는 반영되지 않는다** — 스크린리더
-  /// 활성 시에도 들려야 하는 발화는 priority를 result/emergency로 명시할 것.
+  /// 발화 요청. interrupt=true는 큐에서 최소 result 우선순위(선점)로 처리되지만
+  /// 스크린리더 억제 판단에는 반영되지 않는다. 스크린리더 활성 시에도 들려야 하는
+  /// 발화는 priority를 result/emergency로 명시할 것.
   Future<void> speak(
     String text, {
     bool force = false,
@@ -167,17 +164,13 @@ class TtsService {
       if (message.isEmpty) return;
 
       // ── 스크린리더 억제 계약 ──────────────────────────────────────────
-      // 억제 여부는 호출부가 명시한 [priority]로만 판단한다. interrupt는
-      // "선점 재생" 플래그일 뿐이며 억제 여부와 무관하다(아래에서 큐 순서를
-      // 위해 result로 승격되지만, 그 승격은 억제 판단에 반영되지 않는다).
+      // 억제 여부는 호출부가 명시한 [priority]로만 판단한다. interrupt는 선점
+      // 재생 플래그일 뿐이다(큐 순서를 위해 result로 승격되지만 억제와는 무관).
       //
-      // - navigation/info: 화면 진입 안내 등. 스크린리더가 포커스/liveRegion
-      //   으로 대신 읽으므로 앱 TTS를 억제해 이중 낭독을 막는다.
-      // - result/emergency: 명령 결과·실패·비상 안내. 스크린리더가 자동으로
-      //   읽어주지 않으므로 절대 억제하지 않는다.
+      // - navigation/info: 스크린리더가 포커스/liveRegion으로 대신 읽으므로 앱
+      //   TTS를 억제해 이중 낭독을 막는다.
+      // - result/emergency: 스크린리더가 자동으로 읽지 않으므로 절대 억제하지 않는다.
       //
-      // 따라서 "스크린리더에서도 반드시 들려야 하는" 발화는 호출부에서
-      // priority: TtsPriority.result (또는 emergency)를 **명시**해야 한다.
       // interrupt: true만으로는 스크린리더 활성 시 무음이 된다.
       if (_screenReaderActive && priority.index < TtsPriority.result.index) {
         _addLog('(SUPPRESSED: 스크린리더 활성 - ${priority.name})', source);
@@ -259,9 +252,8 @@ class TtsService {
           continue;
         }
         _speakCompleter = Completer<void>();
-        // fire-and-forget이므로 실패가 unhandled Future error로 새지 않게
-        // catchError로 반드시 받아준다(테스트/일부 플랫폼에서 TTS 플랫폼
-        // 채널이 없을 때 특히 중요 — 그 경우도 큐가 멈추지 않고 넘어가야 한다).
+        // fire-and-forget이라 실패가 unhandled Future error로 새지 않게
+        // catchError로 받는다. TTS 플랫폼 채널이 없을 때도 큐는 멈추지 않는다.
         unawaited(
           _tts.speak(u.text).catchError((_) {
             _completeCurrent();
@@ -287,10 +279,9 @@ class TtsService {
 
   /// 대기열이 비고 현재 발화가 끝날 때까지 기다린다(최대 [timeout]).
   ///
-  /// 용도: 확인 질문("맞으면 예라고 말씀해 주세요")을 말한 **뒤에** 마이크를
-  /// 다시 열어야 TTS 소리가 STT에 섞여 들어가거나, 사용자가 질문을 듣는 중에
-  /// 침묵 타이머가 돌기 시작하는 문제를 막을 수 있다.
-  /// speak()는 재생 완료를 기다리지 않으므로 호출부가 이 메서드로 타이밍을 잡는다.
+  /// 확인 질문을 말한 뒤에 마이크를 다시 열어야 TTS 소리가 STT에 섞이거나,
+  /// 질문을 듣는 중에 침묵 타이머가 도는 것을 막을 수 있다. speak()는 재생
+  /// 완료를 기다리지 않으므로 호출부가 이 메서드로 타이밍을 잡는다.
   Future<void> waitUntilIdle({
     Duration timeout = const Duration(seconds: 10),
   }) async {

@@ -4,9 +4,8 @@ import 'package:touch_bridge/services/accessibility_settings.dart';
 
 void main() {
   test('이중 탭 대기 시간은 WCAG 2.2.1 합의값 20초다 (드리프트 방지)', () {
-    // 과거 화면마다 리터럴(4초/15초/20초)이 흩어져 "20초 통일" 대외 주장이
-    // 코드로 반증 가능한 상태였다. 모든 arm 타이머는 이 상수를 쓰고,
-    // 값 변경은 문서(README/CLAUDE.md) 갱신과 함께 의도적으로만 한다.
+    // 모든 arm 타이머는 이 상수를 쓴다. 화면마다 리터럴을 두지 않고,
+    // 값 변경은 문서(README 등) 갱신과 함께 의도적으로만 한다.
     expect(kDoubleTapArmTimeout, const Duration(seconds: 20));
   });
 

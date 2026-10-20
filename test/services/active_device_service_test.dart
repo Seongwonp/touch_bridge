@@ -13,8 +13,8 @@ void main() {
   });
 
   group('setActiveDevice BLE 연결 결과 전파', () {
-    // 과거 버그: ensureConnected의 실패 bool을 버려서, 기기 선택은 성공처럼
-    // 보이는데 실제 연결은 안 된 상태가 첫 명령 실패로만 드러났다.
+    // ensureConnected의 실패를 버리면 기기 선택은 성공처럼 보이는데 실제 연결은
+    // 안 된 상태가 첫 명령 실패로만 드러난다.
     test('BLE 연결 실패 시 false를 반환하되 선택 자체는 저장한다', () async {
       BleService.instance.setTestOverrides(connect: (_) async => false);
 

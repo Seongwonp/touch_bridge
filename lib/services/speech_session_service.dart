@@ -15,16 +15,15 @@ class SpeechClient {
 
 /// 앱 전체 단일 STT 세션 관리자.
 ///
-/// 배경: `speech_to_text`의 [SpeechToText]는 패키지 차원의 싱글톤이라
-/// `initialize()`의 onStatus/onError 콜백은 **최초 1회만** 등록된다.
-/// 이전에는 VoiceListeningScreen과 EmergencyStopScreen이 각자 초기화해서
-/// (a) 나중에 초기화한 화면의 콜백이 등록되지 않아 비상 화면의 "멈춰" 재청취
-/// 루프가 조용히 죽거나, (b) 스택 아래 깔린 화면의 onStatus가 위 화면의 listen
-/// 세션 이벤트를 받아 상태가 오염될 수 있었다.
+/// `speech_to_text`의 [SpeechToText]는 패키지 차원의 싱글톤이라
+/// `initialize()`의 onStatus/onError 콜백이 최초 1회만 등록된다. 화면마다 따로
+/// 초기화하면 나중 화면의 콜백이 등록되지 않거나(비상 화면의 "멈춰" 재청취
+/// 루프가 조용히 죽는다), 스택 아래 화면이 위 화면의 listen 이벤트를 받아
+/// 상태가 오염된다.
 ///
-/// 이 서비스는 초기화를 한 번만 수행하고, 이벤트를 **가장 나중에 attach한
-/// 화면(스택 최상단)** 에만 전달한다. 화면이 dispose에서 detach하면 이전
-/// 화면이 다시 이벤트를 받는다 — push/pop 내비게이션과 자연스럽게 맞는 구조.
+/// 이 서비스는 초기화를 한 번만 하고, 이벤트를 가장 나중에 attach한 화면
+/// (스택 최상단)에만 전달한다. 화면이 dispose에서 detach하면 이전 화면이 다시
+/// 이벤트를 받으므로 push/pop 내비게이션과 맞는다.
 class SpeechSessionService {
   SpeechSessionService._();
   static final SpeechSessionService instance = SpeechSessionService._();
@@ -45,7 +44,7 @@ class SpeechSessionService {
     if (_initAttempted) return _available;
     _initAttempted = true;
 
-    // macOS 26 beta TCC 버그 가드 (기존 화면별 가드를 이곳으로 일원화).
+    // macOS 26 beta TCC 버그 가드.
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) {
       _available = false;
       return false;
@@ -74,13 +73,11 @@ class SpeechSessionService {
   }
 
   /// 안드로이드 음성 엔진의 기본 엔드포인팅은 말이 시작되기 전 약 3초만
-  /// 기다렸다가 세션을 스스로 닫는다. 앱의 침묵 타이머(설정값, 기본 8초)가
-  /// 돌기도 전에 엔진이 먼저 포기해 "음성 인식 실패"로 끝나던 원인이다.
-  /// 게다가 "녹음을 시작합니다" 안내가 듣기 시작한 뒤에 나가므로, 안내가
-  /// 끝나고 사용자에게 남는 여유는 2초가 채 안 됐다.
+  /// 기다렸다가 세션을 닫아, 앱의 침묵 타이머(설정값, 기본 8초)보다 먼저 끝난다.
+  /// "녹음을 시작합니다" 안내도 듣기 시작한 뒤에 나가므로 실제 여유는 더 짧다.
   ///
-  /// pauseFor를 설정값보다 2초 길게 잡아, 안내 문구와 화면을 함께 갱신하는
-  /// 앱 쪽 침묵 타이머가 먼저 동작하고 엔진은 백스톱 역할만 하도록 한다.
+  /// pauseFor를 설정값보다 2초 길게 잡아, 앱 쪽 침묵 타이머가 먼저 동작하고
+  /// 엔진은 백스톱 역할만 하게 한다.
   static Duration get _defaultPauseFor => Duration(
     seconds: AccessibilitySettings.instance.sttSilenceTimeoutSeconds + 2,
   );

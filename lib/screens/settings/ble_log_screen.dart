@@ -53,8 +53,8 @@ class _BleLogScreenState extends State<BleLogScreen> {
   @override
   void initState() {
     super.initState();
-    // 구독을 저장했다가 dispose에서 취소한다 — 화면을 여닫을 때마다 리스너가
-    // 누적되던 누수(과거 결함) 방지.
+    // 구독을 저장했다가 dispose에서 취소한다. 그러지 않으면 화면을 여닫을
+    // 때마다 리스너가 누적된다.
     _logSub = BleService.instance.logStream.listen((log) {
       if (mounted) {
         setState(() => _logs.add(log));

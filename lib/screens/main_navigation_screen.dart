@@ -181,9 +181,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       AccessibilitySettings.instance.guardianModeEnabled,
     );
     if (_currentIndex == index) {
-      // 다른 탭이 armed 상태로 남아 있으면 여기서 해제한다. 그렇지 않으면
-      // "현재 탭 → 다른 탭"으로 되돌아왔을 때 armed가 유지되어, 그 다른 탭을
-      // 한 번만 눌러도 확인 없이 바로 이동해버리는 문제가 있었다.
+      // 다른 탭이 armed 상태로 남아 있으면 여기서 해제한다. 그러지 않으면
+      // 그 탭으로 되돌아왔을 때 armed가 유지돼, 한 번만 눌러도 확인 없이 이동한다.
       if (_armedNavIndex != null) {
         _navResetTimer?.cancel();
         setState(() => _armedNavIndex = null);
@@ -349,7 +348,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     _navResetTimer?.cancel();
     // TtsService는 앱 전역 싱글톤 큐다. 여기서 stop()을 부르면 이 화면이
     // dispose되는 순간(보통 다음 화면 initState 직후) 다음 화면이 막 넣은
-    // 안내까지 통째로 지워버려 안내가 잘리는 문제가 있었다.
+    // 안내까지 지워진다.
     super.dispose();
   }
 

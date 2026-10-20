@@ -89,8 +89,8 @@ class InterpretWithSchoolTest(unittest.TestCase):
         self.assertEqual(result["commands"], [])
 
     def test_school_modules_never_import_google_sdk(self):
-        # 구조적 보장: 학교 경로 모듈은 google SDK를 import하지 않는다 —
-        # "실패 시 Google로 조용히 우회"가 코드상 불가능함을 회귀로 고정.
+        # 학교 경로 모듈은 google SDK를 import하지 않으므로, 실패 시 Google로
+        # 조용히 우회하는 경로가 구조적으로 존재하지 않는다.
         import ast
         import inspect
 
@@ -127,7 +127,7 @@ class VisionWithSchoolTest(unittest.TestCase):
             VALID_CFG, prompt="p", image_bytes=b"img", mime_type="image/jpeg"
         )
 
-        # 저신뢰 버튼은 sanitizer가 걸러야 한다 (기존 계약 유지).
+        # 저신뢰 버튼은 sanitizer가 걸러야 한다.
         self.assertEqual([b["button_id"] for b in result["buttons"]], ["BT-05"])
         self.assertEqual(result["grid"], {"rows": 3, "cols": 3})
 
@@ -158,8 +158,8 @@ class VisionWithSchoolTest(unittest.TestCase):
 
 class RuleFirstRegressionTest(unittest.TestCase):
     def test_simple_rule_handles_canonical_phrase_without_ai(self):
-        # "30초 시작"류는 규칙에서 끝난다 — main.py의 처리 순서
-        # (규칙 → 음식 추론 → AI)에서 AI까지 내려가지 않음을 뒷받침하는 회귀.
+        # "30초 시작"류는 규칙 단계에서 끝나므로, main.py의 처리 순서
+        # (규칙 → 음식 추론 → AI)에서 AI까지 내려가지 않는다.
         result = check_simple_rules("30초 시작")
         self.assertIsNotNone(result)
         self.assertEqual(result["action"], "MICROWAVE_CONTROL")

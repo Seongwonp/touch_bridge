@@ -17,7 +17,7 @@ class WashingMachineCommandService {
   };
 
   /// 단순 규칙으로 즉시 처리 가능한 세탁기 명령을 파싱한다.
-  /// Gemini 호출 없이 자주 쓰는 패턴을 빠르게 처리.
+  /// AI 백엔드를 거치지 않고 자주 쓰는 패턴을 바로 처리한다.
   static Map<String, dynamic>? checkSimpleRules(String text) {
     final t = text.replaceAll(' ', '');
 

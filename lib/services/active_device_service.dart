@@ -8,7 +8,7 @@ class ActiveDeviceService {
   ActiveDeviceService._();
   static final ActiveDeviceService instance = ActiveDeviceService._();
 
-  // 기기 목록 변경 알림을 위한 노티파이어 추가
+  // 기기 목록이 바뀌면 알린다.
   final ValueNotifier<int> deviceListUpdateNotifier = ValueNotifier<int>(0);
 
   void notifyDeviceListChanged() {
@@ -38,9 +38,8 @@ class ActiveDeviceService {
   /// 활성 기기를 설정하고 BLE 연결까지 시도한다.
   ///
   /// 반환값: BLE 연결 결과. bleId가 없으면(연결할 게 없으면) true.
-  /// 이전 구현은 `ensureConnected`의 실패를 버려서, 기기 선택은 성공한 것처럼
-  /// 보이는데 실제 연결은 안 된 상태가 첫 명령 실패로만 드러났다 — 호출부가
-  /// 이 값으로 조기 안내 여부를 결정할 수 있게 한다(선택 자체는 실패해도 저장됨).
+  /// 연결에 실패해도 선택 자체는 저장된다. 호출부는 이 값을 보고 첫 명령을
+  /// 보내기 전에 연결 실패를 미리 안내할 수 있다.
   Future<bool> setActiveDevice({
     required String deviceId,
     String? deviceName,

@@ -221,8 +221,8 @@ void main() {
 
   group('MappingExecutionResult.phase (신뢰 단계 매핑)', () {
     // 이 서비스는 BLE write 성공만 확인할 뿐 GRBL 확인 채널이 없다.
-    // 따라서 ok=true는 절대 confirmed가 아니라 sent여야 한다 — 이게 깨지면
-    // "전송 성공"을 "기기 확인 완료"로 오안내하는 회귀가 재발한다.
+    // 따라서 ok=true는 confirmed가 아니라 sent여야 한다. 그렇지 않으면
+    // "전송 성공"을 "기기 확인 완료"로 안내하게 된다.
     test('전송 성공(dry-run 아님)은 confirmed가 아니라 sent다', () {
       const result = MappingExecutionResult(ok: true, message: 'ok');
       expect(result.phase, CommandPhase.sent);
@@ -270,8 +270,8 @@ void main() {
     tearDown(() => BleService.instance.setSendRawOverride(null));
 
     test('첫 번째 sendRaw 실패 시 이후 명령을 전송하지 않는다', () async {
-      // &= 패턴은 Dart에서 단락평가를 하지 않아, 첫 실패 후에도 Z 하강/유지/
-      // 상승/원점 복귀 명령이 전송되는 위험한 중간 상태를 만들 수 있었다.
+      // &=는 단락평가를 하지 않아, 첫 실패 후에도 Z 하강/유지/상승/원점 복귀
+      // 명령이 전송되는 위험한 중간 상태를 만든다. 실패 즉시 멈춰야 한다.
       var callCount = 0;
       BleService.instance.setSendRawOverride((cmd) async {
         callCount++;
@@ -654,7 +654,7 @@ void main() {
     });
 
     test('pressPhysicalSequence: 버튼 사이 대기 중 정지가 오면 다음 버튼을 시작하지 않는다', () async {
-      // pressPhysical 내부의 마지막 대기(800ms)가 끝나 정상 반환한 **뒤**,
+      // pressPhysical 내부의 마지막 대기(800ms)가 끝나 정상 반환한 뒤,
       // 외부 루프의 버튼 사이 대기(여기서는 1500ms) 중에 정지를 넣는다.
       // 내부 함수의 검사가 아니라 외부 루프의 검사를 검증하는 것이 목적이다.
       final sent = <String>[];

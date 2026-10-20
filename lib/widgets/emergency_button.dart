@@ -24,7 +24,6 @@ class EmergencyButton extends StatefulWidget {
 class _EmergencyButtonState extends State<EmergencyButton> {
   // 비상 버튼은 사용자 속도/음량 설정, 스크린리더 억제 정책, 안내 큐를
   // 공유해야 하므로 별도 FlutterTts가 아니라 공용 TtsService를 사용한다.
-  // (이전에는 자체 FlutterTts 인스턴스를 써서 중재자를 우회했다.)
   final TtsService _tts = TtsService();
   Timer? _confirmResetTimer;
   bool _armed = false;

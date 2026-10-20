@@ -266,8 +266,7 @@ void main() {
     });
 
     test('전부 깨진 응답이면 기존 수동 포인트를 보존한다', () async {
-      // 과거 버그: 파싱 전에 _points.clear()를 해서, AI 응답이 깨지면
-      // 보호자가 찍어둔 수동 포인트까지 사라졌다.
+      // AI 응답이 깨졌을 때 보호자가 찍어둔 수동 포인트까지 지워지면 안 된다.
       final vm = newViewModel();
       await calibrate(vm);
       vm.addPoint(const Offset(0.3, 0.3)); // 수동 포인트 1개

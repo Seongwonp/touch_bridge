@@ -52,17 +52,15 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
   @override
   void dispose() {
     // TtsService는 앱 전역 싱글톤 큐라 여기서 stop()을 부르면 다음 화면이
-    // 막 넣은 안내까지 지워버린다(화면 전환 시 안내가 잘리는 문제).
+    // 막 넣은 안내까지 지워버린다.
     super.dispose();
   }
 
   /// 매핑용 이미지 선택.
   ///
-  /// 반환 계약: **null = 사용자가 취소** (시트 dismiss 또는 피커 취소) —
-  /// 호출부는 매핑 화면으로 진입하면 안 된다. 샘플 이미지 선택은
+  /// 반환 계약: null = 사용자가 취소(시트 dismiss 또는 피커 취소). 이때 호출부는
+  /// 매핑 화면으로 진입하면 안 된다. 샘플 이미지 선택은
   /// `(path: null, useSample: true)`로 구분한다.
-  /// (이전에는 취소와 샘플이 모두 null이라, 취소했는데도 샘플 이미지로
-  /// 매핑 화면에 진입하는 버그가 있었다.)
   Future<({String? path, bool useSample})?> _chooseImageForMapping(
     BuildContext context,
   ) async {
@@ -113,9 +111,9 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
     }
 
     try {
-      // [CRITICAL] iOS 리소스 격리: 모든 고부하 작업 중지
+      // iOS 리소스 격리: 피커를 열기 전에 고부하 작업을 멈춘다.
       await _tts.stop();
-      // 블루투스 스캔 중이면 중지 (필요 시)
+      // TODO: 블루투스 스캔 중이면 중지.
 
       // iOS XPC 세션 안정화를 위해 충분한 대기
       await Future.delayed(const Duration(milliseconds: 1500));
@@ -227,7 +225,7 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
               if (result == null) return; // 취소 — 매핑 화면으로 넘어가지 않는다
               if (!context.mounted) return;
 
-              // [CRITICAL] 피커 종료 후 OS 리소스 안정화를 위해 추가 대기
+              // 피커 종료 후 OS 리소스 안정화를 위해 잠시 대기한다.
               await Future.delayed(const Duration(milliseconds: 500));
 
               if (!context.mounted) return;

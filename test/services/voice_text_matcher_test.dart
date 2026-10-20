@@ -17,8 +17,8 @@ void main() {
     });
 
     test('과거 contains 오탐 사례를 긍정으로 판별하지 않는다', () {
-      // "그런데 말이야"의 '네', "반응이 없어"의 '응' 같은 부분 문자열 오탐 —
-      // 확인 질문에 대한 오탐은 곧 물리 버튼 누름이었다.
+      // "그런데 말이야"의 '네', "반응이 없어"의 '응' 같은 부분 문자열 오탐.
+      // 확인 질문에 대한 오탐은 곧 물리 버튼 누름이다.
       expect(VoiceTextMatcher.isAffirmative('그런데 말이야'), isFalse);
       expect(VoiceTextMatcher.isAffirmative('반응이 없어'), isFalse);
       expect(VoiceTextMatcher.isAffirmative('좋아하는 노래 틀어줘'), isFalse);
