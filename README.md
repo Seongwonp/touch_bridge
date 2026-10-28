@@ -4,6 +4,8 @@
 
 > 2026 한이음 드림업 공모전 — 3팀 멜론머스크 (박성원 · 서예솔)  
 
+> **프로젝트 최종 보고서·동영상 제출 완료 (2026-10-28)** · ACK 2026 발표 예정: 11월 6일 · 제24회 프로젝트 발표회: 11월 18일
+
 ---
 
 ## 왜 이 문제인가
@@ -33,6 +35,13 @@ Touch Bridge는 **교체가 아닌 부착**으로 기존 가전을 그대로 접
 전자레인지·세탁기·키오스크 등 터치패널 기반 가전이 시각장애인에게 접근하기 어렵다는 문제를 해결합니다.  
 가전 터치패드 위에 부착하는 **IoT 하드웨어 장치**가 스마트폰 앱·음성 명령을 받아 **물리적으로 버튼을 대신 눌러주는** 시스템입니다.
 
+## 제출 및 발표 현황
+
+- 한이음 최종보고서와 동영상 제출을 완료했습니다 (2026-10-28).
+- 논문 「시각장애인용 가전 입력 대행 시스템의 안내–동작 불일치 완화를 위한 소프트웨어 안전 계약」은 ACK 2026 게재가 확정됐으며, 11월 6일 발표 예정입니다.
+- 제24회 프로젝트 발표회는 11월 18일 예정입니다.
+- 자동화 검증과 펌웨어 소스 준비 상태는 실기기에서의 모터 정지·ACK 검증과 구분합니다.
+
 ---
 
 ## 논문
@@ -48,12 +57,12 @@ Touch Bridge는 **교체가 아닌 부착**으로 기존 가전을 그대로 접
   <tr>
     <td align="center" width="25%"><img src="docs/screenshots/home.png" width="200" alt="홈 화면"><br><b>홈 · 내 기기</b><br><sub>큰 말하기 버튼 · 현재 기기</sub></td>
     <td align="center" width="25%"><img src="docs/screenshots/control_sheet.png" width="200" alt="제어 방식 선택"><br><b>제어 방식 선택</b><br><sub>음성·이미지·코스·숫자패드</sub></td>
-    <td align="center" width="25%"><img src="docs/screenshots/emergency.png" width="200" alt="비상 정지"><br><b>비상 정지</b><br><sub>즉시 중단 · 이중 확인</sub></td>
+    <td align="center" width="25%"><img src="docs/screenshots/emergency.png" width="200" alt="비상 정지"><br><b>비상 정지</b><br><sub>전역 정지 · 실행 화면 단일 탭 정지</sub></td>
     <td align="center" width="25%"><img src="docs/screenshots/settings.png" width="200" alt="접근성·모드 설정"><br><b>접근성 · 모드</b><br><sub>큰 글씨·고대비·보호자/개발자</sub></td>
   </tr>
 </table>
 
-> 고대비 다크 테마 · 큰 터치 영역 · **2단계 탭**(첫 탭 안내 → 둘째 탭 실행) · 하단 3탭(홈 / 비상 / 설정) 구조.
+> 고대비 다크 테마 · 큰 터치 영역 · 일반 동작은 2단계 탭 확인 · 실행 중 정지는 단일 탭 · 하단 3탭(홈 / 비상 / 설정) 구조.
 > (스크린샷은 데모 데이터 기준)
 
 ---
@@ -73,14 +82,15 @@ Touch Bridge는 **교체가 아닌 부착**으로 기존 가전을 그대로 접
 - TalkBack/VoiceOver 활성 시 이중 낭독 자동 억제
 
 ### 비상 정지
-- **전역 비상 버튼**: 모든 화면 상단 앱바에 상주 — 어떤 화면에서든 두 번 탭이면 즉시 중단
-- 버튼 3초 홀드(1초 간격 햅틱 피드백) 또는 음성 "멈춰"/"정지"/"그만"
+- **실행 진행 화면**: 단일 탭으로 정지를 요청하고, ACK 확인·응답 미확인·전송 실패를 구분해 안내하며 미확인·실패 시 재시도 제공
+- **전역 비상 버튼**: 다른 화면에서는 확인 절차 후 정지 요청
+- 음성 "멈춰"/"정지"/"그만"은 음성 입력이 열려 있을 때 동작합니다. 실행 중에는 마이크가 닫혀 있어 음성 정지는 지원하지 않습니다.
 - 카운트다운 구간(5분·2분·1분·30초·10초·5초·3초) 자동 음성 안내
 - 정지 결과는 하드웨어 ACK 확인 기반으로만 "멈췄습니다" 안내 (거짓 완료 금지)
 
 ### 이중 탭(2단계) 확인 패턴
-- 하드웨어를 실제로 누르는 모든 동작은 **첫 탭에서 안내 + 대기 강조, 둘째 탭에서 실행** (오작동 방지)
-- 전 화면 일관 적용 (제어 시트·이미지 제어·간편 코스·숫자 패드·비상 정지)
+- 가전 동작 등 확인이 필요한 조작은 **첫 탭에서 안내 + 대기 강조, 둘째 탭에서 실행** (오작동 방지)
+- 실행 중 비상 정지는 지체를 줄이기 위해 단일 탭으로 요청
 - 대기(armed) 시간 **20초** (WCAG 2.2.1 준수)
 
 ### 사용자 / 보호자 모드 분리
@@ -144,7 +154,8 @@ AI_BACKEND_API_KEY=
 (`.env_ex` 참고)
 
 `.env`는 `pubspec.yaml`에 asset으로 선언돼 있어 **없으면 analyze 경고와 빌드 실패**가
-발생합니다. gitignore 대상이므로 클론 직후 한 번 만들어 주세요:
+발생합니다. 앱 asset은 APK에 포함되므로 `AI_BACKEND_API_KEY`를 비밀 키처럼 취급할 수 없습니다.
+현재 구성은 프로토타입이며 공개 배포 전 인증 구조를 다시 설계해야 합니다. gitignore 대상이므로 클론 직후 한 번 만들어 주세요:
 
 ```bash
 cp .env_ex .env
@@ -261,31 +272,11 @@ flutter run -d ios
 ```
 lib/
 ├── main.dart                              # 앱 진입점, dotenv·설정 로드
-├── screens/
-│   ├── main_navigation_screen.dart        # 사용자/보호자 모드별 하단 내비게이션
-│   ├── home/home_screen.dart              # 기기 카드 스와이프 (PageView)
-│   ├── control/remote_control_screen.dart # 타이머 제어 키패드
-│   ├── voice/voice_listening_screen.dart  # STT + Gemini AI 음성 명령
-│   ├── safety/
-│   │   ├── emergency_stop_screen.dart     # 비상 정지 (3초 홀드 / 음성)
-│   │   └── stop_done_screen.dart          # 정지 완료 확인
-│   ├── settings/
-│   │   ├── settings_screen.dart           # 접근성·연락처·보호자/개발자 설정
-│   │   ├── device_management_screen.dart  # 보호자용 기기 관리
-│   │   └── developer_console_screen.dart  # 개발자용 ESP/G-code/XYZ 테스트
-│   ├── connection/
-│   │   ├── device_connect_screen.dart     # 기기 연결 (QR/BLE/NFC)
-│   │   └── qr_scan_screen.dart            # QR 스캔
-│   └── mapping/photo_mapping_screen.dart  # Gemini Vision 버튼 매핑
-├── services/
-│   ├── tts_service.dart                   # TTS Singleton
-│   ├── accessibility_settings.dart        # 설정 Singleton + SharedPreferences
-│   ├── device_mapping_service.dart        # 기기별 매핑/XYZ 모션 프로필 저장
-│   ├── mapping_execution_service.dart     # BT-xx → X/Y/Z G-code 실행 변환
-│   ├── ble_service.dart                   # BLE 스캔/연결/raw 명령 전송
-│   └── timer_service.dart                 # 카운트다운 타이머
-├── theme/                                 # 고대비 다크 테마
-└── widgets/                               # 재사용 위젯
+├── screens/       # 홈·음성·제어·연결·매핑·설정 화면
+├── services/      # BLE·음성·명령 해석·매핑·안전 실행
+├── models/        # 기기·명령·매핑 데이터
+├── theme/         # 색상·타이포그래피·테마
+└── widgets/       # 공용 UI 위젯
 ```
 
 ---
@@ -350,67 +341,17 @@ lib/
   "pressActuator": "switchbot"
 }
 ```
-`pressActuator`는 앱이 예전 표기대로 보내는 값이며 펌웨어는 읽지 않습니다. 명세: [`docs/ESP32_MOTION_PROTOCOL_V2.md`](docs/ESP32_MOTION_PROTOCOL_V2.md)
+`pressActuator`는 레거시 호환 필드이며 펌웨어는 이 값을 읽지 않고 솔레노이드로 누릅니다. 명세: [`docs/ESP32_MOTION_PROTOCOL_V2.md`](docs/ESP32_MOTION_PROTOCOL_V2.md)
 
 ---
 
-## 개발 현황
+## 구현 현황과 검증 범위
 
-- [x] 사용자/보호자 모드별 하단 내비게이션 + 이중 탭 확인 패턴
-- [x] TTS Singleton (설정 영속화)
-- [x] STT + Gemini AI 음성 명령 (침묵 감지 포함)
-- [x] 비상 정지 (홀드 / 음성 / 카운트다운)
-- [x] Gemini Vision 버튼 자동 매핑
-- [x] SharedPreferences 설정 저장
-- [x] 웹(Chrome) 지원
-- [x] Android·iOS·macOS 권한 설정
-- [x] BLE 연동 1차 (`flutter_blue_plus`: 스캔/연결/명령 전송)
-- [x] immutable `deviceId` 기반 기기 관리 + 기존 name 기반 매핑 자동 마이그레이션
-- [x] API 키 클라이언트 분리 (앱→백엔드 프록시, Gemini 키 서버 보관)
-- [x] NFC 태그 기기 등록 (`nfc_manager` — 시각장애인에게 QR보다 적합한 비시각 방식)
-- [x] 비상 연락처 실제 전화 연결 (`url_launcher` tel:)
-- [ ] QR 스캔 재활성화 (`mobile_scanner` 의존성 제거로 현재 비활성 — 화면은 정직한 안내로 대체)
-- [x] 버튼 매핑 데이터 영속화
-- [x] 기기 목록 동적 관리
-- [x] 디자인 토큰 확장(보조 강조색/그라디언트) + 공용 위젯·핵심 화면 비주얼 리뉴얼 (2026-06-27)
-- [x] 대형 화면/서비스 파일 구조 분리 — `voice_listening_screen`, `home_screen`, `photo_mapping_screen`, `ble_service`, `developer_console_screen`, `manual_mapping_screen` 등을 책임별 위젯/서비스 파일로 분리 (2026-06-27)
-- [x] `home_devices` 저장소를 6곳 중복 코드에서 `HomeDeviceStore` 서비스로 단일화 (2026-06-27)
-- [x] 기본 사용자 모드 시작, 보호자/개발자 기능 격리
-- [x] `BT-xx → X/Y/Z G-code` dry-run 변환 및 개발자 콘솔 로그
-- [x] 개발자 콘솔 `$H`, `STOP`, Z축 테스트, 작은 화면 반응형 보강
-- [x] **접근성 고도화 Phase 1-7 (2026-08)** — WCAG 2.2 AA/AAA + KS X 3253 준수
-  - ExcludeSemantics / CustomSemanticsAction / liveRegion / heading / Semantics value 전 화면 적용
-  - TalkBack PageView 잠금 + 대체 탐색 버튼, BottomSheet 자동 포커스
-  - WCAG 2.2.1 이중 탭 타임아웃 20초 통일, 200% 폰트 대응 minHeight 6곳
-  - 색상 대비 자동 검증 테스트 (`AA ≥4.5:1` / `AAA ≥7:1`)
-  - 비상정지 홀드 1초 간격 햅틱, 카운트다운 구간 TTS (5분→3초)
-  - BLE 자동 재연결 지수 백오프 (2→4→8초), BleStatusBanner liveRegion
-  - STT 침묵 타임아웃 설정화 (5~15초 슬라이더), 연속 실패 에스컬레이션
-  - NAVIGATE 음성 액션 구현 (설정·기기 연결·버튼 매핑 화면 이동)
-  - 세탁기·에어컨 음성 명령 BLE 전송 연결 (`ApplianceCommandRouter`)
-  - 첫 방문 예시 명령어 자동 낭독, 첫 실행 AlertDialog 온보딩
-  - 당시 단위 테스트 160개+ (BLE 재연결 16 + 가전 라우터 25 + 색상 대비 + STT 타임아웃)
-- [x] **전면 리뷰 후속 안정화 15단계 (2026-08-20~21)** — 상세: [`docs/WORK_LOG.md`](docs/WORK_LOG.md)
-  - 스크린리더 TTS 억제 계약 확정(비상·결과 안내 항상 재생), 확인 질문 후 자동 재청취
-  - Z축 하강 후 실패 시 자동 복구, 매핑 셀 충돌 검출·저장 차단, 수동 매핑 병합 저장
-  - 가짜 동작 제거/실구현: 비상 연락처 실제 전화(tel:), NFC 태그 등록, 고정 30초 타이머 제거
-  - BLE 명령 직렬화 큐 + 응답 waiter 선등록, 연결/끊김 이벤트 신뢰성, 물리 동작 인증 게이트
-  - 공용 STT 세션(화면 간 이벤트 오염 방지), 백엔드 API 키·레이트리밋·AI 응답 스키마 검증
-  - 이중 탭 타임아웃 20초 단일 상수화, 문서 계보 복구(HARDWARE_MIGRATION_PLAN 등)
-  - 당시 단위 테스트 224개로 확장 (보안 세션·명령 큐·Z 복구·셀 충돌·매처 등 무테스트 영역 해소)
-- [x] **FIT0482 X/Y + 스위치봇 소프트웨어 M1~M5 (2026-09-04)** — 버튼별 실제
-  mm 좌표와 4점 투영 보정, ESP32 모션 v2 상태 머신, 원점/위치 토큰 안전 게이트,
-  한 점씩 검증·실측 오차 기록, 촬영 전 방향 안내, 드래그 대체 미세 조정 버튼,
-  화면읽기 단순 내비게이션 확인 최적화. 상세:
-  [`docs/XY_SWITCHBOT_SOFTWARE_PLAN.md`](docs/XY_SWITCHBOT_SOFTWARE_PLAN.md)
-- [x] **ESP32 펌웨어 v3 (2026-10-10)** — CoreXY 모션 + 솔레노이드 누름, 앱 v2 JSON·G-code
-  호환, HMAC 인증. [`hardware/touchbridge_corexy/`](hardware/touchbridge_corexy/)
-- [ ] FIT0482 실기 PID 튜닝·ACK 검증과 앱 연동 E2E
-- [ ] 전맹·저시력 참여자를 분리한 실제 과업 평가
-- [ ] BLE 실기기 E2E 검증 (sendPress / sendEmergencyStop ACK)
-- [x] 기기별 4점 X/Y 투영 캘리브레이션 UI와 버튼별 실제 mm 저장
-
----
+- 앱·백엔드 기능 구현과 자동화 검증은 완료했고, ESP32 펌웨어 v3 소스(CoreXY + 솔레노이드)도 저장소에 포함되어 있습니다.
+- 자동 테스트·정적 분석 수와 실행 날짜는 아래 테스트 절의 최신 검증 결과를 기준으로 기록합니다.
+- 비상 정지 계약은 앱 코드와 mock 기반 전송 테스트로 확인합니다. 이를 실제 가전의 모터 정지·ACK 검증 결과로 해석하지 않습니다.
+- 실기기 PID 튜닝·앱-펌웨어 전체 E2E, 전맹·저시력 참여자 과업 평가, TalkBack/VoiceOver 실기 흐름 확인은 별도 검증 범위입니다.
+- 후속 확인: 작은 화면에서 글자 크기와 레이아웃 배율 분리, 사진 선택 전 BLE 스캔 중단 여부, 공개 배포용 API 인증·레이트리밋 프록시 신뢰 설정, 미프로비저닝 BLE 기기의 fail-open 정책. 상세: [`CLAUDE.md`](CLAUDE.md), [`docs/SECURITY.md`](docs/SECURITY.md), [`docs/WORK_LOG.md`](docs/WORK_LOG.md).
 
 ## 작업 로그
 
@@ -434,19 +375,14 @@ lib/
 ## 테스트
 
 ```bash
-flutter analyze
+flutter analyze --fatal-infos
 flutter test
+python -m unittest discover -s backend -p 'test_*.py'
 ```
 
-- 자동 테스트 **446개 통과 (Flutter 391 + 백엔드 55, 2026-10-10)** — GitHub Actions가
-  푸시마다 `flutter analyze --fatal-infos`·`flutter test`·백엔드 테스트를 실행합니다.
-  Flutter 테스트 범위: 명령 규칙, 시간 계산, 실제 mm 좌표·4점 보정,
-  ESP32 모션 v2 상태 머신, 안전 검증 기록, BLE 재연결·명령 큐, 보안 세션(HMAC),
-  Z축 복구, 셀 충돌 검출, TTS 억제 계약, 화면읽기 내비게이션, 촬영 안내,
-  보호자 자유 배치·조이스틱 위치 맞추기, 드래그 대체 조그, 색상 대비(WCAG), STT 타임아웃
-- 9월 5일 안전 회귀 10건: 보정 무효화 실행 차단·영속화, 정지 후 대기 작업/지연
-  응답 폐기, 대기 중 재연결, 원점 기기 구분, 타임아웃 안내, 화면 종료 처리.
-- 위젯 테스트: 홈 화면 스모크, BLE 연결 흐름, 하단 내비게이션 모드 전환
+- 자동 테스트 **446개 통과 (Flutter 391 + 백엔드 55, 2026-10-10 기록)**. GitHub Actions도 `flutter analyze --fatal-infos`·`flutter test`·백엔드 unittest를 실행합니다.
+- 주요 범위: 음성 규칙·시간 파싱, 좌표 보정, BLE 명령 큐·재연결, 실행 중 정지 토큰 전파, 접근성 의미 구조·화면 전환, 백엔드 응답 검증.
+- 실제 모터 구동·정지 ACK, 기기별 실사용 흐름, TalkBack/VoiceOver의 전체 과업 완주 검증은 자동 테스트 수에 포함하지 않습니다.
 
 ## 접근성 실험 지표
 
