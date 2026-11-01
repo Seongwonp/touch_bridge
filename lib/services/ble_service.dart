@@ -39,6 +39,18 @@ class BleService {
   /// 상태를 보내므로, 이 broadcast 스트림에서 commandId가 같은 응답만 추적한다.
   final _responseController = StreamController<String>.broadcast();
   Stream<String> get responseStream => _responseController.stream;
+
+  /// 기기가 동작을 끝내지 못했다고 알린 notify 횟수 (단조 증가).
+  ///
+  /// 시퀀스 시작 때 값을 기억해 두고 바뀌었는지만 비교한다
+  /// ([motionEpoch]와 같은 방식). `ok`, `TEMP_OK` 같은 줄은 세지 않는다.
+  int get deviceFaultCount => _deviceFaultCount;
+  int _deviceFaultCount = 0;
+  static final _deviceFaultLine = RegExp(
+    r'^(FAULT\b|ERROR:)',
+    multiLine: true,
+    caseSensitive: false, // G-code 거부는 소문자 error:로 온다
+  );
   final _stopRequests = StreamController<String>.broadcast(sync: true);
   int _motionEpoch = 0;
   Stream<String> get stopRequests => _stopRequests.stream;
@@ -87,6 +99,10 @@ class BleService {
   // 쓰면 응답이 엉뚱한 호출로 배달되거나 유실된다. 모든 write와 응답 대기는
   // [_withCommandLock]으로 직렬화하고, 응답 waiter는 반드시 write 전에 등록한다.
   Completer<String>? _responseWaiter;
+
+  /// 아직 줄바꿈이 오지 않은 `STATE`/전력 줄 조각.
+  String _notifyFragment = '';
+  static const _maxNotifyFragment = 256;
   Future<void> _commandLockTail = Future<void>.value();
 
   /// 명령 큐 잠금: body들이 요청 순서대로 하나씩 실행된다.
@@ -104,6 +120,9 @@ class BleService {
   Future<List<BleDeviceInfo>> Function(Duration timeout)? _scanOverride;
   Future<bool> Function(String deviceId)? _connectOverride;
   Future<bool> Function(String command)? _sendRawOverride;
+
+  /// 실제 기기 대신 테스트 전송기가 붙어 있는지. 이때는 `P` 응답이 없다.
+  bool get hasSendRawOverride => _sendRawOverride != null;
   Future<String> Function(String deviceId)? _priorityStopOverride;
 
   // Security/session — challenge-response 인증은 BleSecuritySession에 위임
@@ -123,6 +142,7 @@ class BleService {
   // [디버그/데모 전용] 실제 BLE 없이 전송을 성공으로 흉내낸다(시뮬레이터 테스트용).
   // 릴리스에서는 enableDemoMode를 호출하지 않으므로 항상 false다.
   bool _demoMode = false;
+  bool get isDemoMode => _demoMode;
   String _demoDeviceId = '';
 
   /// [디버그/데모 전용] BLE 없이 전송/응답을 성공으로 처리한다.
@@ -332,23 +352,19 @@ class BleService {
 
       // Notify 활성화 및 리스너 등록
       await characteristic.setNotifyValue(true);
-      _notifySub = characteristic.lastValueStream.listen((value) {
+      // onValueReceived를 쓴다: lastValueStream은 앱이 쓴 값도 다시 내보내므로
+      // 응답 대기자가 기기 응답 대신 자기 명령의 에코를 받게 된다.
+      _notifyFragment = '';
+      _notifySub = characteristic.onValueReceived.listen((value) {
         if (value.isEmpty) return;
 
-        String res;
+        String raw;
         try {
-          res = utf8.decode(value, allowMalformed: true).trim();
+          raw = utf8.decode(value, allowMalformed: true);
         } catch (e) {
-          res = 'DECODE_ERROR: ${value.toString()}';
+          raw = 'DECODE_ERROR: ${value.toString()}';
         }
-
-        _addLog('RECV: ${_normalizeHardwareLog(res)}');
-        _responseController.add(res);
-        // isCompleted 체크: 빠른 연속 알림이 오면 이미 완료된 Completer에
-        // 다시 complete를 시도해 StateError가 발생하므로 반드시 가드한다.
-        if (_responseWaiter != null && !_responseWaiter!.isCompleted) {
-          _responseWaiter!.complete(res);
-        }
+        _onNotifyText(raw);
       });
 
       // 성공한 기기 ID를 기억해 이후 끊김 시 자동 재연결 대상으로 쓴다.
@@ -849,6 +865,68 @@ class BleService {
       secret,
       sendAndWaitAck: (payload) => _sendAndWaitAck(payload),
     );
+  }
+
+  /// 주기 전력 이벤트 줄인지 본다. 명령 응답이 아니므로 [_responseWaiter]를
+  /// 완료시키면 안 된다.
+  static bool isPowerEventLine(String line) =>
+      line.trimLeft().startsWith(_powerLinePrefix);
+  static const _powerLinePrefix = '{"event":"power"';
+
+  /// notify 한 건을 처리한다. 펌웨어는 긴 줄을 MTU 크기로 쪼개 보내므로, 앱이
+  /// 전체 줄을 읽어야 하는 `STATE` 줄과 전력 이벤트만 줄바꿈까지 이어 붙인다.
+  /// 펌웨어가 한 줄을 끊김 없이 연달아 보내므로 다른 줄이 끼어들지 않는다.
+  void _onNotifyText(String raw) {
+    final String text;
+    if (_notifyFragment.isNotEmpty ||
+        raw.startsWith('STATE ') ||
+        raw.startsWith(_powerLinePrefix)) {
+      _notifyFragment += raw;
+      if (!_notifyFragment.contains('\n') &&
+          _notifyFragment.length < _maxNotifyFragment) {
+        return;
+      }
+      text = _notifyFragment;
+      _notifyFragment = '';
+    } else {
+      text = raw;
+    }
+
+    final res = text.trim();
+    final isPower = isPowerEventLine(res);
+    if (!isPower) _addLog('RECV: ${_normalizeHardwareLog(res)}'); // 1초 주기 로그 제외
+    _onDeviceResponse(res);
+    // isCompleted 체크: 빠른 연속 알림이 오면 이미 완료된 Completer에
+    // 다시 complete를 시도해 StateError가 발생하므로 반드시 가드한다.
+    if (!isPower &&
+        _responseWaiter != null &&
+        !_responseWaiter!.isCompleted) {
+      _responseWaiter!.complete(res);
+    }
+  }
+
+  void _onDeviceResponse(String res) {
+    if (_deviceFaultLine.hasMatch(res)) {
+      _deviceFaultCount++;
+      AppLogger.warn('ble.device_fault', {'count': _deviceFaultCount});
+    }
+    _responseController.add(res);
+  }
+
+  /// notify 수신을 흉내 낸다 — 실제 BLE 없이 기기 오류 판정을 테스트한다.
+  @visibleForTesting
+  void injectResponseForTest(String response) => _onDeviceResponse(response);
+
+  /// notify 조각 수신을 흉내 낸다 — 재조립과 응답 대기자 판정을 테스트한다.
+  @visibleForTesting
+  void injectNotifyForTest(String raw) => _onNotifyText(raw);
+
+  /// 다음 명령 응답 한 줄을 기다린다. 실제 쓰기 없이 대기자 동작을 검증한다.
+  @visibleForTesting
+  Future<String> nextResponseForTest() {
+    final waiter = Completer<String>();
+    _responseWaiter = waiter;
+    return waiter.future.whenComplete(() => _responseWaiter = null);
   }
 
   @visibleForTesting

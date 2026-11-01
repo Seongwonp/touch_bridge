@@ -46,6 +46,10 @@ cd backend && pip install -r requirements.txt && python -m unittest discover -s 
   매 전송 전과 모든 대기 뒤에 비교한다. 하위에서 토큰을 새로 잡으면 대기 중 들어온 정지가
   새어 나간다. 토큰이 바뀌었으면 보내지 않고 `stoppedByEmergency`로 끝낸다. 정지로 끊긴
   경우 Z 복구 같은 추가 이동 명령도 보내지 않으며, 복구 도중 정지도 같은 규칙이다.
+- **기기 오류 뒤 잔여 명령 금지.** 긴 시퀀스는 시작 시 `BleService.deviceFaultCount`도
+  기억해 `faultMark:`로 하위까지 넘기고 `motionEpoch`와 같은 자리에서 비교한다. 값이 바뀌면
+  (`FAULT`/`ERROR:` notify) 남은 줄과 Z 복구를 보내지 않고 `deviceFault`로 끝낸다. 정지
+  판정이 항상 먼저다.
 - **정지 판정은 epoch만 보지 않는다.** 실행 화면의 정지 버튼은 실행 토큰이 잡히기 전
   (안내 음성·연결·매핑 로드)부터 보이므로, 화면이 `_stopRequestedThisRun`으로 정지 요청을
   직접 기록하고 전송 함수 호출 직전에 await 없이 확인한다. epoch는 BLE 링크 끊김에도
@@ -107,9 +111,9 @@ cd backend && pip install -r requirements.txt && python -m unittest discover -s 
   넘기 시작하면 같은 패턴으로 쪼개는 것을 먼저 검토한다.
 - 기기 목록은 `HomeDeviceStore`(`home_devices` 키) 한 곳에서만 읽고 쓴다. 버튼 매핑은
   `mapping_profile_<deviceId>` 키에 기기별로 저장한다.
-- 보호자 화면 문구는 장치 중립어("터치봉", "현재 위치 눌러보기")를 쓴다. 코드 안의
-  `switchbot` 이름은 옛 표기이며, 바꿀 때는 `docs/ESP32_MOTION_PROTOCOL_V2.md`와 테스트를
-  함께 고친다.
+- 보호자 화면 문구는 장치 중립어("터치봉", "현재 위치 눌러보기")를 쓴다. 현재 누름부는
+  SwitchBot Bot이므로 코드 안의 `switchbot` 이름은 실제 장치와 맞다. 프로토콜 값을 바꿀
+  때는 `docs/ESP32_MOTION_PROTOCOL_V2.md`와 테스트를 함께 고친다.
 
 ## 7. 말하지 않을 것
 

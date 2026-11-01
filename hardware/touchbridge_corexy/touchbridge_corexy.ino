@@ -1,8 +1,8 @@
 // =====================================================================
-//  Touch Bridge - CoreXY 모션 + 솔레노이드 누름 펌웨어 (ESP32)  v3
+//  Touch Bridge - CoreXY 모션 + SwitchBot 누름 펌웨어 (ESP32)  v4
 //  모터: DFRobot FIT0482 (6V, 50:1, 홀 엔코더) x2
 //  드라이버: JMOD-MOTOR-1 (TB6612FNG)
-//  누름: SparkFun ROB-11015 솔레노이드 5V (N-MOSFET 로우사이드 + 플라이백 다이오드)
+//  누름: SwitchBot Bot (BLE 직접 제어, 허브 불필요) - SwitchBotBLE.h
 //
 //  필요 라이브러리: ArduinoJson v7 (라이브러리 매니저에서 설치)
 //
@@ -22,12 +22,12 @@
 //  2) GRBL 호환 G-code (앱 음성 경로, MappingExecutionService)
 //     G90 G91 G21 G92 X0 Y0 G92.1  G0/G1 X Y Z F  G4 P(초)  $H  $$  STOP
 //     BTN_n   SET_GRID rows cols ox10 oy10 px10 py10
-//     Z는 솔레노이드로 해석: 상대(G91) Z- / 절대(G90) Z<0 → 누름, 그 반대 → 뗌
+//     Z는 Bot 누름으로 해석: 상대(G91) Z- / 절대(G90) Z<0 → 한 번 누름 (Z+는 무시, Bot이 자동 복귀)
 //
 //  3) 기존 텍스트 명령 (직접 테스트용)
 //     G x y [f]      절대 좌표[mm] 이동, f = mm/s
 //     GT x y [f]     이동 후 한 번 누름
-//     T [ms]         현재 위치에서 한 번 누름
+//     T              현재 위치에서 한 번 누름 (누름 시간은 Bot 앱 설정을 따름)
 //     H              원점 복귀       S 또는 !   비상 정지
 //     Z              현재 위치를 원점(0,0)으로      P  상태 출력
 //     M a b [ms]     모터 PWM 직접 인가 (-1~1)      K kp ki kd kff  게인 변경
@@ -50,6 +50,23 @@
 #include "config.h"
 #include "CoreXYMotion.h"
 
+#include "SwitchBotBLE.h"
+#if CT_LINK_ENABLED
+#include "CtLink.h"
+#endif
+
+// ---------------- Z축 누름: SwitchBot Bot ----------------
+// Bot 주소(소문자)는 공개 저장소에 넣지 않는다. config_local.h.example을
+// config_local.h로 복사해 값을 넣는다 (config_local.h는 gitignore 대상).
+#if __has_include("config_local.h")
+#include "config_local.h"
+#endif
+#ifndef SWITCHBOT_MAC
+#error "SWITCHBOT_MAC is not set: copy config_local.h.example to config_local.h and set your Bot address"
+#endif
+constexpr uint32_t BOT_PRESS_TIMEOUT_MS = 8000;   // 연결 + 누름 + 응답 대기 상한
+uint32_t tapMs = 150;   // 레거시 set_servo/get_servo 호환용 값 (Bot 누름 시간에는 영향 없음)
+
 // ---------------- 공용 타입 ----------------
 // Arduino IDE는 첫 함수 정의 바로 앞에 함수 선언을 자동으로 넣는다.
 // 함수 인자로 쓰는 타입은 반드시 첫 함수보다 위(여기)에 정의해야 한다.
@@ -59,7 +76,7 @@ enum Source : uint8_t { SRC_SERIAL, SRC_BLE };
 struct LineMsg { char text[CMD_LINE_MAX]; };
 
 enum Origin : uint8_t { ORG_TEXT, ORG_GCODE, ORG_JSON };   // 응답 형식 결정
-enum class StepType : uint8_t { MOVE, HOME, SET_ORIGIN, SOL_DOWN, SOL_UP, DWELL, TAP };
+enum class StepType : uint8_t { MOVE, HOME, SET_ORIGIN, Z_DOWN, Z_UP, DWELL, TAP };
 
 struct Step {
   StepType type;
@@ -69,69 +86,10 @@ struct Step {
   char id[48];          // JSON commandId
 };
 
-enum class Phase : uint8_t { WAIT_RELEASE, WAIT_MOTION, WAIT_TIME, TAP_HOLD, TAP_RELEASE };
+enum class Phase : uint8_t { WAIT_MOTION, WAIT_TIME, BOT_WAIT };
 
 CoreXYMotion motion;
 QueueHandle_t motionEvents;
-
-// =====================================================================
-//  솔레노이드
-// =====================================================================
-// config.h에서 이미 쓰는 핀: 4(STBY) 25/26/27(모터A) 32/33/13(모터B)
-//   16/17(엔코더A) 18/19(엔코더B). 남는 출력 핀 중 부팅 영향 없는 23을 사용.
-//   바꾸려면 config.h에 #define SOLENOID_PIN 22 처럼 넣으면 그 값이 우선 적용됨.
-//   피해야 할 핀: 6~11(플래시), 34~39(입력 전용), 0/2/5/12/15(부팅 스트래핑)
-#ifndef SOLENOID_PIN
-#define SOLENOID_PIN 23
-#endif
-#ifndef SOLENOID_LEDC_CH          // Arduino-ESP32 2.x에서만 사용
-#define SOLENOID_LEDC_CH 7        // 모터가 0/1 채널을 쓰므로 다른 타이머의 7번
-#endif
-
-constexpr uint32_t SOL_PWM_FREQ  = 20000;  // 20kHz (가청 소음 없음)
-constexpr uint8_t  SOL_PWM_BITS  = 8;
-constexpr uint32_t SOL_HIT_MS    = 60;     // 처음엔 100%로 당기고
-constexpr uint8_t  SOL_HOLD_DUTY = 90;     // 이후 약 35%로 유지 (발열 감소)
-constexpr uint32_t SOL_MAX_ON_MS = 3000;   // 이보다 오래 켜져 있으면 강제 해제
-constexpr uint32_t SOL_SETTLE_MS = 60;     // 플런저가 끝까지 나가거나 돌아오는 시간
-uint32_t tapMs = 150;                      // 한 번 누를 때 유지 시간 (set_servo ms로 변경 가능)
-
-volatile bool solOn = false;
-bool solHolding = false;
-uint32_t solOnAt = 0;
-
-static void solWrite(uint32_t duty) {
-#if ESP_ARDUINO_VERSION_MAJOR >= 3
-  ledcWrite(SOLENOID_PIN, duty);
-#else
-  ledcWrite(SOLENOID_LEDC_CH, duty);
-#endif
-}
-
-void solBegin() {
-  pinMode(SOLENOID_PIN, OUTPUT);
-  digitalWrite(SOLENOID_PIN, LOW);
-#if ESP_ARDUINO_VERSION_MAJOR >= 3
-  ledcAttach(SOLENOID_PIN, SOL_PWM_FREQ, SOL_PWM_BITS);
-#else
-  ledcSetup(SOLENOID_LEDC_CH, SOL_PWM_FREQ, SOL_PWM_BITS);
-  ledcAttachPin(SOLENOID_PIN, SOLENOID_LEDC_CH);
-#endif
-  solWrite(0);
-}
-
-void solenoidOn() {
-  solWrite((1u << SOL_PWM_BITS) - 1);
-  solOnAt = millis();
-  solHolding = false;
-  solOn = true;
-}
-
-void solenoidOff() {   // BLE 콜백에서도 호출됨 (비상 정지)
-  solWrite(0);
-  solOn = false;
-  solHolding = false;
-}
 
 // =====================================================================
 //  BLE
@@ -250,7 +208,7 @@ class RxCallbacks : public BLECharacteristicCallbacks {
     if (v.length() && v[0] == '{') {
       if (v.indexOf("\"stop\"") >= 0) {   // 비상 정지는 큐를 기다리지 않고 즉시
         motion.stop();
-        solenoidOff();
+        sbble::cancel();                 // 아직 쓰지 않은 Bot 누름도 취소
         stopRequested = true;
         xQueueReset(bleLines);           // 정지 전에 도착해 대기 중인 명령은 버림
       }
@@ -265,7 +223,7 @@ class RxCallbacks : public BLECharacteristicCallbacks {
     for (size_t i = 0; i < v.length(); i++) {
       char ch = v[i];
       if (ch == '!') {
-        motion.stop(); solenoidOff(); stopRequested = true;
+        motion.stop(); sbble::cancel(); stopRequested = true;
         xQueueReset(bleLines);
         len = 0;
         continue;
@@ -412,13 +370,12 @@ void failActive(const char* jsonState, const char* text) {
   active = false;
   planValid = false;
   invalidateToken();
-  solenoidOff();
 }
 
 void emergencyStop() {
   stopRequested = false;
   motion.stop();
-  solenoidOff();
+  sbble::cancel();
   qClear();
   if (active && cur.org == ORG_JSON) emitState(cur.id, "STOPPED");
   active = false;
@@ -440,21 +397,25 @@ void waitFor(uint32_t ms) {
   phaseMs = ms;
 }
 
+// Bot 누름 요청 → 결과는 pump()의 BOT_WAIT에서 비차단으로 확인
+void beginBotPress() {
+  if (cur.org == ORG_JSON) emitState(cur.id, "PRESSING");
+  if (!sbble::request(sbble::PRESS)) {          // 이전 요청이 아직 진행 중
+    failActive("ERROR_PROTOCOL", "BOT_BUSY");
+    return;
+  }
+  phase = Phase::BOT_WAIT;
+  phaseAt = millis();
+}
+
 void startStep() {
   active = true;
   switch (cur.type) {
     case StepType::MOVE:
-      if (solOn) {                 // 누른 채로 끌고 다니지 않도록 먼저 뗌
-        solenoidOff();
-        phase = Phase::WAIT_RELEASE;
-        phaseAt = millis();
-      } else {
-        beginMove();
-      }
+      beginMove();
       break;
     case StepType::HOME: {
       invalidateToken();
-      solenoidOff();
       if (cur.org == ORG_JSON) emitState(cur.id, "HOMING");
       const char* err = motion.home();
       if (err) { failActive("ERROR_LIMIT", err); return; }
@@ -466,23 +427,17 @@ void startStep() {
       invalidateToken();
       endActive();
       break;
-    case StepType::SOL_DOWN:
-      solenoidOn();
-      waitFor(SOL_SETTLE_MS);
+    case StepType::Z_DOWN:
+      beginBotPress();             // G-code Z- → Bot 한 번 누름 (Bot은 스스로 복귀)
       break;
-    case StepType::SOL_UP:
-      solenoidOff();
-      waitFor(SOL_SETTLE_MS);
+    case StepType::Z_UP:
+      endActive();                 // Bot은 누른 뒤 자동 복귀하므로 뗄 동작 없음
       break;
     case StepType::DWELL:
       waitFor(cur.ms);
       break;
     case StepType::TAP:
-      if (cur.org == ORG_JSON) emitState(cur.id, "PRESSING");
-      solenoidOn();
-      phase = Phase::TAP_HOLD;
-      phaseAt = millis();
-      phaseMs = cur.ms;
+      beginBotPress();
       break;
   }
 }
@@ -494,41 +449,35 @@ void pump() {
   }
   const uint32_t t = millis() - phaseAt;
   switch (phase) {
-    case Phase::WAIT_RELEASE:
-      if (t >= SOL_SETTLE_MS) beginMove();
-      break;
     case Phase::WAIT_TIME:
       if (t >= phaseMs) endActive();
       break;
-    case Phase::TAP_HOLD:
-      if (t >= phaseMs) {
-        solenoidOff();
-        phase = Phase::TAP_RELEASE;
-        phaseAt = millis();
+    case Phase::BOT_WAIT: {
+      int r;
+      if (sbble::poll(r)) {
+        if (r == sbble::SB_OK) {
+          if (cur.org == ORG_JSON) emitState(cur.id, "COMPLETED");
+          else if (cur.org == ORG_TEXT) out("PRESSED\n");
+          endActive();
+        } else {
+          const char* why = sbble::resultName(r);
+          if (cur.org == ORG_JSON) {
+            char extra[64];
+            snprintf(extra, sizeof(extra), ",\"message\":\"%s\"", why);
+            emitState(cur.id, r == sbble::SB_ERR_CONNECT || r == sbble::SB_ERR_TIMEOUT
+                                  ? "ERROR_TIMEOUT" : "ERROR_PROTOCOL", extra);
+            cur.org = ORG_GCODE;                  // failActive가 같은 id로 한 번 더 보내지 않게
+          }
+          failActive("ERROR_PROTOCOL", why);
+        }
+      } else if (t >= BOT_PRESS_TIMEOUT_MS) {
+        sbble::cancel();   // 뒤늦은 쓰기가 다음 동작 중에 누르지 않도록
+        failActive("ERROR_TIMEOUT", "BOT_TIMEOUT");
       }
       break;
-    case Phase::TAP_RELEASE:
-      if (t >= SOL_SETTLE_MS) {
-        if (cur.org == ORG_JSON) emitState(cur.id, "COMPLETED");
-        else if (cur.org == ORG_TEXT) out("PRESSED\n");
-        endActive();
-      }
-      break;
+    }
     case Phase::WAIT_MOTION:
       break;   // 모션 이벤트에서 처리
-  }
-}
-
-void solService() {
-  if (!solOn) return;
-  uint32_t t = millis() - solOnAt;
-  if (!solHolding && t >= SOL_HIT_MS) {
-    solWrite(SOL_HOLD_DUTY);
-    solHolding = true;
-  }
-  if (t >= SOL_MAX_ON_MS) {   // 앱이 Z 상승을 못 보내고 끊긴 경우 등 안전장치
-    solenoidOff();
-    out("WARN SOLENOID_TIMEOUT\n");
   }
 }
 
@@ -639,9 +588,10 @@ void reply(const char* err) {
 
 void printStatus() {
   auto st = motion.status();
-  out("STATE %s homed=%d pos=(%.2f, %.2f) ref=(%.2f, %.2f) enc=(%ld, %ld) sol=%d q=%d auth=%s\n",
+  out("STATE %s homed=%d pos=(%.2f, %.2f) ref=(%.2f, %.2f) enc=(%ld, %ld) bot=%d q=%d auth=%s\n",
       motionStateName(st.state), st.homed, st.x, st.y, st.xRef, st.yRef,
-      (long)st.countA, (long)st.countB, solOn ? 1 : 0, qCount + (active ? 1 : 0),
+      (long)st.countA, (long)st.countB, sbble::busy() ? 1 : 0,
+      qCount + (active ? 1 : 0),
       !keyProvisioned() ? "none" : (bleSessionValid() ? "ok" : "locked"));
 }
 
@@ -691,7 +641,7 @@ const char* handleGcode(const char* line) {
     }
     s = end;
   }
-  // G-code F는 mm/min. Z(솔레노이드) 줄의 느린 F150이 XY 속도를 덮지 않도록
+  // G-code F는 mm/min. Z(Bot 누름) 줄의 느린 F150이 XY 속도를 덮지 않도록
   // XY 이동이 있는 줄에서만 반영한다.
   if (hasF && F > 0 && (hasX || hasY)) gFeedMmS = F / 60.0f;
 
@@ -720,20 +670,20 @@ const char* handleGcode(const char* line) {
       if (!qPush(d)) return "QUEUE_FULL";
     }
     else if (fabsf(g - 0) < 0.01f || fabsf(g - 1) < 0.01f) {
-      // Z → 솔레노이드. 상대 모드는 부호, 절대 모드는 0보다 작으면 누름
+      // Z → Bot 누름. 상대 모드는 부호, 절대 모드는 0보다 작으면 누름
       bool zDown = false, zUp = false;
       if (hasZ) {
         if (gRelative) { zDown = Z < 0; zUp = Z > 0; }
         else           { zDown = Z < 0; zUp = !zDown; }
       }
-      if (zUp && !qPush(makeStep(StepType::SOL_UP, ORG_GCODE))) return "QUEUE_FULL";
+      if (zUp && !qPush(makeStep(StepType::Z_UP, ORG_GCODE))) return "QUEUE_FULL";
       if (hasX || hasY) {
         syncPlan();
         float tx = hasX ? (gRelative ? planX + X : X) : planX;
         float ty = hasY ? (gRelative ? planY + Y : Y) : planY;
         if (!enqueueMove(tx, ty, gFeedMmS, ORG_GCODE)) return "QUEUE_FULL";
       }
-      if (zDown && !qPush(makeStep(StepType::SOL_DOWN, ORG_GCODE))) return "QUEUE_FULL";
+      if (zDown && !qPush(makeStep(StepType::Z_DOWN, ORG_GCODE))) return "QUEUE_FULL";
     }
     else return "UNSUPPORTED_G";
   }
@@ -800,7 +750,7 @@ void handleJson(const char* line, Source src) {
     return;
   }
 
-  if (!strcmp(action, "get_servo")) {   // 레거시: 서보 대신 솔레노이드 누름 시간
+  if (!strcmp(action, "get_servo")) {   // 레거시 호환 (Bot 사용 시 값만 유지)
     out("SERVO up=0 down=1 ms=%u\n", (unsigned)tapMs);
     return;
   }
@@ -849,7 +799,7 @@ void handleJson(const char* line, Source src) {
 
   if (!strcmp(action, "press")) {
     const char* tok = doc["positionToken"] | "";
-    bool ok = tokValid && tok[0] && !strcmp(tok, posToken) && !busy() && !solOn;
+    bool ok = tokValid && tok[0] && !strcmp(tok, posToken) && !busy() && !sbble::busy();
     if (ok) {                           // 토큰 발급 이후 위치가 밀렸는지 재확인
       auto st = motion.status();
       ok = hypotf(st.x - tokX, st.y - tokY) <= tokTol;
@@ -983,7 +933,7 @@ void pollSerial() {
   static uint16_t len = 0;
   while (Serial.available()) {
     char c = Serial.read();
-    if (c == '!') { motion.stop(); solenoidOff(); stopRequested = true; len = 0; continue; }
+    if (c == '!') { motion.stop(); sbble::cancel(); stopRequested = true; len = 0; continue; }
     if (c == '\r') continue;
     if (c == '\n') { buf[len] = 0; handleLine(buf, SRC_SERIAL); len = 0; continue; }
     if (len < sizeof(buf) - 1) buf[len++] = c;
@@ -991,8 +941,21 @@ void pollSerial() {
 }
 
 // ---------------------------------------------------------------------
+#if CT_LINK_ENABLED
+// 표시 전용. 이 값으로 동작을 막거나 완료를 판단하지 않는다.
+static void pollCtLink() {
+  ctlink::poll();
+  ctlink::Report r;
+  if (!ctlink::takeReport(r)) return;
+  if (r.hasAvg) {
+    out("{\"event\":\"power\",\"w\":%.1f,\"state\":\"%s\"}\n", r.avgW, ctlink::stateName(r.state));
+  } else {
+    out("{\"event\":\"power\",\"w\":null,\"state\":\"unknown\"}\n");
+  }
+}
+#endif
+
 void setup() {
-  solBegin();                 // 가장 먼저: 부팅 중 솔레노이드가 켜지지 않게
   Serial.begin(115200);
   delay(200);
 
@@ -1004,7 +967,12 @@ void setup() {
   xTaskCreatePinnedToCore(controlTask, "corexy", 4096, nullptr,
                           configMAX_PRIORITIES - 2, nullptr, 1);
   bleBegin();
-  out("Touch Bridge CoreXY v3 ready (BLE: " BLE_DEVICE_NAME ", key=%s)\n",
+  sbble::begin(SWITCHBOT_MAC);   // BLEDevice::init() 이후여야 함
+#if CT_LINK_ENABLED
+  ctlink::begin();
+#endif
+  out("Z actuator: SwitchBot Bot %s\n", SWITCHBOT_MAC);
+  out("Touch Bridge CoreXY v4 ready (BLE: " BLE_DEVICE_NAME ", key=%s)\n",
       keyProvisioned() ? "set" : "none");
   printHelp();
 }
@@ -1023,6 +991,8 @@ void loop() {
 
   pollSerial();
   pump();
-  solService();
+#if CT_LINK_ENABLED
+  pollCtLink();
+#endif
   delay(1);
 }

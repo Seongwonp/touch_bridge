@@ -298,14 +298,14 @@ lib/
 
 ## 하드웨어 연동
 
-현재 하드웨어는 소형화를 위해 **FIT0482 엔코더 DC 기어모터 2개(X/Y, CoreXY) + ESP32 폐루프 PID + 솔레노이드 누름부**로 구성합니다. 펌웨어(v3)는 [`hardware/touchbridge_corexy/`](hardware/touchbridge_corexy/)에 있고, 배선과 첫 구동 순서는 그 폴더의 README를 따릅니다. 설계 배경은 [`docs/XY_SWITCHBOT_SOFTWARE_PLAN.md`](docs/XY_SWITCHBOT_SOFTWARE_PLAN.md)이며, 그 계획의 누름부(스위치봇)는 이후 솔레노이드로 바뀌었습니다.
+현재 하드웨어는 소형화를 위해 **FIT0482 엔코더 DC 기어모터 2개(X/Y, CoreXY) + ESP32 폐루프 PID + SwitchBot Bot 누름부**로 구성합니다. 펌웨어(v4)는 [`hardware/touchbridge_corexy/`](hardware/touchbridge_corexy/)에 있고, 배선과 첫 구동 순서는 그 폴더의 README를 따릅니다. 설계 배경은 [`docs/XY_SWITCHBOT_SOFTWARE_PLAN.md`](docs/XY_SWITCHBOT_SOFTWARE_PLAN.md)입니다. 누름부는 중간에 솔레노이드를 거쳐 현재 SwitchBot Bot입니다.
 
 **현재 구성:**
 - X/Y: `FIT0482` 6V 310RPM 50:1 엔코더 DC 기어모터 2개, CoreXY 구동
 - 드라이버: JMOD-MOTOR-1 (TB6612FNG)
 - 제어: ESP32가 엔코더 피드백을 받아 위치 PID 수행 (1kHz)
 - 원점: 벽 감지(스톨) 원점 복귀가 기본, 리밋 스위치는 선택; 홈 완료 전 이동 금지
-- 누름: 별도 Z축 대신 5V 솔레노이드 (SparkFun ROB-11015)
+- 누름: 별도 Z축 대신 SwitchBot Bot (ESP32가 BLE로 직접 제어, 허브 불필요)
 - 통신: 앱 → BLE → ESP32 (USB 시리얼은 디버깅용)
 - 전원: 모터 전원과 MCU 전원 분리, 공통 GND 유지
 
@@ -313,8 +313,8 @@ lib/
 - AI는 물리 좌표를 만들지 않고 논리 버튼 ID(`BT-xx`)만 반환합니다.
 - 사진 분석은 버튼 중심의 정규화 좌표와 신뢰도만 만들고, 보호자 캘리브레이션을 거쳐 X/Y mm로 확정합니다.
 - 앱은 `BT-xx → buttonMachinePositions → X/Y 목표 mm`를 전달합니다.
-- ESP32는 목표 위치 오차가 허용 범위 안에 들어온 뒤에만 솔레노이드를 작동시키고 완료 상태를 회신합니다.
-- 펌웨어 v3는 앱 v2 JSON과 함께 GRBL 호환 G-code(Z축 명령을 솔레노이드로 해석)·`BTN_n`·`SET_GRID`도 받으므로, 음성 경로의 G-code 전송도 그대로 동작합니다.
+- ESP32는 목표 위치 오차가 허용 범위 안에 들어온 뒤에만 Bot 누름을 요청하고, Bot의 응답을 받아 완료 상태를 회신합니다.
+- 펌웨어 v4는 앱 v2 JSON과 함께 GRBL 호환 G-code(Z축 하강 명령을 Bot 누름으로 해석)·`BTN_n`·`SET_GRID`도 받으므로, 음성 경로의 G-code 전송도 그대로 동작합니다.
 
 **v2 명령 흐름 (이동과 누름은 두 단계):**
 
@@ -341,14 +341,15 @@ lib/
   "pressActuator": "switchbot"
 }
 ```
-`pressActuator`는 레거시 호환 필드이며 펌웨어는 이 값을 읽지 않고 솔레노이드로 누릅니다. 명세: [`docs/ESP32_MOTION_PROTOCOL_V2.md`](docs/ESP32_MOTION_PROTOCOL_V2.md)
+`pressActuator`는 레거시 호환 필드이며 펌웨어는 이 값을 읽지 않고 항상 SwitchBot Bot으로 누릅니다. 명세: [`docs/ESP32_MOTION_PROTOCOL_V2.md`](docs/ESP32_MOTION_PROTOCOL_V2.md)
 
 ---
 
 ## 구현 현황과 검증 범위
 
-- 앱·백엔드 기능 구현과 자동화 검증은 완료했고, ESP32 펌웨어 v3 소스(CoreXY + 솔레노이드)도 저장소에 포함되어 있습니다.
+- 앱·백엔드 기능 구현과 자동화 검증은 완료했고, ESP32 펌웨어 v4 소스(CoreXY + SwitchBot Bot)도 저장소에 포함되어 있습니다.
 - 자동 테스트·정적 분석 수와 실행 날짜는 아래 테스트 절의 최신 검증 결과를 기준으로 기록합니다.
+- `STOPPED`는 모터가 멈췄고 대기 큐를 버렸다는 뜻입니다. 이미 Bot에 쓴 누름은 되돌릴 수 없습니다.
 - 비상 정지 계약은 앱 코드와 mock 기반 전송 테스트로 확인합니다. 이를 실제 가전의 모터 정지·ACK 검증 결과로 해석하지 않습니다.
 - 실기기 PID 튜닝·앱-펌웨어 전체 E2E, 전맹·저시력 참여자 과업 평가, TalkBack/VoiceOver 실기 흐름 확인은 별도 검증 범위입니다.
 - 후속 확인: 작은 화면에서 글자 크기와 레이아웃 배율 분리, 사진 선택 전 BLE 스캔 중단 여부, 공개 배포용 API 인증·레이트리밋 프록시 신뢰 설정, 미프로비저닝 BLE 기기의 fail-open 정책. 상세: [`CLAUDE.md`](CLAUDE.md), [`docs/SECURITY.md`](docs/SECURITY.md), [`docs/WORK_LOG.md`](docs/WORK_LOG.md).
@@ -365,8 +366,8 @@ lib/
 - [접근성 지침·법률 조사 (WCAG 2.2 / KS X 3253 / 장애인차별금지법)](docs/ACCESSIBILITY_GUIDELINES_RESEARCH.md)
 - [2026-09-04 근거자료 출처 감사](docs/SOURCE_AUDIT_2026-09-04.md)
 - [시각장애인 당사자 검증 계획/기록 양식](docs/USER_VALIDATION_PLAN.md)
-- [ESP32 펌웨어 v3 (CoreXY + 솔레노이드)](hardware/touchbridge_corexy/README.md)
-- [FIT0482 X/Y + 스위치봇 소프트웨어 계획](docs/XY_SWITCHBOT_SOFTWARE_PLAN.md) — 설계 배경 (누름부는 이후 솔레노이드로 변경)
+- [ESP32 펌웨어 v4 (CoreXY + SwitchBot Bot)](hardware/touchbridge_corexy/README.md)
+- [FIT0482 X/Y + 스위치봇 소프트웨어 계획](docs/XY_SWITCHBOT_SOFTWARE_PLAN.md) — 설계 배경 (누름부는 현재 SwitchBot Bot)
 - [앱-하드웨어 연동 계약서 (BLE/Wi-Fi, XYZ G-code, 레거시 명령)](docs/HW_APP_INTEGRATION_CONTRACT_KO.md)
 - [하드웨어 마이그레이션 계획서](docs/HARDWARE_MIGRATION_PLAN.md)
 - [하드웨어 작업 및 안전 체크리스트](docs/HARDWARE_TASKS.md)
@@ -405,8 +406,8 @@ python -m unittest discover -s backend -p 'test_*.py'
 - 6V 모터 전원과 ESP32 로직 전원을 분리하고 공통 GND 연결
 - 엔코더 A/B상 방향·카운트 확인, 벽 감지 원점 복귀와 추종 오차(걸림) 감지 동작 확인
   (리밋 스위치를 달 경우 fail-safe 동작도 확인)
-- 홈 완료 전 이동 금지, 허용 오차 밖에서는 솔레노이드 누름 금지 확인
-- 솔레노이드 구동부의 플라이백 다이오드 확인
+- 홈 완료 전 이동 금지, 허용 오차 밖에서는 Bot 누름 금지 확인
+- Bot 비밀번호 해제, 누름(Press) 모드, 배터리 잔량, ESP32와의 BLE 거리 확인
 - 적정 퓨즈 장착
 - 하드웨어 비상정지(E‑STOP) 회로 구성(필수)
 

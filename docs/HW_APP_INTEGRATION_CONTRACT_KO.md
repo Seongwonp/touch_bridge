@@ -1,9 +1,12 @@
 # Touch Bridge 앱-하드웨어 연동 계약서 (실무 기준)
 
-> 이 문서는 GRBL XYZ 기반 v1 계약이다. 현행 펌웨어 v3(`hardware/touchbridge_corexy/`,
-> FIT0482 X/Y CoreXY + 솔레노이드)는 v2 JSON 계약(`ESP32_MOTION_PROTOCOL_V2.md`)을
-> 구현하면서 이 문서의 v1 G-code 명령도 계속 받는다 — Z축 명령은 솔레노이드
-> 누름/뗌으로 해석한다. 그래서 음성 경로의 v1 G-code 전송은 v3에서도 그대로 동작한다.
+> 이 문서는 GRBL XYZ 기반 v1 계약이다. 현행 펌웨어 v4(`hardware/touchbridge_corexy/`,
+> FIT0482 X/Y CoreXY + SwitchBot Bot)는 v2 JSON 계약(`ESP32_MOTION_PROTOCOL_V2.md`)을
+> 구현하면서 이 문서의 v1 G-code 명령도 계속 받는다 — Z축 하강은 Bot 누름
+> 1회로 해석하고 Z축 상승은 무시한다(Bot이 스스로 복귀). 그래서 음성 경로의 v1 G-code
+> 전송은 v4에서도 그대로 동작한다. 누름이 실패하면 펌웨어가 `FAULT <사유>`를 notify하고
+> 큐를 버리며, 앱은 `deviceFault`로 남은 전송을 멈춘다. `STOPPED`는 모터가 멈췄고 큐를
+> 버렸다는 뜻이며, 이미 Bot에 쓴 누름은 되돌릴 수 없다.
 
 ## 1) 목적
 앱(STT/AI)과 하드웨어(ESP32/AVR) 간 명령 포맷을 고정해, 기기별 매핑(2x2/3x3 등)이 바뀌어도 코드가 깨지지 않게 한다.

@@ -49,7 +49,7 @@ ESP32 허브
     ↓ 엔코더 폐루프 PID (CoreXY)
 FIT0482 X/Y 모터 2개
     ↓ 위치 오차·토큰 확인
-솔레노이드 누름부
+SwitchBot Bot 누름부 (ESP32가 BLE로 직접 제어)
     ↓
 가전 터치패드 물리적으로 누름
 ```
@@ -96,7 +96,7 @@ FIT0482 X/Y 모터 2개
 | 음성 인식 | speech_to_text |
 | TTS | flutter_tts |
 | 등록 | NFC (`nfc_manager`), BLE 스캔 |
-| 하드웨어 | ESP32 + FIT0482 엔코더 모터 X/Y (CoreXY) + 솔레노이드 |
+| 하드웨어 | ESP32 + FIT0482 엔코더 모터 X/Y (CoreXY) + SwitchBot Bot |
 | 설계 참고 | WCAG 2.2, Android 접근성 지침, Apple VoiceOver 평가 기준 |
 
 ---
@@ -111,7 +111,8 @@ FIT0482 X/Y 모터 2개
 | 자동 테스트 446개 (Flutter 391 + 백엔드 55, 2026-10-10 기록) | ✅ 통과 기록 |
 | 앱-펌웨어 실기기 E2E | ⏳ 별도 검증 필요 |
 | CI (GitHub Actions) | ✅ 푸시마다 자동 검증 |
-| ESP32 펌웨어 v3 소스 | ✅ 저장소 포함 (`hardware/touchbridge_corexy/`) |
+| ESP32 펌웨어 v4 소스 | ✅ 저장소 포함, 실기기 실행 전 (`hardware/touchbridge_corexy/`) |
+| CT 전력 측정 노드 소스 | 저장소 포함, 플래시·측정 전 (`hardware/touchbridge_ct/`) |
 | 실기기 PID 튜닝·앱 연동 E2E | ⏳ 별도 검증 필요 |
 
 ---

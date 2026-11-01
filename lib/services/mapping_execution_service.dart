@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 
 import '../models/command_result.dart';
@@ -19,6 +21,8 @@ class MappingExecutionResult {
     this.dryRun = false,
     this.explicitUserMessage,
     this.stoppedByEmergency = false,
+    this.deviceFault = false,
+    this.deviceUnconfirmed = false,
   });
 
   final bool ok;
@@ -42,12 +46,27 @@ class MappingExecutionResult {
   /// 비상 정지 경로가 ACK 기준으로 따로 한다).
   final bool stoppedByEmergency;
 
+  /// 기기가 `FAULT`/`ERROR:`로 동작을 끝내지 못했다고 알려 남은 명령을 보내지
+  /// 않고 중단한 결과. 기기가 이미 큐를 비웠으므로 Z 복구도 보내지 않는다.
+  final bool deviceFault;
+
+  /// 명령은 보냈지만 제한시간 안에 기기가 끝났다는 상태를 받지 못한 결과.
+  /// 실패로 단정할 수 없고 완료도 아니다. 이미 눌렸을 수 있으므로 호출부는
+  /// 자동 재시도하지 않는다.
+  final bool deviceUnconfirmed;
+
   /// 시각장애인 사용자에게 읽어줄 정직한 문구.
   /// 기술용어(G-code/XYZ/BT-xx)나 내부 좌표를 노출하지 않는다.
   /// (개발자 로그용 상세 문구는 [message]를 그대로 쓴다.)
   String get userMessage {
     if (explicitUserMessage != null) return explicitUserMessage!;
     if (stoppedByEmergency) return '비상 정지로 남은 동작을 취소했습니다.';
+    if (deviceFault) {
+      return '기기가 동작을 끝내지 못해 남은 동작을 취소했습니다. 기기 상태를 확인해 주세요.';
+    }
+    if (deviceUnconfirmed) {
+      return '기기 동작 결과를 확인하지 못했습니다. 다시 누르기 전에 기기 상태를 확인해 주세요.';
+    }
     if (!ok) {
       final mappingMissing = row == null || col == null;
       if (mappingMissing) {
@@ -81,9 +100,124 @@ class MappingExecutionService {
   MappingExecutionService._();
   static final MappingExecutionService instance = MappingExecutionService._();
 
+  static const _maxDrainDeadline = Duration(seconds: 60);
+  static const _drainQueryTimeout = Duration(seconds: 2);
+  Duration _drainPollInterval = const Duration(milliseconds: 300);
+  Duration _drainDeadlinePerButton = const Duration(seconds: 12);
+  Future<String?> Function()? _drainStatusOverride;
+
+  /// 드레인 대기의 `P` 응답을 테스트에서 공급한다. 주면 sendRaw 오버라이드가
+  /// 있어도 드레인을 건너뛰지 않는다. null로 부르면 기본값으로 되돌린다.
+  @visibleForTesting
+  void setDrainStatusOverride(
+    Future<String?> Function()? status, {
+    Duration pollInterval = const Duration(milliseconds: 300),
+    Duration deadlinePerButton = const Duration(seconds: 12),
+  }) {
+    _drainStatusOverride = status;
+    _drainPollInterval = pollInterval;
+    _drainDeadlinePerButton = deadlinePerButton;
+  }
+
+  static final _stateLine = RegExp(
+    r'^STATE\s+(\S+)\s.*\bbot=(\d+)\s+q=(\d+)\b',
+  );
+
+  /// 펌웨어 `P` 응답의 `STATE` 줄을 읽는다. 전력 이벤트나 `ok`, `DONE` 같은
+  /// 다른 줄, 잘린 줄은 null이다(판정 없이 다음 조회로 넘어간다).
+  @visibleForTesting
+  static ({String state, int bot, int queue})? parseStateLine(String? line) {
+    if (line == null || BleService.isPowerEventLine(line)) return null;
+    final m = _stateLine.firstMatch(line.trim());
+    if (m == null) return null;
+    return (
+      state: m.group(1)!,
+      bot: int.parse(m.group(2)!),
+      queue: int.parse(m.group(3)!),
+    );
+  }
+
+  /// 전송이 끝난 시퀀스를 기기가 다 처리할 때까지 `P`로 확인한다.
+  ///
+  /// 쓰기 성공은 기기 동작 완료가 아니다. Bot 누름은 연결·응답 대기로 수 초
+  /// 걸리고 그 뒤에야 FAULT가 올 수 있으므로, 큐가 비고(q=0) Bot이 쉴 때(bot=0)
+  /// 까지 기다린다. null이면 정상 완료(또는 드레인 생략)이고, 아니면 호출부가
+  /// 그대로 돌려줄 결과다. 매 조회마다 시퀀스와 같은 실행 토큰을 검사한다.
+  Future<MappingExecutionResult?> _awaitDeviceDrain({
+    required int epoch,
+    required int faultMark,
+    required int pressedButtons,
+  }) async {
+    final ble = BleService.instance;
+    final statusOverride = _drainStatusOverride;
+    if (pressedButtons <= 0) return null;
+    if (statusOverride == null && (ble.isDemoMode || ble.hasSendRawOverride)) {
+      return null;
+    }
+
+    const stopped = MappingExecutionResult(
+      ok: false,
+      message: '기기 완료 확인 중 비상 정지가 들어왔습니다.',
+      stoppedByEmergency: true,
+    );
+    const fault = MappingExecutionResult(
+      ok: false,
+      message: '기기 완료 확인 중 기기 오류 보고가 들어왔습니다.',
+      deviceFault: true,
+    );
+
+    final perButtonMs = _drainDeadlinePerButton.inMilliseconds;
+    final deadline = Duration(
+      milliseconds: math.min(
+        perButtonMs * pressedButtons,
+        _maxDrainDeadline.inMilliseconds,
+      ),
+    );
+    final clock = Stopwatch()..start();
+    while (true) {
+      if (ble.motionEpoch != epoch) return stopped;
+      if (ble.deviceFaultCount != faultMark) return fault;
+      final remaining = deadline - clock.elapsed;
+      if (remaining <= Duration.zero) {
+        AppLogger.warn('mapping.drain.unconfirmed', {
+          'deadline_ms': deadline.inMilliseconds,
+        });
+        return const MappingExecutionResult(
+          ok: false,
+          message: '제한시간 안에 기기 완료 상태를 받지 못했습니다.',
+          deviceUnconfirmed: true,
+        );
+      }
+
+      final line = statusOverride != null
+          ? await statusOverride()
+          : await ble.sendRawWithResponse(
+              'P',
+              timeout: remaining < _drainQueryTimeout
+                  ? remaining
+                  : _drainQueryTimeout,
+            );
+      // 응답을 기다리는 동안의 정지·오류가 "비어 있음"보다 먼저다. notify는 순서가
+      // 지켜지므로 FAULT 뒤에 온 idle 응답은 여기서 걸러진다.
+      if (ble.motionEpoch != epoch) return stopped;
+      if (ble.deviceFaultCount != faultMark) return fault;
+
+      final status = parseStateLine(line);
+      if (status != null) {
+        if (status.state == 'FAULT') return fault;
+        if (status.queue == 0 && status.bot == 0) return null;
+      }
+      await Future<void>.delayed(_drainPollInterval);
+    }
+  }
+
   /// [epoch]: 상위 시퀀스가 시작 시점에 잡은 실행 토큰([BleService.motionEpoch]).
   /// 넘기지 않으면 이 호출이 시작될 때 잡는다. 모든 대기(`await`) 뒤에 같은 토큰을
   /// 다시 비교해, 대기 중 들어온 비상 정지 이후로는 어떤 줄도 보내지 않는다.
+  ///
+  /// [faultMark]: 상위가 잡은 [BleService.deviceFaultCount]. [epoch]와 같은
+  /// 방식이며, 값이 바뀌면 남은 줄과 Z 복구를 보내지 않고
+  /// [MappingExecutionResult.deviceFault]로 끝낸다. 정지 판정이 항상 먼저다.
   Future<MappingExecutionResult> pressButton({
     required String deviceId,
     required DeviceMappingProfile profile,
@@ -91,8 +225,10 @@ class MappingExecutionService {
     Duration afterGridDelay = const Duration(milliseconds: 250),
     bool dryRun = false,
     int? epoch,
+    int? faultMark,
   }) async {
     final token = epoch ?? BleService.instance.motionEpoch;
+    final mark = faultMark ?? BleService.instance.deviceFaultCount;
     if (profile.calibrationInvalidated) {
       AppLogger.warn('mapping.press.calibration_invalidated', {
         'device_id': deviceId,
@@ -178,6 +314,27 @@ class MappingExecutionService {
         stoppedByEmergency: true,
       );
     }
+    MappingExecutionResult faultResult(int sentLines) {
+      AppLogger.warn('mapping.press.cancelled_by_device_fault', {
+        'device_id': deviceId,
+        'button_id': buttonId,
+        'sent_lines': sentLines,
+      });
+      return MappingExecutionResult(
+        ok: false,
+        message: '기기 오류 보고로 남은 명령 전송을 취소했습니다. '
+            '(전송된 라인: $sentLines/${gcode.length})',
+        buttonId: buttonId,
+        row: resolved.row,
+        col: resolved.col,
+        x: x,
+        y: y,
+        gcode: gcode,
+        deviceFault: true,
+      );
+    }
+
+    if (BleService.instance.deviceFaultCount != mark) return faultResult(0);
     AppLogger.info('mapping.press.send', {
       'device_id': deviceId,
       'button_id': buttonId,
@@ -190,7 +347,11 @@ class MappingExecutionService {
       'gcode': gcode,
     });
 
-    final send = await sendGcodeSequenceWithIndex(gcode, epoch: token);
+    final send = await sendGcodeSequenceWithIndex(
+      gcode,
+      epoch: token,
+      faultMark: mark,
+    );
 
     if (send.stopped) {
       // 비상 정지/끊김으로 끊긴 경우: Z 복구 이동 명령을 보내지 않는다.
@@ -214,6 +375,8 @@ class MappingExecutionService {
       );
     }
 
+    if (send.deviceFault) return faultResult(send.failedIndex);
+
     if (!send.ok) {
       // Z 하강 라인(G1 Z<pressZ>) 이후에 실패하면 누름 핀이 버튼을 누른 채
       // 멈춰 있을 수 있다. best-effort로 안전 높이 복구를 시도하고, 복구도
@@ -229,6 +392,7 @@ class MappingExecutionService {
           safeZ: profile.travelHeightZ,
           feed: profile.pressFeed,
           epoch: token,
+          faultMark: mark,
         );
         recovered = recovery.recovered;
         stoppedDuringRecovery = recovery.stopped;
@@ -268,6 +432,7 @@ class MappingExecutionService {
         x: x,
         y: y,
         gcode: gcode,
+        deviceFault: BleService.instance.deviceFaultCount != mark,
         explicitUserMessage: zMayBeDown && !recovered
             ? '명령 전송이 중간에 끊겼습니다. 누름 장치가 버튼을 누른 채 멈춰 있을 수 '
                   '있으니 기기 상태를 확인하고, 필요하면 비상 정지를 사용해 주세요.'
@@ -299,6 +464,7 @@ class MappingExecutionService {
     // 다음 버튼을 누르지 않는다. (한 버튼 안의 줄 단위 검사는
     // [sendGcodeSequenceWithIndex]가 한다.)
     final epoch = BleService.instance.motionEpoch;
+    final faultMark = BleService.instance.deviceFaultCount;
     for (final buttonId in buttonIds) {
       if (!dryRun && BleService.instance.motionEpoch != epoch) {
         AppLogger.warn('mapping.sequence.cancelled_by_stop', {
@@ -313,12 +479,26 @@ class MappingExecutionService {
           stoppedByEmergency: true,
         );
       }
+      if (!dryRun && BleService.instance.deviceFaultCount != faultMark) {
+        AppLogger.warn('mapping.sequence.cancelled_by_device_fault', {
+          'device_id': deviceId,
+          'next_button_id': buttonId,
+        });
+        return MappingExecutionResult(
+          ok: false,
+          message: '기기 오류 보고로 남은 버튼($buttonId 이후)을 누르지 않았습니다.',
+          buttonId: buttonId,
+          gcode: dryRunGcode,
+          deviceFault: true,
+        );
+      }
       final result = await pressButton(
         deviceId: deviceId,
         profile: profile,
         buttonId: buttonId,
         dryRun: dryRun,
         epoch: epoch,
+        faultMark: faultMark,
       );
       if (!result.ok) return result;
       dryRunGcode.addAll(result.gcode);
@@ -333,6 +513,22 @@ class MappingExecutionService {
         gcode: dryRunGcode,
         stoppedByEmergency: true,
       );
+    }
+    if (!dryRun && BleService.instance.deviceFaultCount != faultMark) {
+      return MappingExecutionResult(
+        ok: false,
+        message: '시퀀스 전송 후 대기 중 기기 오류 보고가 들어왔습니다.',
+        gcode: dryRunGcode,
+        deviceFault: true,
+      );
+    }
+    if (!dryRun) {
+      final drain = await _awaitDeviceDrain(
+        epoch: epoch,
+        faultMark: faultMark,
+        pressedButtons: buttonIds.length,
+      );
+      if (drain != null) return drain;
     }
     return MappingExecutionResult(
       ok: true,
@@ -351,6 +547,7 @@ class MappingExecutionService {
   }) async {
     final ble = BleService.instance;
     final epoch = ble.motionEpoch;
+    final faultMark = ble.deviceFaultCount;
     for (final buttonId in buttonIds) {
       if (ble.motionEpoch != epoch) {
         AppLogger.warn('mapping.physical_sequence.cancelled_by_stop', {
@@ -363,7 +560,22 @@ class MappingExecutionService {
           stoppedByEmergency: true,
         );
       }
-      final result = await pressPhysical(buttonId, epoch: epoch);
+      if (ble.deviceFaultCount != faultMark) {
+        AppLogger.warn('mapping.physical_sequence.cancelled_by_device_fault', {
+          'next_button_id': buttonId,
+        });
+        return MappingExecutionResult(
+          ok: false,
+          message: '기기 오류 보고로 남은 버튼($buttonId 이후)을 누르지 않았습니다.',
+          buttonId: buttonId,
+          deviceFault: true,
+        );
+      }
+      final result = await pressPhysical(
+        buttonId,
+        epoch: epoch,
+        faultMark: faultMark,
+      );
       if (!result.ok) return result;
       await Future<void>.delayed(betweenPressDelay);
     }
@@ -374,6 +586,19 @@ class MappingExecutionService {
         stoppedByEmergency: true,
       );
     }
+    if (ble.deviceFaultCount != faultMark) {
+      return const MappingExecutionResult(
+        ok: false,
+        message: '시퀀스 전송 후 대기 중 기기 오류 보고가 들어왔습니다.',
+        deviceFault: true,
+      );
+    }
+    final drain = await _awaitDeviceDrain(
+      epoch: epoch,
+      faultMark: faultMark,
+      pressedButtons: buttonIds.length,
+    );
+    if (drain != null) return drain;
     return const MappingExecutionResult(ok: true, message: '물리 좌표 시퀀스 전송 완료');
   }
 
@@ -383,6 +608,7 @@ class MappingExecutionService {
   Future<MappingExecutionResult> pressPhysical(
     String buttonId, {
     int? epoch,
+    int? faultMark,
   }) async {
     final phys = MicrowaveCommandService.btnToPhysical(buttonId);
     if (phys == null) {
@@ -407,14 +633,26 @@ class MappingExecutionService {
     // 실행 토큰. 상위 시퀀스가 넘긴 값을 쓰고, 없으면 지금 잡는다. 각 명령 전과
     // 모든 대기 뒤에 비교해, 비상 정지 이후에는 남은 이동·누름 명령을 보내지 않는다.
     final token = epoch ?? ble.motionEpoch;
+    final mark = faultMark ?? ble.deviceFaultCount;
     var stopped = false;
+    var faulted = false;
     Future<bool> raw(String command) async {
       if (ble.motionEpoch != token) {
         stopped = true;
         return false;
       }
+      if (ble.deviceFaultCount != mark) {
+        faulted = true;
+        return false;
+      }
       final ok = await ble.sendRaw(command);
-      if (!ok && ble.motionEpoch != token) stopped = true;
+      if (!ok) {
+        if (ble.motionEpoch != token) {
+          stopped = true;
+        } else if (ble.deviceFaultCount != mark) {
+          faulted = true;
+        }
+      }
       return ok;
     }
 
@@ -438,12 +676,32 @@ class MappingExecutionService {
       );
     }
 
+    MappingExecutionResult faultResult() {
+      AppLogger.warn('mapping.press_physical.cancelled_by_device_fault', {
+        'button_id': buttonId,
+        'z_down': zDown,
+      });
+      return MappingExecutionResult(
+        ok: false,
+        message: '$buttonId 기기 오류 보고로 남은 명령 전송 취소',
+        buttonId: buttonId,
+        x: targetX,
+        y: targetY,
+        deviceFault: true,
+      );
+    }
+
     Future<MappingExecutionResult> fail() async {
       // 정지로 끊긴 경우 Z 복구 이동을 보내지 않는다 — 정지 계약 우선.
       if (stopped) return stoppedResult();
+      // 기기 오류도 복구 이동을 보내지 않는다 — 기기가 이미 큐를 비웠다.
+      if (faulted) return faultResult();
       var recovered = true;
       if (zDown) {
-        final recovery = await _tryRecoverZRelative(epoch: token);
+        final recovery = await _tryRecoverZRelative(
+          epoch: token,
+          faultMark: mark,
+        );
         recovered = recovery.recovered;
         AppLogger.warn('mapping.press_physical.z_recovery', {
           'button_id': buttonId,
@@ -461,6 +719,7 @@ class MappingExecutionService {
         buttonId: buttonId,
         x: targetX,
         y: targetY,
+        deviceFault: ble.deviceFaultCount != mark,
         explicitUserMessage: zDown && !recovered
             ? '명령 전송이 중간에 끊겼습니다. 누름 장치가 버튼을 누른 채 멈춰 있을 수 '
                   '있으니 기기 상태를 확인하고, 필요하면 비상 정지를 사용해 주세요.'
@@ -495,6 +754,7 @@ class MappingExecutionService {
       stopped = true;
       return stoppedResult(detail: '전송 후 대기 중 정지');
     }
+    if (ble.deviceFaultCount != mark) return faultResult();
 
     return MappingExecutionResult(
       ok: true,
@@ -591,28 +851,44 @@ class MappingExecutionService {
   /// [epoch]: 상위가 잡은 실행 토큰. 넘기지 않으면 여기서 잡는다(단독 호출용).
   /// 마지막 줄 뒤 대기 중 정지가 오면 줄은 다 나갔어도 `stopped: true`,
   /// `failedIndex: gcode.length`로 보고한다.
-  Future<({bool ok, int failedIndex, bool stopped})> sendGcodeSequenceWithIndex(
+  ///
+  /// [deviceFault]가 true면 기기가 오류를 보고해([faultMark]와 현재
+  /// [BleService.deviceFaultCount]가 다름) 멈춘 것이다. 호출부는 복구 이동을
+  /// 보내면 안 된다. 정지가 함께 오면 `stopped`가 우선한다.
+  Future<({bool ok, int failedIndex, bool stopped, bool deviceFault})>
+  sendGcodeSequenceWithIndex(
     List<String> gcode, {
     int? epoch,
+    int? faultMark,
   }) async {
     final ble = BleService.instance;
     final token = epoch ?? ble.motionEpoch;
+    final mark = faultMark ?? ble.deviceFaultCount;
+    ({bool ok, int failedIndex, bool stopped, bool deviceFault}) halted(
+      int index,
+    ) {
+      final stopped = ble.motionEpoch != token;
+      return (
+        ok: false,
+        failedIndex: index,
+        stopped: stopped,
+        deviceFault: !stopped && ble.deviceFaultCount != mark,
+      );
+    }
+
     for (var i = 0; i < gcode.length; i++) {
-      if (ble.motionEpoch != token) {
-        return (ok: false, failedIndex: i, stopped: true);
+      if (ble.motionEpoch != token || ble.deviceFaultCount != mark) {
+        return halted(i);
       }
       final ok = await ble.sendRaw(gcode[i]);
-      if (!ok) {
-        // write 대기 중 정지가 들어와 sendRaw가 큐 안에서 취소된 경우도 포함한다.
-        final stopped = ble.motionEpoch != token;
-        return (ok: false, failedIndex: i, stopped: stopped);
-      }
+      // write 대기 중 정지가 들어와 sendRaw가 큐 안에서 취소된 경우도 포함한다.
+      if (!ok) return halted(i);
       await Future<void>.delayed(const Duration(milliseconds: 120));
     }
-    if (ble.motionEpoch != token) {
-      return (ok: false, failedIndex: gcode.length, stopped: true);
+    if (ble.motionEpoch != token || ble.deviceFaultCount != mark) {
+      return halted(gcode.length);
     }
-    return (ok: true, failedIndex: -1, stopped: false);
+    return (ok: true, failedIndex: -1, stopped: false, deviceFault: false);
   }
 
   /// Z축이 내려간 채 시퀀스가 끊겼을 때의 best-effort 복구 (절대 좌표 경로).
@@ -623,12 +899,19 @@ class MappingExecutionService {
     required double safeZ,
     required int feed,
     required int epoch,
+    required int faultMark,
   }) async {
     final ble = BleService.instance;
     try {
       if (ble.motionEpoch != epoch) return (recovered: false, stopped: true);
+      if (ble.deviceFaultCount != faultMark) {
+        return (recovered: false, stopped: false);
+      }
       final abs = await ble.sendRaw('G90');
       if (ble.motionEpoch != epoch) return (recovered: false, stopped: true);
+      if (ble.deviceFaultCount != faultMark) {
+        return (recovered: false, stopped: false);
+      }
       final up = await ble.sendRaw('G0 Z${_fmt(safeZ)} F$feed');
       return (recovered: abs && up, stopped: ble.motionEpoch != epoch);
     } catch (_) {
@@ -641,12 +924,19 @@ class MappingExecutionService {
   /// 핀이 실제로는 안 내려간 상태에서 실행돼도 패널 반대 방향 1mm 이동이라 무해하다.
   Future<({bool recovered, bool stopped})> _tryRecoverZRelative({
     required int epoch,
+    required int faultMark,
   }) async {
     final ble = BleService.instance;
     try {
       if (ble.motionEpoch != epoch) return (recovered: false, stopped: true);
+      if (ble.deviceFaultCount != faultMark) {
+        return (recovered: false, stopped: false);
+      }
       final up = await ble.sendRaw('G1 Z1.0 F150');
       if (ble.motionEpoch != epoch) return (recovered: false, stopped: true);
+      if (ble.deviceFaultCount != faultMark) {
+        return (recovered: false, stopped: false);
+      }
       final abs = await ble.sendRaw('G90');
       return (recovered: up && abs, stopped: ble.motionEpoch != epoch);
     } catch (_) {

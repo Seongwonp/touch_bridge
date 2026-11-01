@@ -44,7 +44,7 @@
 
 - 시각장애인 당사자 사용성 평가는 미실시(`docs/USER_VALIDATION_PLAN.md`는 계획서).
   협회장 면담(경기도시각장애인연합회, 수원)으로 요구사항만 확인했다.
-- 펌웨어 v3는 저장소에 있지만(`hardware/touchbridge_corexy/`, 2026-10-10) **앱과 묶은
+- 펌웨어 v4는 저장소에 있지만(`hardware/touchbridge_corexy/`) **실행·앱과 묶은
   실기기 E2E는 미완**이다. 데모는 `--dart-define=TOUCH_BRIDGE_DEMO=true`.
 - TalkBack 완주 검증은 아직 `[ ]`(`docs/KS_X_3253_CHECKLIST.md`). "스크린리더 검증 완료"라고 말하지 말 것.
 - 프로덕션 전 보안 후속: 앱 `.env` asset의 정적 노출 가능성, 프록시 뒤 레이트리밋 IP 신뢰 설정, 미프로비저닝 BLE 기기의 fail-open 정책을 재검토한다. 상세: `docs/SECURITY.md` 및 `docs/WORK_LOG.md`의 #6·#7·#9.
@@ -77,9 +77,9 @@
 
 가전 터치패드 위에 **부착하는 IoT 장치**가 스마트폰 앱/음성 명령을 받아 **물리적으로 버튼을 대신 눌러주는** 시스템
 
-## 하드웨어 (펌웨어 v3 — CoreXY + 솔레노이드)
+## 하드웨어 (펌웨어 v4 — CoreXY + SwitchBot Bot)
 
-펌웨어 소스: **`hardware/touchbridge_corexy/`** (Arduino IDE 스케치, 2026-10-10 저장소 반영).
+펌웨어 소스: **`hardware/touchbridge_corexy/`** (Arduino IDE 스케치). 실기기 실행 기록은 없다.
 하드웨어 사실관계는 이 문서보다 **펌웨어 코드가 기준**이다. 어긋나면 코드를 믿을 것.
 
 | 항목 | 구성 |
@@ -87,25 +87,30 @@
 | MCU | ESP32 DevKit V1 |
 | X/Y 모션 | DFRobot `FIT0482` 엔코더 DC 기어모터 2개, **CoreXY**, 폐루프 PID (1kHz) |
 | 모터 드라이버 | JMOD-MOTOR-1 (TB6612FNG) |
-| **누름부** | **SparkFun ROB-11015 5V 솔레노이드** (N-MOSFET 로우사이드, GPIO 23) |
+| **누름부** | **SwitchBot Bot** (ESP32가 BLE central로 직접 제어, 허브 불필요, `SwitchBotBLE.h`) |
+| 전력 측정(선택) | DFRobot SEN0211 + 별도 ESP32 CT 노드 `hardware/touchbridge_ct/` (UART, 기본 꺼짐) |
 | 원점 복귀 | **스톨(벽 접촉) 감지가 기본**. 리밋 스위치는 선택(`USE_LIMIT_SWITCHES`, 기본 `false`) |
 | 의존 라이브러리 | ArduinoJson v7 |
 
 - 핀 배치·기구 상수·PID 게인은 `config.h`, 배선과 첫 구동 절차는 그 폴더의 `README.md`.
+- Bot 설정(`config_local.h`의 `SWITCHBOT_MAC`, 누름 모드, 비밀번호 해제)도 같은 `README.md`를 따른다.
+  Bot의 OK는 명령 수락이지 패널이 눌렸다는 감지가 아니다.
+- **CT 링크는 구현됐지만 플래시·측정 전이다.** `CT_LINK_ENABLED`(기본 0), 모터 ESP32 RX 21 / TX 22,
+  CT 노드 TX 17 / RX 16. `CT_ON_WATTS`는 측정하지 않은 자리표시자다. 앱에는
+  `PowerStatusService`가 있지만 UI는 없고, 전력 값은 안전 판단에 쓰지 않는다.
 - 모든 물리 동작은 단일 큐에서 순서대로 실행되고, 이동 실패·정지가 오면 남은 큐를 버린다.
 - **알려진 결함:** `config.h`의 `PIN_LIMIT_X = 30`, `PIN_LIMIT_Y = 100`은 ESP32에 없는
   GPIO다. 지금은 리밋 스위치를 안 써서 무해하지만, `true`로 바꾸기 전에 반드시 실제 핀
-  (예: 21, 22 — 23은 솔레노이드)으로 고쳐야 한다.
+  (예: 23 — 21, 22는 CT 링크가 쓴다)으로 고쳐야 한다.
 
 ### 설계 문서와의 관계
 
 - `docs/XY_SWITCHBOT_SOFTWARE_PLAN.md`는 앱 쪽 X/Y 이동·매핑 설계 근거로는 여전히 유효하지만,
-  **누름부를 스위치봇으로 가정한 부분은 펌웨어 v3에서 솔레노이드로 바뀌었다.**
-- 보호자 화면 문구는 장치 중립어("터치봉")로 정리했지만, 코드의 클래스명·프로토콜 값에는
-  `switchbot`이 남아 있다(아래 TODO). 동작에는 문제없다 — 앱이 보내는
-  `pressActuator: 'switchbot'`을 펌웨어가 읽지 않고 솔레노이드로 누른다.
-- 구 GRBL 경로(`NK1704S + TB6600 + Arduino Uno`)는 펌웨어 v3가 **G-code 호환 명령으로 흡수**했다
-  (Z축 명령을 솔레노이드 누름/뗌으로 해석). 구 계획: `docs/HARDWARE_MIGRATION_PLAN.md`
+  누름부를 스위치봇으로 가정한 부분은 펌웨어 v4와 다시 일치한다. 다만 **허브 없이 ESP32가 Bot에 직접 연결한다.**
+- 보호자 화면 문구는 장치 중립어("터치봉")이고, 코드의 클래스명·프로토콜 값은 `switchbot`이다.
+  앱이 보내는 `pressActuator: 'switchbot'`을 펌웨어는 읽지 않고 항상 Bot으로 누른다.
+- 구 GRBL 경로(`NK1704S + TB6600 + Arduino Uno`)는 펌웨어 v4도 **G-code 호환 명령으로 흡수**한다
+  (Z- 명령을 Bot 1회 누름으로 해석, Z+는 무시). 구 계획: `docs/HARDWARE_MIGRATION_PLAN.md`
 
 ## Flutter 앱 — 기술 스택
 
@@ -227,8 +232,8 @@ lib/
 - 진입 시 버튼을 자동 선택하지 않는다. 사용자가 명시적으로 선택한 뒤에만 `선택한 버튼 위치 저장`을 활성화한다.
 - 패널 그림은 등록 버튼과 앱이 성공적으로 전송한 이동 명령 기준의 현재 위치를 함께 표시한다.
 - 1/5/10mm 조이스틱과 SwitchBot 눌러보기는 보호자 위치 보정 용도이며, raw G-code와 Z축 제어는 고급/개발자 영역으로 분리한다.
-  (화면 문구는 "현재 위치 눌러보기". 코드의 `SwitchBot` 이름은 옛 표기이고 실제 누름부는
-  **솔레노이드**다 — 하드웨어 절 참고.)
+  (화면 문구는 "현재 위치 눌러보기". 코드의 `SwitchBot` 이름은 실제 누름부인
+  **SwitchBot Bot**과 일치한다 — 하드웨어 절 참고.)
 
 ## 음성 명령 (Gemini AI)
 
@@ -369,13 +374,13 @@ Nordic UART     : 6E400001-...  ← 일반 BLE 터미널 앱 디버깅용
 USB 시리얼      : 115200, 같은 명령을 받음 (인증 없이 항상 허용)
 ```
 
-펌웨어 v3가 받는 명령은 3종이다 (상세는 `touchbridge_corexy.ino` 헤더 주석):
+펌웨어 v4가 받는 명령은 3종이다 (상세는 `touchbridge_corexy.ino` 헤더 주석):
 
 1. **앱 v2 JSON** — 사진 매핑 경로(`SafePressCoordinator`). 명세: `docs/ESP32_MOTION_PROTOCOL_V2.md`
    `{"version":2,"commandId":..,"action":"home|move_only|press|stop|status",...}`
    → notify: `RECEIVED → MOVING → POSITIONED(+positionToken) → PRESSING → COMPLETED / STOPPED / ERROR_*`
    `press`는 직전 `move_only`가 발급한 **1회용 `positionToken`**이 있어야 실행된다.
-2. **GRBL 호환 G-code** — 음성 경로(`MappingExecutionService`). Z축 명령을 솔레노이드로 해석.
+2. **GRBL 호환 G-code** — 음성 경로(`MappingExecutionService`). Z- 명령을 Bot 1회 누름으로 해석. 시퀀스 전송 뒤 `P`로 `q=0`, `bot=0`을 확인한다.
 3. **텍스트 명령** — 직접 시험용 (`G x y`, `H`, `S`, `P`, `M`, `K` 등).
 
 인증: `{"action":"challenge"|"auth"|"provision"}` — HMAC-SHA256 challenge-response,
@@ -449,16 +454,18 @@ BLE 연동 구현 파일: `lib/services/ble_service.dart`
 - [ ] **BLE 실기기 E2E 검증** — 실제 ESP32에 연결해 `sendPress()` / `sendEmergencyStop()` 동작 확인
   - 확인 항목: ACK 수신, 타임아웃 처리, 재연결 후 명령 재전송
   - 파일: `lib/services/ble_service.dart`, `lib/services/mapping_execution_service.dart`
-  - 펌웨어: `hardware/touchbridge_corexy/` (v3). 앱 v2 action 5종은 펌웨어가 전부 처리함을
+  - 펌웨어: `hardware/touchbridge_corexy/` (v4). 앱 v2 action 5종은 펌웨어가 전부 처리함을
     코드상 확인(2026-10-10) — 실기에서 notify 흐름과 `positionToken` 왕복을 검증할 것.
 - [x] **누름부 화면 문구 정리** (2026-10-10) — 보호자 화면의 "스위치봇"을 장치 중립어
   "터치봉"/"현재 위치 눌러보기"로 바꿨다(`manual_mapping_screen.dart`).
   참고: 앱에서 **"허브"는 Touch Bridge 기기(ESP32) 자체**를 뜻하므로 "허브 연결을 확인하세요"는
-  솔레노이드 구성에서도 맞는 안내다. 스위치봇 허브와 혼동하지 말 것.
-- [ ] (선택) **내부 이름 정리** — 동작에는 영향 없어 남겨 두었다.
+  v4 구성에서도 맞는 안내다. 스위치봇 허브와 혼동하지 말 것(v4는 스위치봇 허브를 쓰지 않는다).
+- [x] **내부 이름 정리 불필요** — 누름부가 v4에서 SwitchBot Bot이 되어 아래 이름이 실제와 맞다.
   `Esp32SwitchBotActuator`(`motion_controller.dart`), `_testSwitchBotAtCurrentPosition`·
   `id: 'switchbot_test'`(`manual_mapping_screen.dart`), `pressActuator: 'switchbot'`
-  (`esp32_motion_protocol.dart` — 펌웨어가 읽지 않음. 바꾸면 `ESP32_MOTION_PROTOCOL_V2.md`와 테스트도 함께)
+  (`esp32_motion_protocol.dart` — 펌웨어가 읽지 않음)
+- [ ] **CT 링크 실기 검증** — 배선 후 `CT_LINK_ENABLED`를 1로 켜고 보고 수신, 끊김 시 `unknown`, 가전별
+  `CT_ON_WATTS` 측정, BLE·모션 영향을 확인한다. 전력 표시 UI는 그 뒤에 만든다.
 - [ ] **펌웨어 리밋 스위치 핀 수정** — `config.h`의 `PIN_LIMIT_X = 30` / `PIN_LIMIT_Y = 100`은
   ESP32에 없는 GPIO. 리밋 스위치를 달기 전에 고칠 것(하드웨어 담당).
 - [ ] **ESP32 모션 v2 상태 번역·실기 검증** — `homing/moving/positioned/pressing/completed/error` 상태와 ACK를 한국어 TTS로 전달

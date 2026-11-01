@@ -27,6 +27,24 @@ constexpr bool USE_LIMIT_SWITCHES = false;
 constexpr int  PIN_LIMIT_X = 30;  // NO 스위치, GND로 단락 = 눌림
 constexpr int  PIN_LIMIT_Y = 100;
 
+// ---------------- CT 노드 수신 (기본 꺼짐) ----------------
+// 배선 전에는 0으로 둔다. 0이면 UART를 열지 않아 기존 빌드와 동작이 같다.
+// 표시 전용 데이터이며 어떤 안전 판단에도 쓰지 않는다.
+#define CT_LINK_ENABLED 0
+
+// Serial2 기본 핀 16/17은 위의 엔코더 입력이므로 빈 핀으로 옮긴다.
+constexpr int      PIN_CT_LINK_RX = 21;  // <- CT 노드 GPIO17(TX)
+constexpr int      PIN_CT_LINK_TX = 22;  // -> CT 노드 GPIO16(RX), 예비선
+constexpr uint32_t CT_LINK_BAUD   = 115200;
+constexpr size_t   CT_LINK_RX_BUFFER_BYTES = 256;
+constexpr size_t   CT_LINE_MAX     = 96;      // 넘는 줄은 버린다
+constexpr int      CT_POLL_BUDGET  = 64;      // loop 1회당 처리할 최대 바이트
+constexpr uint32_t CT_AVG_WINDOW_MS = 5000;   // 이동 평균 창
+constexpr uint32_t CT_STALE_MS      = 3000;   // 이보다 오래 끊기면 UNKNOWN (0W로 보지 않음)
+constexpr uint32_t CT_EMIT_MS       = 1000;   // 앱 보고 주기
+// 자리표시자: 측정값이 아니다. 대상 가전마다 대기 전력과 동작 전력을 재서 정해야 한다.
+constexpr float    CT_ON_WATTS      = 50.0f;
+
 // ---------------- 방향 보정 ----------------
 // 'M' 명령으로 시험해서 맞춤 (README.md의 '처음 켤 때 순서' 참고)
 constexpr bool MOTOR_A_INVERT = false;

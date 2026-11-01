@@ -1,0 +1,4 @@
+// config_local.h로 복사한 뒤 실제 Bot 주소(소문자)로 바꾼다.
+// config_local.h는 gitignore 대상이다. 실제 주소를 저장소에 올리지 말 것.
+#pragma once
+#define SWITCHBOT_MAC "aa:bb:cc:dd:ee:ff"

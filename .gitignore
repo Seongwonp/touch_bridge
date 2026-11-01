@@ -85,3 +85,7 @@ Touch_bridge_HW_code-moter/
 # 제출용 산출물 (pptx/docx/이미지 — 저장소에 넣지 않고 파일로 주고받는다)
 docs/submission/
 
+
+# 기기별 값 (SwitchBot Bot MAC)
+hardware/touchbridge_corexy/config_local.h
+hardware/touchbridge_ct/.pio/

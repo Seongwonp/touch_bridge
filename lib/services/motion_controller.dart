@@ -73,7 +73,8 @@ abstract interface class PressActuator {
   Future<MotionOutcome> press({
     required String deviceId,
     required String positionToken,
-    Duration timeout = const Duration(seconds: 8),
+    // 펌웨어의 Bot 누름 상한(BOT_PRESS_TIMEOUT_MS, 8초)보다 길어야 한다.
+    Duration timeout = const Duration(seconds: 12),
   });
 }
 
@@ -354,7 +355,8 @@ class Esp32SwitchBotActuator implements PressActuator {
   Future<MotionOutcome> press({
     required String deviceId,
     required String positionToken,
-    Duration timeout = const Duration(seconds: 8),
+    // 펌웨어의 Bot 누름 상한(BOT_PRESS_TIMEOUT_MS, 8초)보다 길어야 한다.
+    Duration timeout = const Duration(seconds: 12),
   }) async {
     final commandId = _commandIdFactory();
     if (!_transport.isConnected) {

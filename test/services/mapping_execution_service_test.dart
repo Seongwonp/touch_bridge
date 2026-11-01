@@ -753,4 +753,289 @@ void main() {
       expect(sent.length, 14);
     });
   });
+
+  group('전송 뒤 기기 완료 대기(드레인)', () {
+    const idle =
+        'STATE IDLE homed=1 pos=(1.00, 2.00) ref=(1.00, 2.00) '
+        'enc=(1, 2) bot=0 q=0 auth=ok';
+    const busy =
+        'STATE MOVING homed=1 pos=(1.00, 2.00) ref=(1.00, 2.00) '
+        'enc=(1, 2) bot=1 q=2 auth=ok';
+    const poll = Duration(milliseconds: 1);
+    final profile = DeviceMappingProfile.defaultGrid(rows: 3, cols: 3);
+    final service = MappingExecutionService.instance;
+
+    Future<MappingExecutionResult> runPress() => service.pressSequence(
+      deviceId: 'd',
+      profile: profile,
+      buttonIds: const ['BT-01'],
+      betweenPressDelay: Duration.zero,
+    );
+
+    setUp(() => BleService.instance.setSendRawOverride((_) async => true));
+    tearDown(() {
+      BleService.instance.setSendRawOverride(null);
+      service.setDrainStatusOverride(null);
+    });
+
+    test('드레인 오버라이드가 없으면 조회 없이 끝난다', () async {
+      final result = await runPress();
+      expect(result.ok, isTrue);
+    });
+
+    test('dry-run은 드레인하지 않는다', () async {
+      var polls = 0;
+      service.setDrainStatusOverride(() async {
+        polls++;
+        return busy;
+      }, pollInterval: poll);
+      final result = await service.pressSequence(
+        deviceId: 'd',
+        profile: profile,
+        buttonIds: const ['BT-01'],
+        betweenPressDelay: Duration.zero,
+        dryRun: true,
+      );
+      expect(result.ok, isTrue);
+      expect(polls, 0);
+    });
+
+    test('q=0, bot=0이 될 때까지 기다린다 (다른 줄은 판정하지 않는다)', () async {
+      final replies = [
+        busy,
+        'ok',
+        '{"event":"power","w":1.0,"state":"on"}',
+        null,
+        'STATE IDLE homed=1 pos=(1.00, 2.00) bot=1 q=0 auth=ok',
+        'STATE IDLE homed=1 pos=(1.00, 2.00) bot=0 q=1 auth=ok',
+        idle,
+      ];
+      var polls = 0;
+      service.setDrainStatusOverride(
+        () async => replies[polls++],
+        pollInterval: poll,
+      );
+      final result = await runPress();
+      expect(result.ok, isTrue);
+      expect(polls, replies.length);
+    });
+
+    test('pressPhysicalSequence도 같은 드레인을 거친다', () async {
+      var polls = 0;
+      service.setDrainStatusOverride(() async {
+        polls++;
+        return polls < 2 ? busy : idle;
+      }, pollInterval: poll);
+      final result = await service.pressPhysicalSequence(const [
+        'BT-01',
+      ], betweenPressDelay: Duration.zero);
+      expect(result.ok, isTrue);
+      expect(polls, 2);
+    });
+
+    test('드레인 중 FAULT는 deviceFault다 (뒤이은 idle 응답보다 우선)', () async {
+      service.setDrainStatusOverride(() async {
+        BleService.instance.injectResponseForTest('FAULT BOT_TIMEOUT');
+        return idle;
+      }, pollInterval: poll);
+      final result = await runPress();
+      expect(result.ok, isFalse);
+      expect(result.deviceFault, isTrue);
+      expect(result.userMessage, contains('끝내지 못해'));
+    });
+
+    test('STATE FAULT 응답도 deviceFault다', () async {
+      service.setDrainStatusOverride(
+        () async => idle.replaceFirst('STATE IDLE', 'STATE FAULT'),
+        pollInterval: poll,
+      );
+      final result = await runPress();
+      expect(result.deviceFault, isTrue);
+    });
+
+    test('드레인 중 정지는 stoppedByEmergency다', () async {
+      BleService.instance.setPriorityStopOverride((_) async => 'STOPPED');
+      addTearDown(() => BleService.instance.setPriorityStopOverride(null));
+      var polls = 0;
+      service.setDrainStatusOverride(() async {
+        polls++;
+        if (polls == 2) await BleService.instance.sendEmergencyStop('d');
+        return polls >= 2 ? idle : busy;
+      }, pollInterval: poll);
+      final result = await runPress();
+      expect(result.ok, isFalse);
+      expect(result.stoppedByEmergency, isTrue);
+      expect(result.deviceFault, isFalse);
+      expect(polls, 2);
+    });
+
+    test('제한시간을 넘기면 완료가 아닌 미확인 결과다', () async {
+      service.setDrainStatusOverride(
+        () async => busy,
+        pollInterval: poll,
+        deadlinePerButton: const Duration(milliseconds: 20),
+      );
+      final result = await runPress();
+      expect(result.ok, isFalse);
+      expect(result.deviceUnconfirmed, isTrue);
+      expect(result.deviceFault, isFalse);
+      expect(result.stoppedByEmergency, isFalse);
+      expect(result.phase, CommandPhase.failed);
+      expect(result.userMessage, contains('확인하지 못했습니다'));
+      expect(result.userMessage, isNot(contains('완료')));
+    });
+
+    test('제한시간은 버튼 수에 비례한다', () async {
+      var polls = 0;
+      service.setDrainStatusOverride(
+        () async {
+          polls++;
+          return null;
+        },
+        pollInterval: const Duration(milliseconds: 5),
+        deadlinePerButton: const Duration(milliseconds: 30),
+      );
+      final clock = Stopwatch()..start();
+      final result = await service.pressSequence(
+        deviceId: 'd',
+        profile: profile,
+        buttonIds: const ['BT-01', 'BT-02'],
+        betweenPressDelay: Duration.zero,
+      );
+      expect(result.deviceUnconfirmed, isTrue);
+      expect(clock.elapsedMilliseconds, greaterThanOrEqualTo(60));
+      expect(polls, greaterThan(0));
+    });
+
+    test('STATE 줄 파서', () {
+      final s = MappingExecutionService.parseStateLine(busy);
+      expect(s?.state, 'MOVING');
+      expect(s?.bot, 1);
+      expect(s?.queue, 2);
+      expect(MappingExecutionService.parseStateLine('STATE MOVING homed=1'), isNull);
+      expect(MappingExecutionService.parseStateLine(null), isNull);
+    });
+  });
+
+  group('기기 오류 보고(FAULT/ERROR:) 시 남은 동작 중단', () {
+    final profile = DeviceMappingProfile.defaultGrid(rows: 3, cols: 3);
+
+    tearDown(() => BleService.instance.setSendRawOverride(null));
+
+    test('Z 하강 뒤 FAULT가 오면 다음 버튼과 Z 복구를 보내지 않는다', () async {
+      final sent = <String>[];
+      BleService.instance.setSendRawOverride((cmd) async {
+        sent.add(cmd);
+        if (cmd.startsWith('G1 Z')) {
+          BleService.instance.injectResponseForTest('FAULT BOT_TIMEOUT');
+        }
+        return true;
+      });
+
+      final result = await MappingExecutionService.instance.pressSequence(
+        deviceId: 'device-1',
+        profile: profile,
+        buttonIds: const ['BT-04', 'BT-05'],
+      );
+
+      expect(result.ok, isFalse);
+      expect(result.deviceFault, isTrue);
+      expect(result.stoppedByEmergency, isFalse);
+      expect(result.userMessage, contains('기기가 동작을 끝내지 못해'));
+      expect(sent.last, startsWith('G1 Z'), reason: '복구 줄도 다음 줄도 나가면 안 된다');
+      expect(sent.where((c) => c.startsWith('G0 X')).length, 1);
+    });
+
+    test('마지막 대기 중 ERROR:가 오면 정상 완료로 보고하지 않는다', () async {
+      final sent = <String>[];
+      BleService.instance.setSendRawOverride((cmd) async {
+        sent.add(cmd);
+        if (sent.length == 7) {
+          Future<void>.delayed(const Duration(milliseconds: 30), () {
+            BleService.instance.injectResponseForTest(
+              'ok\nERROR:AUTH_REQUIRED',
+            );
+          });
+        }
+        return true;
+      });
+
+      final result = await MappingExecutionService.instance.pressSequence(
+        deviceId: 'device-1',
+        profile: profile,
+        buttonIds: const ['BT-04'],
+      );
+
+      expect(sent.length, 7, reason: '줄은 이미 다 나갔다');
+      expect(result.ok, isFalse);
+      expect(result.deviceFault, isTrue);
+    });
+
+    test('pressPhysicalSequence: FAULT 뒤 남은 줄과 다음 버튼을 보내지 않는다', () async {
+      final sent = <String>[];
+      BleService.instance.setSendRawOverride((cmd) async {
+        sent.add(cmd);
+        if (cmd == 'G1 Z-1.0 F150') {
+          BleService.instance.injectResponseForTest('FAULT BOT_ENCRYPTED');
+        }
+        return true;
+      });
+
+      final result = await MappingExecutionService.instance
+          .pressPhysicalSequence(const ['BT-01', 'BT-02']);
+
+      expect(result.ok, isFalse);
+      expect(result.deviceFault, isTrue);
+      expect(sent.last, 'G1 Z-1.0 F150', reason: 'Z 복구도 보내면 안 된다');
+    });
+
+    test('정지와 기기 오류가 함께 오면 정지 판정이 우선한다', () async {
+      BleService.instance.setPriorityStopOverride((_) async => 'STOPPED');
+      addTearDown(() => BleService.instance.setPriorityStopOverride(null));
+      BleService.instance.setSendRawOverride((cmd) async {
+        if (cmd.startsWith('G1 Z')) {
+          BleService.instance.injectResponseForTest('FAULT BOT_TIMEOUT');
+          await BleService.instance.sendEmergencyStop('test-device');
+        }
+        return true;
+      });
+
+      final result = await MappingExecutionService.instance.pressButton(
+        deviceId: 'device-1',
+        profile: profile,
+        buttonId: 'BT-04',
+      );
+
+      expect(result.stoppedByEmergency, isTrue);
+      expect(result.deviceFault, isFalse);
+    });
+
+    test('G-code 거부(소문자 error:)도 기기 실패로 센다', () {
+      final before = BleService.instance.deviceFaultCount;
+      BleService.instance.injectResponseForTest('error:QUEUE_FULL');
+      expect(BleService.instance.deviceFaultCount, before + 1);
+    });
+
+    test('무관한 응답(ok, TEMP_OK)은 시퀀스를 중단하지 않는다', () async {
+      final sent = <String>[];
+      final before = BleService.instance.deviceFaultCount;
+      BleService.instance.setSendRawOverride((cmd) async {
+        sent.add(cmd);
+        BleService.instance.injectResponseForTest('ok');
+        BleService.instance.injectResponseForTest('TEMP_OK');
+        return true;
+      });
+
+      final result = await MappingExecutionService.instance.pressSequence(
+        deviceId: 'device-1',
+        profile: profile,
+        buttonIds: const ['BT-04', 'BT-05'],
+      );
+
+      expect(result.ok, isTrue);
+      expect(result.deviceFault, isFalse);
+      expect(sent.length, 14);
+      expect(BleService.instance.deviceFaultCount, before);
+    });
+  });
 }
