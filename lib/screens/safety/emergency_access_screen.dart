@@ -97,7 +97,7 @@ class _EmergencyAccessScreenState extends State<EmergencyAccessScreen> {
               ),
               SizedBox(height: 12 * rs),
               Text(
-                '버튼을 두 번 눌러 실행합니다.',
+                '버튼을 한 번 누르면 바로 멈춥니다.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: const Color(0xFFD1D5DB),
@@ -108,7 +108,6 @@ class _EmergencyAccessScreenState extends State<EmergencyAccessScreen> {
               const Spacer(),
               EmergencyButton(
                 label: _isStopping ? '중단 중' : '즉시 중단',
-                firstTapGuide: '즉시 중단 버튼입니다. 한 번 더 누르면 현재 연결된 기기를 멈춥니다.',
                 onPressed: _stopNow,
               ),
               SizedBox(height: 28 * rs),

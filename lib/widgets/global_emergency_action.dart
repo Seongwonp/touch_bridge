@@ -1,10 +1,6 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../screens/safety/stop_done_screen.dart';
-import '../services/accessibility_settings.dart';
 import '../services/emergency_stop_service.dart';
 import '../services/feedback_service.dart';
 import '../services/tts_service.dart';
@@ -12,11 +8,11 @@ import '../theme/app_colors.dart';
 
 /// 모든 화면의 상단 앱바에 상주하는 전역 비상 정지 버튼.
 ///
-/// 이미지 제어·숫자 패드·간편 코스 같은 push된 화면에서도 비상 탭으로
-/// 돌아가지 않고, 두 번 탭만으로 즉시 기기를 멈출 수 있게 한다.
-///
-/// 패턴은 다른 비상 버튼과 동일: 첫 탭 안내(arm) → 20초 내 둘째 탭 실행.
-/// 모든 발화는 emergency 우선순위 — 스크린리더 활성 시에도 반드시 들린다.
+/// 한 번 누르면 확인 없이 바로 정지를 요청한다(정지는 추가 확인을 두지 않는다는
+/// 결정, `docs/USER_FLOW_REDESIGN_PROPOSAL.md` 9절). 잘못 눌러도 멈출 뿐이므로
+/// 확인 단계가 주는 이득보다, 급할 때 두 번 눌러야 하는 비용이 크다.
+/// 오른쪽 위 모서리는 화면을 더듬어 찾기 쉬운 자리이고, 낭독 순서에서는 화면
+/// 제목 바로 다음이다. 모든 발화는 emergency 우선순위로 낭독기 사용 중에도 들린다.
 class GlobalEmergencyAction extends StatefulWidget {
   const GlobalEmergencyAction({super.key});
 
@@ -24,62 +20,19 @@ class GlobalEmergencyAction extends StatefulWidget {
   State<GlobalEmergencyAction> createState() => _GlobalEmergencyActionState();
 }
 
-class _GlobalEmergencyActionState extends State<GlobalEmergencyAction>
-    with WidgetsBindingObserver {
+class _GlobalEmergencyActionState extends State<GlobalEmergencyAction> {
   final TtsService _tts = TtsService();
-  Timer? _armTimer;
-  bool _armed = false;
   bool _stopping = false;
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    // 백그라운드 전환 시 armed 해제 — 복귀 후 의도치 않은 한 번 탭 실행 방지.
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.hidden ||
-        state == AppLifecycleState.inactive) {
-      _armTimer?.cancel();
-      if (mounted && _armed) setState(() => _armed = false);
-    }
-  }
-
-  @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _armTimer?.cancel();
     _tts.cancelSource('GlobalEmergencyAction');
     super.dispose();
   }
 
   Future<void> _handleTap() async {
     if (_stopping) return;
-
-    if (!_armed) {
-      setState(() => _armed = true);
-      HapticFeedback.heavyImpact();
-      _armTimer?.cancel();
-      _armTimer = Timer(kDoubleTapArmTimeout, () {
-        if (mounted) setState(() => _armed = false);
-      });
-      await _tts.speak(
-        '비상 정지 버튼입니다. 한 번 더 누르면 현재 기기를 즉시 중단합니다.',
-        source: 'GlobalEmergencyAction',
-        priority: TtsPriority.emergency,
-        interrupt: true,
-      );
-      return;
-    }
-
-    _armTimer?.cancel();
-    setState(() {
-      _armed = false;
-      _stopping = true;
-    });
+    setState(() => _stopping = true);
     FeedbackService.instance.vibrateError();
     await _tts.speak(
       '즉시 중단합니다.',
@@ -115,41 +68,33 @@ class _GlobalEmergencyActionState extends State<GlobalEmergencyAction>
     return Semantics(
       button: true,
       label: '비상 정지',
-      hint: _armed ? '한 번 더 누르면 즉시 중단합니다' : '한 번 누르면 안내, 두 번 누르면 즉시 중단',
-      value: _armed ? '실행 대기 중' : null,
-      liveRegion: _armed,
+      hint: _stopping ? '정지 명령을 보내는 중입니다' : '누르면 확인 없이 바로 멈춥니다',
+      excludeSemantics: true,
+      onTap: _handleTap,
       child: InkWell(
         onTap: _handleTap,
-        borderRadius: BorderRadius.circular(24),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          // 최소 터치 타겟 48dp 보장 (WCAG 2.5.8).
-          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+        borderRadius: BorderRadius.circular(28),
+        child: Container(
+          // 앱바 안에서 가능한 크게. 최소 터치 영역 48dp보다 넉넉히 둔다.
+          constraints: const BoxConstraints(minWidth: 56, minHeight: 56),
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: _armed ? AppColors.emergency : Colors.transparent,
-            border: Border.all(
-              color: _armed ? Colors.white : AppColors.emergency,
-              width: _armed ? 2.5 : 1.5,
-            ),
+            color: AppColors.emergency,
+            border: Border.all(color: Colors.white, width: 2),
           ),
           child: _stopping
               ? const Padding(
-                  padding: EdgeInsets.all(12),
+                  padding: EdgeInsets.all(16),
                   child: SizedBox(
-                    width: 20,
-                    height: 20,
+                    width: 22,
+                    height: 22,
                     child: CircularProgressIndicator(
                       strokeWidth: 2.5,
                       color: Colors.white,
                     ),
                   ),
                 )
-              : Icon(
-                  Icons.back_hand,
-                  size: 24,
-                  color: _armed ? Colors.white : AppColors.emergency,
-                ),
+              : const Icon(Icons.back_hand, size: 28, color: Colors.white),
         ),
       ),
     );

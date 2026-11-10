@@ -11,6 +11,7 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    TtsService().resetForTest();
     // FakeAsync(testWidgets) 환경에서는 TTS 플랫폼 채널이 영원히 완료되지 않아
     // speak()를 await하는 위젯 로직이 멈춘다 — 엔진 호출만 생략한다.
     TtsService().disableEngineForTest = true;
@@ -43,47 +44,47 @@ void main() {
       expect(find.byType(GlobalEmergencyAction), findsNothing);
     });
 
-    testWidgets('첫 탭은 실행하지 않고 arm 상태만 만든다 (이중 탭 원칙)', (tester) async {
-      await tester.pumpWidget(
-        wrap(const Scaffold(appBar: TopAppBar(title: '테스트 화면'))),
-      );
-
-      await tester.tap(find.byType(GlobalEmergencyAction));
-      await tester.pump();
-
-      // arm 상태가 Semantics value로 노출된다 (스크린리더 병행 채널).
-      final semantics = tester.getSemantics(
-        find.bySemanticsLabel('비상 정지'),
-      );
-      expect(semantics.value, '실행 대기 중');
-      // 실행되지 않았으므로 완료 화면으로 이동하지 않는다.
-      expect(find.byType(StopDoneScreen), findsNothing);
-
-      // 타이머 정리 (arm 20초 타이머가 테스트를 오염시키지 않도록).
-      await tester.pump(const Duration(seconds: 21));
-    });
-
-    testWidgets('둘째 탭에서 정지를 실행하고, 미확인이면 완료 화면으로 가지 않는다',
+    testWidgets('한 번 탭으로 바로 정지를 시도하고, 미확인이면 완료 화면으로 가지 않는다',
         (tester) async {
       await tester.pumpWidget(
         wrap(const Scaffold(appBar: TopAppBar(title: '테스트 화면'))),
       );
 
       await tester.tap(find.byType(GlobalEmergencyAction));
-      await tester.pump();
-      await tester.tap(find.byType(GlobalEmergencyAction));
       // 정지 시도(테스트 환경: 연결 없음 → 즉시 실패 outcome) 처리 대기.
-      // pumpAndSettle은 진행 스피너(무한 애니메이션) 프레임 때문에 쓸 수 없다 —
-      // 유한 pump로 비동기 흐름을 흘려보낸다.
+      // pumpAndSettle은 진행 스피너(무한 애니메이션) 때문에 쓸 수 없다.
       for (var i = 0; i < 10; i++) {
         await tester.pump(const Duration(milliseconds: 300));
       }
 
-      // 정지 시도가 끝나 스피너가 해제되어야 하고(버튼 잠김 방지),
+      expect(TtsService().getRecentLog().any((l) => l.contains('즉시 중단합니다')), isTrue,
+          reason: '정지는 확인 없이 첫 탭에서 바로 요청한다');
       expect(find.byType(CircularProgressIndicator), findsNothing,
           reason: '_stopping이 해제되지 않으면 전역 버튼이 영구 잠긴다');
-      // ACK가 확인되지 않았으므로 "안전하게 중단" 완료 화면으로 이동하면 안 된다.
+      // ACK가 확인되지 않았으므로 정지 완료 화면으로 이동하면 안 된다.
       expect(find.byType(StopDoneScreen), findsNothing);
+    });
+
+    testWidgets('낭독기 두 번 탭(semantics tap)으로도 바로 정지를 시도한다', (tester) async {
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(
+        wrap(const Scaffold(appBar: TopAppBar(title: '테스트 화면'))),
+      );
+      tester.semantics.tap(find.semantics.byLabel('비상 정지'));
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 300));
+      }
+      expect(TtsService().getRecentLog().any((l) => l.contains('즉시 중단합니다')), isTrue);
+      handle.dispose();
+    });
+
+    testWidgets('터치 영역이 56dp 이상이다', (tester) async {
+      await tester.pumpWidget(
+        wrap(const Scaffold(appBar: TopAppBar(title: '테스트 화면'))),
+      );
+      final size = tester.getSize(find.byType(GlobalEmergencyAction));
+      expect(size.width, greaterThanOrEqualTo(56));
+      expect(size.height, greaterThanOrEqualTo(56));
     });
   });
 }

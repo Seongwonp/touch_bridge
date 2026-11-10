@@ -1,95 +1,40 @@
-﻿import 'dart:async';
-
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../services/accessibility_settings.dart';
-import '../services/tts_service.dart';
 
-class EmergencyButton extends StatefulWidget {
+/// 비상 정지 버튼. 한 번 누르면 확인 없이 바로 [onPressed]를 부른다.
+///
+/// 정지는 추가 확인을 두지 않는다(`docs/USER_FLOW_REDESIGN_PROPOSAL.md` 9절).
+/// 잘못 눌러도 멈출 뿐이고, 급할 때 두 번 눌러야 하는 비용이 더 크다.
+class EmergencyButton extends StatelessWidget {
   const EmergencyButton({
     super.key,
     required this.label,
     required this.onPressed,
-    this.firstTapGuide,
   });
 
   final String label;
   final VoidCallback onPressed;
-  final String? firstTapGuide;
-
-  @override
-  State<EmergencyButton> createState() => _EmergencyButtonState();
-}
-
-class _EmergencyButtonState extends State<EmergencyButton> {
-  // 비상 버튼은 사용자 속도/음량 설정, 스크린리더 억제 정책, 안내 큐를
-  // 공유해야 하므로 별도 FlutterTts가 아니라 공용 TtsService를 사용한다.
-  final TtsService _tts = TtsService();
-  Timer? _confirmResetTimer;
-  bool _armed = false;
-
-  Future<void> _handleTap() async {
-    if (!_armed) {
-      setState(() {
-        _armed = true;
-      });
-      HapticFeedback.heavyImpact();
-
-      _confirmResetTimer?.cancel();
-      // WCAG 2.2.1: 이중 탭 대기(armed)는 앱 전체 20초로 통일.
-      _confirmResetTimer = Timer(kDoubleTapArmTimeout, () {
-        if (!mounted) {
-          return;
-        }
-        setState(() {
-          _armed = false;
-        });
-      });
-
-      await _tts.speak(
-        widget.firstTapGuide ?? '${widget.label}. 안전 확인을 위해 다시 한 번 누르면 실행됩니다.',
-        source: 'EmergencyButton',
-        priority: TtsPriority.emergency,
-        interrupt: true,
-      );
-      return;
-    }
-
-    _confirmResetTimer?.cancel();
-    setState(() {
-      _armed = false;
-    });
-    widget.onPressed();
-  }
-
-  @override
-  void dispose() {
-    _confirmResetTimer?.cancel();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
-      label: widget.label,
-      hint: '한 번 누르면 음성 안내, 두 번 누르면 실행',
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
-        curve: Curves.easeOut,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: _armed ? Colors.white : Colors.transparent,
-            width: _armed ? 3 : 0,
-          ),
-        ),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 84),
-          child: SizedBox(
+      label: label,
+      hint: '누르면 확인 없이 바로 멈춥니다',
+      excludeSemantics: true,
+      onTap: () {
+        HapticFeedback.heavyImpact();
+        onPressed();
+      },
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 84),
+        child: SizedBox(
           width: double.infinity,
           child: FilledButton.icon(
-            onPressed: _handleTap,
+            onPressed: () {
+              HapticFeedback.heavyImpact();
+              onPressed();
+            },
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.error,
               foregroundColor: Theme.of(context).colorScheme.onError,
@@ -99,8 +44,7 @@ class _EmergencyButtonState extends State<EmergencyButton> {
               ),
             ),
             icon: const Icon(Icons.warning_amber_rounded, size: 28),
-            label: Text(_armed ? '${widget.label} (다시 누르기)' : widget.label),
-          ),
+            label: Text(label),
           ),
         ),
       ),
