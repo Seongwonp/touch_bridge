@@ -35,6 +35,7 @@ import '../../services/mapping_execution_service.dart';
 import '../../services/single_tap_stop_controller.dart';
 import 'widgets/press_progress_view.dart';
 import '../../services/home_device_store.dart';
+import '../../services/demo_seed.dart';
 import '../../services/accessibility_settings.dart';
 import '../../services/accessibility_confirmation_policy.dart';
 import '../../theme/app_colors.dart';
@@ -65,6 +66,10 @@ class VoiceListeningScreen extends StatefulWidget {
 /// 공개 State: 위젯 테스트가 실행 중 화면(단일 탭 정지)까지 도달할 수 있도록
 /// [handleCommandForTest] 등 테스트 전용 진입점을 둔다.
 class VoiceListeningScreenState extends State<VoiceListeningScreen> {
+  /// 매핑이 없을 때 데모 목데이터 좌표로 누를지. 데모 빌드에서만 켠다.
+  @visibleForTesting
+  static bool allowMockMappingFallback = DemoSeed.enabled;
+
   final TtsService _tts = TtsService();
   final math.Random _random = math.Random();
   // 공용 STT 세션: STT 패키지가 싱글톤이라 콜백이 최초 1회만 등록된다.
@@ -1063,6 +1068,14 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
       return true;
     }
 
+    // 저장 매핑이 없는 실제 기기에 데모 좌표로 누르면 엉뚱한 버튼이 눌린다.
+    // 데모 빌드(또는 테스트)에서만 목데이터로 넘어가고, 그 밖에는 거절한다.
+    if (!allowMockMappingFallback) {
+      const msg = '이 기기의 버튼 위치가 아직 설정되지 않았습니다. 보호자에게 위치 맞추기를 요청해 주세요.';
+      if (mounted) setState(() => _statusMessage = msg);
+      _speak(msg);
+      return false;
+    }
     // 저장 매핑이 없을 때만 검증된 데모 목데이터 물리 좌표를 fallback으로 쓴다.
     // 실제 G-code 조립·전송은 MappingExecutionService.pressPhysical이 한다.
     // 버튼 사이 대기까지 하나의 실행 토큰으로 묶는다 — 화면에서 pressPhysical을

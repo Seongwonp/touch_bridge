@@ -42,7 +42,8 @@ class ApplianceCommandRouter {
     // 1. deviceType 이 있으면 직접 매핑 (ApplianceType.name 값과 일치)
     if (deviceType != null && deviceType.isNotEmpty) {
       return switch (deviceType.toLowerCase()) {
-        'washer' => _ApplianceKind.washer,
+        // 건조기는 이름 추론('건조')과 같게 세탁기 규칙을 쓴다. 전자레인지 규칙으로 가면 안 된다.
+        'washer' || 'dryer' => _ApplianceKind.washer,
         'airconditioner' || 'air_conditioner' || 'ac' =>
           _ApplianceKind.ac,
         'microwave' => _ApplianceKind.microwave,

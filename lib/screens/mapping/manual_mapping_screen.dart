@@ -225,6 +225,8 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
       if (ok) {
         _tts.speak('그리드 설정이 하드웨어로 전송되었습니다.', priority: TtsPriority.result);
         if (widget.showCompletionCheck) {
+          // result: true — 최초 등록 흐름을 연 쪽에 저장까지 끝났음을 알린다.
+          // 이 값이 없으면 그쪽은 등록을 되돌린다.
           Navigator.of(context).pushReplacement(
             MaterialPageRoute<void>(
               builder: (_) => GuardianHandoffScreen(
@@ -232,6 +234,7 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
                 deviceName: widget.deviceName ?? '기기',
               ),
             ),
+            result: true,
           );
           return;
         }

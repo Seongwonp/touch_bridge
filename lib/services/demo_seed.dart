@@ -31,8 +31,12 @@ class DemoSeed {
   static Future<void> seed() async {
     if (!kDebugMode || !enabled) return;
 
-    // 1) 등록 기기 1대
+    // 1) 등록 기기 1대. 목록을 통째로 바꾸지 않고 데모 기기만 넣거나 갱신한다.
+    // 예전에는 앱을 켤 때마다 목록을 덮어써, 시연 중 등록한 기기가 사라졌다.
+    final devices = await HomeDeviceStore.loadDevices()
+      ..removeWhere((d) => d['id'] == deviceId);
     await HomeDeviceStore.saveDevices([
+      ...devices,
       {
         'id': deviceId,
         'name': deviceName,
@@ -40,6 +44,7 @@ class DemoSeed {
         'iconCodePoint': Icons.microwave.codePoint,
         'bleId': bleId,
         'bleName': '데모 브리지',
+        'deviceType': 'microwave',
       },
     ]);
 

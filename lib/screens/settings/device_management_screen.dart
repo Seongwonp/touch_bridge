@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/active_device_service.dart';
 import '../../services/ble_service.dart';
 import '../../services/home_device_store.dart';
 import '../../widgets/responsive_scale.dart';
@@ -21,21 +22,43 @@ class _DeviceManagementScreenState extends State<DeviceManagementScreen> {
   @override
   void initState() {
     super.initState();
+    // 홈 탭과 함께 살아 있으므로, 다른 곳에서 기기가 바뀌면 다시 읽는다.
+    ActiveDeviceService.instance.deviceListUpdateNotifier.addListener(_loadDevices);
     _loadDevices();
   }
 
+  @override
+  void dispose() {
+    ActiveDeviceService.instance.deviceListUpdateNotifier.removeListener(_loadDevices);
+    super.dispose();
+  }
+
   Future<void> _loadDevices() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
-    _devices = await HomeDeviceStore.loadDevices();
-    setState(() => _isLoading = false);
+    final devices = await HomeDeviceStore.loadDevices();
+    if (!mounted) return;
+    setState(() {
+      _devices = devices;
+      _isLoading = false;
+    });
   }
 
   Future<void> _updateBleId(int index, String? bleId, String? bleName) async {
-    setState(() {
-      _devices[index]['bleId'] = bleId;
-      _devices[index]['bleName'] = bleName;
-    });
-    await HomeDeviceStore.saveDevices(_devices);
+    final id = _devices[index]['id'] as String? ?? '';
+    // 화면 목록을 통째로 저장하지 않고 이 기기만 고친다(다른 탭의 변경을 덮어쓰지 않게).
+    await HomeDeviceStore.updateById(id, {'bleId': bleId, 'bleName': bleName});
+    final active = ActiveDeviceService.instance;
+    if (active.getActiveDeviceId() == id) {
+      // 활성 기기의 허브를 바꿨으면 활성 정보도 새 허브로 맞춘다.
+      await active.setActiveDevice(
+        deviceId: id,
+        deviceName: _devices[index]['name'] as String?,
+        bleId: bleId,
+        bleName: bleName,
+      );
+    }
+    active.notifyDeviceListChanged();
   }
 
   /// 별명 편집 — "우리집 세탁기"처럼 사용자가 실제로 부르는 이름을 등록하면
@@ -81,8 +104,11 @@ class _DeviceManagementScreenState extends State<DeviceManagementScreen> {
         .map((s) => s.trim())
         .where((s) => s.isNotEmpty)
         .toList();
-    setState(() => _devices[index]['aliases'] = aliases);
-    await HomeDeviceStore.saveDevices(_devices);
+    await HomeDeviceStore.updateById(
+      _devices[index]['id'] as String? ?? '',
+      {'aliases': aliases},
+    );
+    ActiveDeviceService.instance.notifyDeviceListChanged();
   }
 
   Future<void> _showPairDialog(int index) async {

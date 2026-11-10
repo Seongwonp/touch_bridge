@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../services/tts_service.dart';
 import '../../services/accessibility_settings.dart';
 import '../../services/active_device_service.dart';
+import '../../services/device_mapping_service.dart';
 import '../../services/home_device_store.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
@@ -63,6 +64,10 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _devices = devices;
         _isLoading = false;
+        // 다른 화면에서 기기가 지워져 목록이 줄면 현재 위치가 범위를 벗어난다.
+        if (_currentDeviceIndex > _devices.length) {
+          _currentDeviceIndex = _devices.length;
+        }
       });
       if (!_announcedOnce) {
         _announcedOnce = true;
@@ -237,17 +242,26 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _deleteDevice(int index) async {
     try {
       final deviceName = _devices[index]['name'];
-      setState(() {
-        _devices.removeAt(index);
-        if (_currentDeviceIndex >= _devices.length && _devices.isNotEmpty) {
-          _currentDeviceIndex = _devices.length - 1;
-        }
-      });
-      await HomeDeviceStore.saveDevices(_devices);
+      final deviceId = _devices[index]['id'] as String? ?? '';
+      // 저장소를 다시 읽어 이 기기만 지운다. 화면이 들고 있던 목록을 통째로 저장하면
+      // 기기 관리 탭이 그사이 바꾼 별명·연결 정보를 덮어쓴다.
+      await HomeDeviceStore.removeById(deviceId);
+      await DeviceMappingService.instance.delete(deviceId);
+      if (ActiveDeviceService.instance.getActiveDeviceId() == deviceId) {
+        // 지운 기기가 활성으로 남으면 음성 명령이 지운 기기의 매핑으로 누를 수 있다.
+        await ActiveDeviceService.instance.clearActiveDevice();
+      }
+      ActiveDeviceService.instance.notifyDeviceListChanged();
+      await _loadDevices();
+      if (!mounted) return;
+      if (_pageController.hasClients && _devices.isNotEmpty) {
+        _pageController.jumpToPage(_currentDeviceIndex);
+      }
       await _tts.speak(
         '$deviceName 기기가 삭제되었습니다.',
         source: 'HomeScreen',
         interrupt: true,
+        priority: TtsPriority.result,
       );
     } catch (e) {
       debugPrint('Error deleting device: $e');

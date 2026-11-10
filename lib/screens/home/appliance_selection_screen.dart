@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../models/appliance_config.dart';
 import '../../services/active_device_service.dart';
+import '../../services/device_mapping_service.dart';
 import '../../services/home_device_store.dart';
 import '../../services/recommendation_service.dart';
 import '../../services/tts_service.dart';
@@ -147,13 +150,25 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
     return '${safe}_$ts';
   }
 
-  /// 사진 매핑을 건너뛰고 바로 기기를 등록한 뒤 좌표 기반 설정 화면으로 이동한다.
+  /// 사진 매핑을 건너뛰고 좌표 기반 설정 화면으로 이동한다.
   /// 시각 확인 없이(화살표+테스트 눌러보기만으로) 최초 등록을 끝낼 수 있는 경로.
+  ///
+  /// 설정 화면이 이 기기를 활성 기기로 쓰므로 먼저 등록하지만, 저장까지 마치지
+  /// 않고 돌아오면 등록을 되돌린다. 예전에는 되돌리지 않아 뒤로 가기만 해도
+  /// 매핑 없는 "일반 전자레인지"가 홈에 남았다(실기 확인).
   Future<void> _registerAndStartCoordinateSetup(
     BuildContext context,
     ApplianceConfig appliance,
   ) async {
     final deviceId = _newDeviceId(appliance.name.replaceAll(' ', '_'));
+    final active = ActiveDeviceService.instance;
+    final previous = (
+      id: active.getActiveDeviceId(),
+      name: active.getActiveDeviceName(),
+      bleId: active.getActiveBleId(),
+      bleName: await active.getActiveBleName(),
+      type: active.getActiveDeviceType(),
+    );
 
     final devices = await HomeDeviceStore.loadDevices();
     devices.add({
@@ -175,22 +190,51 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
     );
     ActiveDeviceService.instance.notifyDeviceListChanged();
 
-    await _tts.speak(
-      '${appliance.name} 기기가 등록되었습니다. 이제 좌표로 버튼 위치를 설정합니다.',
+    // 아직 등록이 끝난 것이 아니므로 "등록되었습니다"라고 하지 않는다.
+    unawaited(_tts.speak(
+      '${appliance.name}의 버튼 위치를 좌표로 설정합니다. 저장하면 등록이 끝납니다.',
       source: 'ApplianceSelectionScreen',
       interrupt: true,
-    );
+      priority: TtsPriority.result,
+    ));
 
-    if (!context.mounted) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ManualMappingScreen(
-          deviceId: deviceId,
-          deviceName: appliance.name,
-          showCompletionCheck: true,
-        ),
-      ),
+    final completed = context.mounted
+        ? await Navigator.push<bool>(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ManualMappingScreen(
+                deviceId: deviceId,
+                deviceName: appliance.name,
+                showCompletionCheck: true,
+              ),
+            ),
+          )
+        : null;
+    if (completed == true) return;
+
+    // 저장하지 않고 돌아왔다 — 등록·매핑·활성 기기를 되돌린다.
+    await HomeDeviceStore.removeById(deviceId);
+    await DeviceMappingService.instance.delete(deviceId);
+    if (active.getActiveDeviceId() == deviceId) {
+      final prevId = previous.id;
+      if (prevId != null && prevId.isNotEmpty &&
+          await HomeDeviceStore.findById(prevId) != null) {
+        await active.setActiveDevice(
+          deviceId: prevId,
+          deviceName: previous.name,
+          bleId: previous.bleId,
+          bleName: previous.bleName,
+          deviceType: previous.type,
+        );
+      } else {
+        await active.clearActiveDevice();
+      }
+    }
+    active.notifyDeviceListChanged();
+    _tts.speak(
+      '${appliance.name} 등록을 취소했습니다.',
+      source: 'ApplianceSelectionScreen',
+      priority: TtsPriority.result,
     );
   }
 

@@ -29,6 +29,9 @@ void main() {
   late List<String> rawSent;
 
   setUp(() async {
+    // 이 테스트는 매핑 프로필 없이 데모 좌표 경로로 누름 시퀀스를 만든다.
+    // 앱은 데모 빌드에서만 이 경로를 허용하므로 테스트에서 명시적으로 켠다.
+    VoiceListeningScreenState.allowMockMappingFallback = true;
     SharedPreferences.setMockInitialValues({});
     TtsService().disableEngineForTest = true;
     TtsService().resetForTest();
@@ -53,6 +56,7 @@ void main() {
   });
 
   tearDown(() {
+    VoiceListeningScreenState.allowMockMappingFallback = false;
     TtsService().disableEngineForTest = false;
     BleService.instance.clearTestOverrides();
     BleService.instance.setSendRawOverride(null);
@@ -99,6 +103,27 @@ void main() {
     expect(find.byKey(PressProgressView.stopButtonKey), findsOneWidget,
         reason: '실행 중 화면에 단일 탭 정지 버튼이 있어야 한다');
   }
+
+  testWidgets('버튼 위치가 저장되지 않은 기기는 데모 좌표로 누르지 않고 거절한다', (tester) async {
+    VoiceListeningScreenState.allowMockMappingFallback = false;
+    final state = await pumpScreen(tester);
+    // ignore: unawaited_futures
+    state.handleCommandForTest({
+      'action': 'MICROWAVE_CONTROL',
+      'commands': ['BT-02', 'BT-05'],
+      'inferred_seconds': 30,
+      'confidence': 0.99,
+      'needs_confirmation': false,
+      'message': '30초 조리를 시작합니다.',
+    });
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    expect(rawSent, isEmpty, reason: '매핑 없는 실제 기기에 데모 좌표로 보내면 엉뚱한 버튼이 눌린다');
+    expect(state.statusMessageForTest, contains('버튼 위치가 아직 설정되지 않았습니다'));
+    expect(find.byType(EmergencyStopScreen), findsNothing);
+    await tester.pump(const Duration(seconds: 4));
+  });
 
   testWidgets('실행 중 정지 버튼 한 번 탭으로 우선 정지 경로가 호출되고 잔여 명령이 끊긴다', (tester) async {
     stubStopAck('STOPPED');

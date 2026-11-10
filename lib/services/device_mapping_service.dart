@@ -354,6 +354,14 @@ class DeviceMappingService {
     await prefs.setString(_profileKey(deviceId), jsonEncode(profile.toJson()));
   }
 
+  /// 기기를 지우거나 등록을 취소할 때 그 기기의 매핑을 함께 지운다.
+  /// 남겨 두면 같은 id가 다시 쓰일 때 옛 좌표로 누를 수 있다.
+  Future<void> delete(String deviceId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_profileKey(deviceId));
+    await prefs.remove(_legacyGridKey(deviceId));
+  }
+
   /// 좌표(그리드) 수동 설정을 기존 프로필에 병합한다.
   ///
   /// 수동 매핑 화면은 행/열/원점/간격/홈 위치만 편집하므로 그리드 값만 갱신하고,
