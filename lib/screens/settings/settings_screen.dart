@@ -272,7 +272,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 NavRow(
                   icon: Icons.sports_esports_rounded,
                   title: '연습 모드',
-                  subtitle: '실행 없이 이중 탭·비상 정지·음성 명령을 연습',
+                  subtitle: '실행 없이 가전 버튼 확인·비상 정지·음성 명령을 연습',
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const PracticeScreen()),

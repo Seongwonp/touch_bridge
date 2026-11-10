@@ -357,7 +357,7 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
     return '${safe}_$ts';
   }
 
-  Future<void> _registerDevice(
+  Future<bool> _registerDevice(
     BuildContext context, {
     required String name,
     required String type,
@@ -375,7 +375,7 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
       if (context.mounted) {
         _tts.speak('$name 기기는 이미 등록되어 있습니다.', source: 'DeviceConnectScreen', priority: TtsPriority.result);
       }
-      return;
+      return false;
     }
 
     final newDevice = {
@@ -383,6 +383,7 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
       'name': name,
       'status': '작동 대기 중',
       'iconCodePoint': _iconCodePointForType(type),
+      if (type.isNotEmpty) 'deviceType': type,
       'bleId': bleId,
       'bleName': bleName,
     };
@@ -396,9 +397,11 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
       bleName: bleName,
     );
 
+    ActiveDeviceService.instance.notifyDeviceListChanged();
     if (context.mounted) {
       _tts.speak('$name 기기가 홈에 추가되었습니다.', source: 'DeviceConnectScreen', priority: TtsPriority.result);
     }
+    return true;
   }
 
   Future<void> _processCloudDeviceId(String deviceId) async {
@@ -409,18 +412,20 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
         deviceId,
       );
       final name = (profileData['device_type'] as String?) ?? '새 기기';
+      // 매핑을 먼저 해석한다. 등록 뒤에 해석이 실패하면 매핑 없는 기기만 홈에 남는다.
+      final profile = DeviceMappingProfile.fromJson(profileData);
       if (!mounted) return;
 
-      await _registerDevice(
+      final registered = await _registerDevice(
         context,
         name: name,
         type: name == '전자레인지' ? 'microwave' : (name == '세탁기' ? 'washer' : ''),
         preferredDeviceId: deviceId,
       );
+      // 이미 등록된 기기면 기존 매핑을 덮어쓰지 않는다("이미 등록" 안내는 위에서 했다).
+      if (!registered) return;
 
-      final profile = DeviceMappingProfile.fromJson(profileData);
       await DeviceMappingService.instance.save(deviceId, profile);
-
       _tts.speak('$name 정보를 불러왔습니다.', source: 'DeviceConnectScreen', priority: TtsPriority.result);
     } catch (e) {
       _tts.speak('정보를 가져오지 못했습니다.', source: 'DeviceConnectScreen', priority: TtsPriority.result);

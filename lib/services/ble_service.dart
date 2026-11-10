@@ -779,11 +779,14 @@ class BleService {
     return await _sendAndWaitAck({'action': HardwareProtocol.actionGetServo});
   }
 
-  Future<void> sendHoming(String deviceId) async {
-    await _sendAndWaitAck({
+  /// 원점 복귀 명령을 보낸다. 보내지 못했거나(연결 없음·인증·쓰기 실패) 기기가 거부하면 false.
+  /// 응답을 기다리다 시간이 지난 것은 전송은 된 것으로 보고 true다.
+  Future<bool> sendHoming(String deviceId) async {
+    final ack = await _sendAndWaitAck({
       'action': 'home',
       'deviceId': deviceId,
     }, timeout: const Duration(seconds: 5));
+    return !ack.startsWith('ERROR:') || ack == 'ERROR:TIMEOUT';
   }
 
   /// 비상 정지 명령을 전송하고 controller ACK 결과 문자열을 그대로 반환한다.

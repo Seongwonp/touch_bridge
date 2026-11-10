@@ -276,14 +276,20 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
       _tts.speak('활성 기기가 없습니다.');
       return;
     }
-    await BleService.instance.sendHoming(deviceId);
+    final ok = await BleService.instance.sendHoming(deviceId);
+    // 전송에 실패했으면 화면 위치를 0으로 바꾸지 않는다(실제 위치와 어긋난다).
+    if (!ok) {
+      _tts.speak('홈 이동 명령을 보내지 못했습니다. 연결을 확인해 주세요.', priority: TtsPriority.result);
+      return;
+    }
     if (mounted) {
       setState(() {
         _currentXmm = 0;
         _currentYmm = 0;
       });
     }
-    _tts.speak('하드웨어를 홈 위치로 이동합니다.');
+    // 원점 복귀 완료 응답을 기다리지 않으므로 "이동했습니다"가 아니라 "보냈습니다".
+    _tts.speak('홈 위치로 이동하도록 기기에 전달했습니다.', priority: TtsPriority.result);
     if (!mounted) return;
     ScaffoldMessenger.of(
       context,
@@ -303,9 +309,10 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
           _currentYmm = 0;
         });
       }
-      _tts.speak('현재 위치를 원점으로 지정했습니다.');
+      // 쓰기 성공만 확인했다. 기기 확인 응답은 보지 않으므로 "전달했습니다".
+      _tts.speak('현재 위치를 원점으로 지정하도록 기기에 전달했습니다.', priority: TtsPriority.result);
     } else {
-      _tts.speak('원점 지정 명령 전송에 실패했습니다.');
+      _tts.speak('원점 지정 명령 전송에 실패했습니다.', priority: TtsPriority.result);
     }
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(

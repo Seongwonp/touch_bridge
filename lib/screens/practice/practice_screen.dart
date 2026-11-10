@@ -63,7 +63,7 @@ class _PracticeScreenState extends State<PracticeScreen>
     _initSpeech();
     _tts.speak(
       '연습 모드입니다. 여기서는 아무것도 실제로 실행되지 않아요. '
-      '이중 탭, 비상 정지 홀드, 음성 명령을 마음껏 연습해 보세요.',
+      '가전 버튼 확인, 비상 정지, 음성 명령을 마음껏 연습해 보세요.',
       source: 'PracticeScreen',
       interrupt: true,
     );
@@ -134,7 +134,7 @@ class _PracticeScreenState extends State<PracticeScreen>
     HapticFeedback.lightImpact();
     FeedbackService.instance.playSuccess();
     await _tts.speak(
-      '잘하셨어요! 이중 탭 $_tapSuccessCount번째 성공. 실제 화면에서는 지금 명령이 실행됐을 거예요.',
+      '잘하셨어요! 버튼 확인 $_tapSuccessCount번째 성공. 실제 화면에서는 지금 가전 버튼이 눌렸을 거예요.',
       source: 'PracticeScreen',
       priority: TtsPriority.result,
       interrupt: true,
@@ -289,7 +289,8 @@ class _PracticeScreenState extends State<PracticeScreen>
           children: [
             _noticeCard(rs),
             SizedBox(height: 20 * rs),
-            _lessonHeader(rs, '1. 이중 탭 연습', '첫 탭은 안내, 둘째 탭이 실행이에요.'),
+            // 화면 이동은 한 번에 되고, 가전을 누르는 버튼만 두 번 확인한다(2026-11-10).
+            _lessonHeader(rs, '1. 가전 버튼 확인 연습', '가전을 누르는 버튼은 첫 탭이 안내, 둘째 탭이 실행이에요.'),
             SizedBox(height: 10 * rs),
             _practiceTapButton(rs),
             _successBadge(rs, _tapSuccessCount),
