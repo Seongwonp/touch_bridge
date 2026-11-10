@@ -185,12 +185,22 @@ static bool constEq(const char* a, const char* b) {
 }
 
 // ---------------- BLE 콜백 ----------------
+// Bluedroid는 ESP32가 central로 Bot에 연결·해제할 때도 GATTS 연결 이벤트를 낸다.
+// Bot 링크를 앱 연결로 오인하면 누를 때마다 "앱 끊김 → 비상 정지"가 일어나므로 주소로 거른다.
+static bool isBotAddr(const uint8_t* bda) {
+  char s[18];
+  snprintf(s, sizeof(s), "%02x:%02x:%02x:%02x:%02x:%02x", bda[0], bda[1], bda[2], bda[3], bda[4], bda[5]);
+  return strcasecmp(s, SWITCHBOT_MAC) == 0;
+}
+
 class ServerCallbacks : public BLEServerCallbacks {
-  void onConnect(BLEServer*) override {
+  void onConnect(BLEServer*, esp_ble_gatts_cb_param_t* param) override {
+    if (isBotAddr(param->connect.remote_bda)) return;
     bleConnected = true;
     bleAuthed = false;
   }
-  void onDisconnect(BLEServer* server) override {
+  void onDisconnect(BLEServer* server, esp_ble_gatts_cb_param_t* param) override {
+    if (isBotAddr(param->disconnect.remote_bda)) return;
     bleConnected = false;
     bleAuthed = false;
     stopRequested = true;          // 앱이 끊기면 진행 중 동작을 멈춤 (앱 안전 계약과 동일)
