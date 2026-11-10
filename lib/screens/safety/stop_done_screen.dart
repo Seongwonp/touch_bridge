@@ -198,6 +198,7 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
                         // 제목
                         Semantics(
                           label: headlineLabel,
+                          excludeSemantics: true,
                           child: Text(
                             headline,
                             textAlign: TextAlign.center,
@@ -214,6 +215,7 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
                         // 설명 텍스트
                         Semantics(
                           label: descText,
+                          excludeSemantics: true,
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 18,
@@ -244,9 +246,13 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
                           width: double.infinity,
                           height: ResponsiveScale.v(context, 86),
                           child: Semantics(
-                            label:
-                                '홈으로 돌아가기 버튼${_armedHomeButton ? '. 활성화됨. 한 번 더 누르면 실행됨' : ''}',
+                            // 역할("버튼")은 button: true가 붙인다. 라벨과 자식 글자가 겹쳐
+                            // 두 번 읽히지 않게 자식 시맨틱은 뺀다.
+                            label: '홈으로 돌아가기',
+                            value: _armedHomeButton ? '한 번 더 누르면 실행' : null,
                             button: true,
+                            excludeSemantics: true,
+                            onTap: _onHomeButtonTap,
                             child: Material(
                               color: Colors.transparent,
                               child: InkWell(
