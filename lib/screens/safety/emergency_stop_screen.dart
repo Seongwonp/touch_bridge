@@ -9,6 +9,7 @@ import '../../services/status_intent.dart';
 import '../../services/feedback_service.dart';
 import '../../services/speech_session_service.dart';
 import '../../services/timer_service.dart';
+import '../../services/power_status_service.dart';
 import '../../services/tts_service.dart';
 import '../../services/accessibility_experiment_service.dart';
 import '../../services/accessibility_settings.dart';
@@ -80,6 +81,42 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     // 안내 속 "중단"이 STT에 들어가 스스로 정지되는 일이 없다.
     _speak('${widget.deviceName} 작동 중입니다. ${_stopInstruction()}.');
     _initSpeech();
+    _lastPowerState = PowerStatusService.instance.state;
+    PowerStatusService.instance.status.addListener(_onPowerStatus);
+  }
+
+  PowerState _lastPowerState = PowerState.unknown;
+
+  /// 전류 센서가 가전이 꺼졌다고 판정하면 한 번 알린다. 관찰 정보일 뿐이라
+  /// 정지·완료 판단에는 쓰지 않는다(전력 값은 안전 판단에 쓰지 않는다는 계약).
+  void _onPowerStatus() {
+    final now = PowerStatusService.instance.state;
+    final before = _lastPowerState;
+    _lastPowerState = now;
+    if (!mounted) return;
+    setState(() {});
+    if (before == PowerState.on && now == PowerState.off) {
+      _speak(
+        '전류 센서 기준으로 ${widget.deviceName} 전원이 꺼진 것으로 보입니다.',
+        priority: TtsPriority.result,
+      );
+    }
+  }
+
+  /// 전류 센서가 연결되어 있을 때만 보이는 가전 작동 상태 문구.
+  String? _powerLabel() {
+    final s = PowerStatusService.instance.status.value;
+    switch (s.state) {
+      case PowerState.on:
+        final w = s.watts;
+        return w == null
+            ? '${widget.deviceName} 작동 중 (전류 센서)'
+            : '${widget.deviceName} 작동 중 · 약 ${w.round()} W';
+      case PowerState.off:
+        return '${widget.deviceName} 전원 꺼짐 (전류 센서)';
+      case PowerState.unknown:
+        return null;
+    }
   }
 
   /// 화면 낭독기 사용자는 두 번 탭으로 바로 멈춘다(길게 누르기는 낭독기 제스처와 다르다).
@@ -277,6 +314,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
 
   @override
   void dispose() {
+    PowerStatusService.instance.status.removeListener(_onPowerStatus);
     _timerService.stop();
     // 화면 이탈 후에는 남은 시간을 추적하지 못한다 — 상태 질의가 옛 값으로
     // "작동 중"이라 답하지 않게 정리한다.
@@ -339,6 +377,19 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                     ),
                   ),
                 ),
+                if (_powerLabel() case final power?) ...[
+                  SizedBox(height: 8 * rs),
+                  Text(
+                    power,
+                    key: const Key('countdown_power_status'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: const Color(0xFFD6E3FF),
+                      fontSize: 16 * rs,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
                 SizedBox(height: 24 * rs),
                 Container(
                   width: double.infinity,

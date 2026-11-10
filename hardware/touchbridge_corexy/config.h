@@ -43,7 +43,13 @@ constexpr uint32_t CT_AVG_WINDOW_MS = 5000;   // 이동 평균 창
 constexpr uint32_t CT_STALE_MS      = 3000;   // 이보다 오래 끊기면 UNKNOWN (0W로 보지 않음)
 constexpr uint32_t CT_EMIT_MS       = 1000;   // 앱 보고 주기
 // 자리표시자: 측정값이 아니다. 대상 가전마다 대기 전력과 동작 전력을 재서 정해야 한다.
-constexpr float    CT_ON_WATTS      = 50.0f;
+// 작동 판정: CT_ON_WATTS 이상이 CT_ON_HOLD_MS 동안 이어지면 작동, CT_OFF_WATTS 이하가
+// CT_OFF_HOLD_MS 동안 이어지면 종료. 2026-11-02 전자레인지 1분 가열 측정(별도 ESP32
+// 측정 장치)에서 이 기준으로 설정 60초를 60.7초로 판정했다. 가전마다 다시 잴 수 있다.
+constexpr float    CT_ON_WATTS      = 100.0f;
+constexpr float    CT_OFF_WATTS     = 15.0f;
+constexpr uint32_t CT_ON_HOLD_MS    = 5000;
+constexpr uint32_t CT_OFF_HOLD_MS   = 3000;
 
 // ---------------- 방향 보정 ----------------
 // 'M' 명령으로 시험해서 맞춤 (README.md의 '처음 켤 때 순서' 참고)

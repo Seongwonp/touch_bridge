@@ -7,6 +7,7 @@ import 'package:touch_bridge/services/active_device_service.dart';
 import 'package:touch_bridge/services/ble_service.dart';
 import 'package:touch_bridge/services/run_status_service.dart';
 import 'package:touch_bridge/services/tts_service.dart';
+import 'package:touch_bridge/services/power_status_service.dart';
 
 /// 비상 정지 화면의 안전 계약 검증.
 ///
@@ -220,6 +221,38 @@ void main() {
       );
 
       await disposeScreen(tester);
+    });
+  });
+
+  group('비상 정지 화면 — 전류 센서', () {
+    testWidgets('센서 보고가 없으면 작동 상태를 보이지 않는다', (tester) async {
+      await tester.pumpWidget(wrap(const EmergencyStopScreen(initialSeconds: 60)));
+      await tester.pump();
+      expect(find.byKey(const Key('countdown_power_status')), findsNothing);
+      await disposeScreen(tester);
+    });
+
+    testWidgets('작동 보고를 받으면 표시하고, 꺼지면 한 번 알린다', (tester) async {
+      PowerStatusService.instance; // 응답 스트림 구독 시작
+      await tester.pumpWidget(
+        wrap(const EmergencyStopScreen(initialSeconds: 60, deviceName: '전자레인지')),
+      );
+      await tester.pump();
+
+      BleService.instance.injectResponseForTest('{"event":"power","w":1020.0,"state":"on"}');
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('전자레인지 작동 중 · 약 1020 W'), findsOneWidget);
+
+      BleService.instance.injectResponseForTest('{"event":"power","w":3.0,"state":"off"}');
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('전자레인지 전원 꺼짐 (전류 센서)'), findsOneWidget);
+      expect(spoke('전원이 꺼진 것으로 보입니다'), isTrue);
+
+      await disposeScreen(tester);
+      // 신선도 타이머(5초)가 남지 않게 흘려보낸다.
+      await tester.pump(const Duration(seconds: 6));
     });
   });
 

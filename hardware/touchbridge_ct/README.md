@@ -50,8 +50,8 @@ pio run -e firebeetle32_adc
 
 ## 측정 전 미확정 값
 
-- **켜짐·꺼짐 문턱값은 측정하지 않았다.** `hardware/touchbridge_corexy/config.h`의 `CT_ON_WATTS`는
-  자리표시자이며 가전마다 재야 한다.
+- 켜짐·꺼짐 판정 기준(100 W 5초 / 15 W 3초)은 2026-11-02 전자레인지 측정(별도 장치)에서 가져왔다.
+  `hardware/touchbridge_corexy/config.h`에서 바꾸며, 가전마다 다시 잴 수 있다.
 - `include/config.h`의 `CT_CAL_GAIN_CH`(보정 배율)는 아는 부하로 맞춰야 한다.
 - 내장 ADC는 보드마다 편차가 있어 켜짐·꺼짐 판단용이지 정밀 계측용이 아니다.
 - 1초 창 평균은 이번에 정한 값이며 원본의 100ms 창과 다르다. 실측으로 확인해야 한다.

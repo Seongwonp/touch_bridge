@@ -3,8 +3,9 @@
 //  CT_LINK_ENABLED가 1일 때만 포함한다.
 //
 //  CT 노드가 1초마다 보내는 {"t":"ct","w":..,"a":..,"seq":..} 줄을 loop()에서 읽어
-//  5초 이동 평균과 ON/OFF/UNKNOWN 상태를 만든다. 대기 없이 도착한 바이트만 처리해
-//  모션 루프와 BLE를 막지 않는다.
+//  5초 이동 평균과 ON/OFF/UNKNOWN 상태를 만든다. ON/OFF는 측정에서 쓴 유지 시간
+//  판정(CT_ON_WATTS 이상 CT_ON_HOLD_MS → 작동, CT_OFF_WATTS 이하 CT_OFF_HOLD_MS → 종료)이다.
+//  대기 없이 도착한 바이트만 처리해 모션 루프와 BLE를 막지 않는다.
 //
 //  표시 전용이다. 안전 판단(정지, 누름 허용, 완료 판정)에 쓰지 말 것.
 // =====================================================================
@@ -41,6 +42,10 @@ static int      sampleCount = 0;
 static bool     everReceived = false;
 static uint32_t lastRxMs = 0;
 static uint32_t lastEmitMs = 0;
+// 유지 시간 판정 상태. 두 문턱 사이에서는 직전 판정을 유지한다(켜짐·꺼짐 깜빡임 방지).
+static State    judged = State::OFF;
+static bool     above = false, below = false;
+static uint32_t aboveSince = 0, belowSince = 0;
 
 inline void begin() {
   Serial2.setRxBufferSize(CT_LINK_RX_BUFFER_BYTES);
@@ -55,6 +60,19 @@ inline void addSample(uint32_t now, float w) {
   if (sampleCount < kSampleSlots) sampleCount++;
   lastRxMs = now;
   everReceived = true;
+
+  if (w >= CT_ON_WATTS) {
+    if (!above) { above = true; aboveSince = now; }
+  } else {
+    above = false;
+  }
+  if (w <= CT_OFF_WATTS) {
+    if (!below) { below = true; belowSince = now; }
+  } else {
+    below = false;
+  }
+  if (above && now - aboveSince >= CT_ON_HOLD_MS) judged = State::ON;
+  if (below && now - belowSince >= CT_OFF_HOLD_MS) judged = State::OFF;
 }
 
 // 잘못된 줄은 버리고 신선도도 갱신하지 않는다.
@@ -105,7 +123,7 @@ inline Report current(uint32_t now) {
   }
   if (n == 0) return {State::UNKNOWN, false, 0.0f};
   const float avg = sum / n;
-  return {avg >= CT_ON_WATTS ? State::ON : State::OFF, true, avg};
+  return {judged, true, avg};
 }
 
 // 보고할 시각이면 true.
