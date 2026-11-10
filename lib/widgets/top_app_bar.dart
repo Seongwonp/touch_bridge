@@ -70,48 +70,14 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
               centerTitle: false,
             ),
             // Status Header — 스크린리더용 통합 레이블으로 연결/기기 상태를 한 번에 읽는다.
-            Semantics(
-              label: [
-                BleService.instance.isConnected
-                    ? '허브 연결됨: ${BleService.instance.connectedDeviceName}'
-                    : '허브 연결 필요',
-                '선택 기기: ${ActiveDeviceService.instance.getActiveDeviceName() ?? '없음'}',
-              ].join(', '),
-              child: ExcludeSemantics(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16 * rs),
-                  child: Row(
-                    children: [
-                      Icon(
-                        BleService.instance.isConnected ? Icons.hub : Icons.hub_outlined,
-                        color: BleService.instance.isConnected ? Colors.greenAccent : Colors.redAccent,
-                        size: 13 * rs,
-                      ),
-                      SizedBox(width: 4 * rs),
-                      Flexible(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            BleService.instance.isConnected ? BleService.instance.connectedDeviceName : '허브 연결 필요',
-                            style: TextStyle(fontSize: 11 * rs, color: Colors.white70),
-                          ),
-                        ),
-                      ),
-                      SizedBox(width: 12 * rs),
-                      Icon(Icons.kitchen, color: Colors.blueAccent, size: 13 * rs),
-                      SizedBox(width: 4 * rs),
-                      Flexible(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            ActiveDeviceService.instance.getActiveDeviceName() ?? '기기 선택 필요',
-                            style: TextStyle(fontSize: 11 * rs, color: Colors.white70),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+            // 연결·기기 선택이 바뀌면 다시 그린다. 한 번만 읽으면 재연결 뒤에도
+            // "허브 연결 필요"로 남아 낭독기 사용자에게 틀린 상태를 알린다.
+            StreamBuilder<bool>(
+              stream: BleService.instance.isConnectedStream,
+              builder: (context, _) => ValueListenableBuilder<String?>(
+                valueListenable:
+                    ActiveDeviceService.instance.activeDeviceNameNotifier,
+                builder: (context, _, _) => _buildStatusHeader(rs),
               ),
             ),
             const SizedBox(height: 4),
@@ -126,6 +92,54 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusHeader(double rs) {
+    final connected = BleService.instance.isConnected;
+    final hubText =
+        connected ? BleService.instance.connectedDeviceName : '허브 연결 필요';
+    final deviceName = ActiveDeviceService.instance.getActiveDeviceName();
+    return Semantics(
+      label: [
+        connected ? '허브 연결됨: $hubText' : '허브 연결 필요',
+        '선택 기기: ${deviceName ?? '없음'}',
+      ].join(', '),
+      child: ExcludeSemantics(
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16 * rs),
+          child: Row(
+            children: [
+              Icon(
+                connected ? Icons.hub : Icons.hub_outlined,
+                color: connected ? Colors.greenAccent : Colors.redAccent,
+                size: 13 * rs,
+              ),
+              SizedBox(width: 4 * rs),
+              // FittedBox로 줄이면 시스템 글자 크기 확대가 무시된다. 넘치면 말줄임으로 자른다.
+              Flexible(
+                child: Text(
+                  hubText,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11 * rs, color: Colors.white70),
+                ),
+              ),
+              SizedBox(width: 12 * rs),
+              Icon(Icons.kitchen, color: Colors.blueAccent, size: 13 * rs),
+              SizedBox(width: 4 * rs),
+              Flexible(
+                child: Text(
+                  deviceName ?? '기기 선택 필요',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11 * rs, color: Colors.white70),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

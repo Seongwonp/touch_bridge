@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 
 import '../../../services/single_tap_stop_controller.dart';
 import '../../../theme/app_colors.dart';
@@ -57,7 +58,10 @@ class PressProgressView extends StatelessWidget {
                     : CircularProgressIndicator(strokeWidth: 8 * rs, color: AppColors.primary),
           ),
           SizedBox(height: 32 * rs),
+          // 낭독 순서는 정지 버튼 → 상태 → 설명. 화면에서는 아래에 있어도 낭독기
+          // 사용자가 넘기기 한 번에 정지를 찾게 한다.
           Semantics(
+            sortKey: const OrdinalSortKey(1),
             liveRegion: true,
             child: Text(
               label,
@@ -72,7 +76,9 @@ class PressProgressView extends StatelessWidget {
             ),
           ),
           SizedBox(height: 16 * rs),
-          Text(
+          Semantics(
+            sortKey: const OrdinalSortKey(2),
+            child: Text(
             done
                 ? '잠시 후 음성 화면으로 돌아갑니다.'
                 : awaitingStopResolution
@@ -86,11 +92,15 @@ class PressProgressView extends StatelessWidget {
               height: 1.5,
             ),
           ),
+          ),
           if (!done) ...[
             SizedBox(height: 28 * rs),
-            ListenableBuilder(
-              listenable: stopController,
-              builder: (context, _) => _buildStopArea(rs),
+            Semantics(
+              sortKey: const OrdinalSortKey(0),
+              child: ListenableBuilder(
+                listenable: stopController,
+                builder: (context, _) => _buildStopArea(rs),
+              ),
             ),
           ],
         ],

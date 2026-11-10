@@ -152,4 +152,24 @@ void main() {
     );
     handle.dispose();
   });
+
+  testWidgets('낭독 순서에서 정지 버튼이 상태 문구보다 먼저 온다', (tester) async {
+    final handle = tester.ensureSemantics();
+    final c = SingleTapStopController(
+      stop: () async => EmergencyStopOutcome.fromAck('STOPPED'),
+    );
+    await tester.pumpWidget(host(controller: c, onStopTap: () {}));
+
+    final labels = tester.semantics
+        .simulatedAccessibilityTraversal()
+        .map((n) => n.label)
+        .where((l) => l.isNotEmpty)
+        .toList();
+    final stopAt = labels.indexWhere((l) => l.contains('즉시 정지'));
+    final statusAt = labels.indexWhere((l) => l.contains('누르는 중입니다'));
+    expect(stopAt, isNonNegative);
+    expect(statusAt, isNonNegative);
+    expect(stopAt, lessThan(statusAt), reason: '실행 중 낭독기 사용자가 넘기기 한 번에 정지를 찾아야 한다');
+    handle.dispose();
+  });
 }

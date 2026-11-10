@@ -15,6 +15,10 @@ class ActiveDeviceService {
     deviceListUpdateNotifier.value++;
   }
 
+  /// 선택 기기 이름이 바뀌면 알린다(상단 상태 줄 등 표시 전용).
+  /// 기기 목록 알림과 분리해, 목록을 다시 불러오는 화면이 반응하지 않게 한다.
+  final ValueNotifier<String?> activeDeviceNameNotifier = ValueNotifier<String?>(null);
+
   // 메모리 캐시
   String? _activeDeviceId;
   String? _activeDeviceName;
@@ -31,6 +35,7 @@ class ActiveDeviceService {
     final prefs = await SharedPreferences.getInstance();
     _activeDeviceId = prefs.getString(_kActiveDeviceId);
     _activeDeviceName = prefs.getString(_kActiveDeviceName);
+    activeDeviceNameNotifier.value = _activeDeviceName;
     _activeBleId = prefs.getString(_kActiveBleId);
     _activeDeviceType = prefs.getString(_kActiveDeviceType);
   }
@@ -49,6 +54,7 @@ class ActiveDeviceService {
   }) async {
     _activeDeviceId = deviceId;
     _activeDeviceName = deviceName;
+    activeDeviceNameNotifier.value = deviceName;
     _activeBleId = bleId;
     _activeDeviceType = deviceType;
 
