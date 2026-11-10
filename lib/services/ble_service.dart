@@ -313,7 +313,13 @@ class BleService {
       late final StreamSubscription<BluetoothConnectionState> sub;
       sub = target.connectionState.listen((state) {
         if (!identical(sub, _connectionSub)) return; // 교체된 옛 구독이면 무시
-        _connectionStateController.add(state);
+        // 플랫폼의 connected는 명령 특성을 찾기 전에 온다. 그대로 알리면 구독자는
+        // "연결됨"을 받는데 isConnected·이름은 아직 비어 있고, 준비 뒤의 명시 emit은
+        // distinct에 걸려 다시 오지 않는다(실기: 배너 "연결됨:", 앱바 "허브 연결 필요").
+        // 연결 완료는 connect() 끝의 명시 emit만 알린다.
+        if (state != BluetoothConnectionState.connected) {
+          _connectionStateController.add(state);
+        }
         if (state == BluetoothConnectionState.disconnected) _motionEpoch++;
         _addLog('연결 상태 변경: ${state.name}');
         if (state == BluetoothConnectionState.disconnected) {
