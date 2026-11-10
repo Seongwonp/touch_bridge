@@ -9,8 +9,12 @@
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30"/>
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"/>
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <!-- 스캔으로 위치를 추정하지 않는다. 이 플래그가 없으면 Android 12+에서 위치 권한을
+         거부한 사용자는 검색 결과가 비어 "검색된 ESP가 없습니다"만 보게 된다. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation"/>
+    <!-- Android 11 이하에서만 BLE 스캔에 위치 권한이 필요하다. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30"/>
     <!-- NFC 태그 읽기 (기기 등록 — 시각장애인에게 QR보다 적합한 비시각 방식) -->
     <uses-permission android:name="android.permission.NFC"/>
     <application
