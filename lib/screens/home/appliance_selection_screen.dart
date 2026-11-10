@@ -366,13 +366,6 @@ class _ApplianceCard extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    Text(
-                      '추천 킷: ${appliance.recommendedKit}',
-                      style: TextStyle(
-                        color: AppColors.textTertiary,
-                        fontSize: 13 * rs,
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -418,59 +411,10 @@ class _ApplianceCard extends StatelessWidget {
               ],
             ),
             SizedBox(height: ResponsiveScale.v(context, 24)),
+            // 예전 "필요한 부품·부착 가이드"는 랙&피니언·키캡 같은 옛 하드웨어 기준이라 뺐다.
+            // 지금 하드웨어(CoreXY 프레임 + SwitchBot Bot)는 가전 종류와 무관하게 같다.
             Text(
-              '필요한 부품 구성',
-              style: TextStyle(
-                color: AppColors.primary,
-                fontWeight: FontWeight.bold,
-                fontSize: 16 * rs,
-              ),
-            ),
-            SizedBox(height: ResponsiveScale.v(context, 12)),
-            SizedBox(
-              height: 100 * rs,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: appliance.parts.length,
-                itemBuilder: (context, index) {
-                  final part = appliance.parts[index];
-                  return Container(
-                    width: 90 * rs,
-                    margin: EdgeInsets.only(right: 12 * rs),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceElevated,
-                      borderRadius: BorderRadius.circular(12 * rs),
-                      border: Border.all(color: AppColors.borderDefault),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(part.icon, color: Colors.white70, size: 28 * rs),
-                        Text(
-                          part.name,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 11 * rs,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        Text(
-                          '${part.count}개',
-                          style: TextStyle(
-                            color: AppColors.primary,
-                            fontSize: 11 * rs,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-            SizedBox(height: ResponsiveScale.v(context, 24)),
-            Text(
-              '부착 가이드',
+              '설치 순서',
               style: TextStyle(
                 color: AppColors.primary,
                 fontWeight: FontWeight.bold,
@@ -479,7 +423,9 @@ class _ApplianceCard extends StatelessWidget {
             ),
             SizedBox(height: ResponsiveScale.v(context, 8)),
             Text(
-              appliance.assemblyGuide,
+              '1. 터치브릿지 프레임을 조작부 위에 붙입니다.\n'
+              '2. 누름 장치가 버튼에 닿도록 놓습니다.\n'
+              '3. 아래에서 버튼 위치를 설정하고 저장하면 등록이 끝납니다.',
               style: TextStyle(
                 color: Colors.white70,
                 height: 1.5,
