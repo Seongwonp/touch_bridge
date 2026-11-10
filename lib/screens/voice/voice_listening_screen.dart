@@ -530,38 +530,49 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     if (_isRecording) setState(() => _isRecording = false);
   }
 
+  /// 기본 답은 음성 "네"·"아니요"다(질문 뒤 마이크가 다시 열린다). 버튼은 손으로
+  /// 답하고 싶을 때를 위한 것이라, 화면을 더듬어도 바로 닿도록 '실행'을 가로 전체에
+  /// 아주 크게, '취소'를 그 아래에 둔다. 낭독 순서도 실행 → 취소다.
   Widget _buildConfirmButtons(double rs) {
-    final labelStyle = TextStyle(fontSize: 22 * rs, fontWeight: FontWeight.w900);
     return Padding(
       padding: EdgeInsets.only(bottom: 16 * rs),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: 64 * rs),
-              child: OutlinedButton(
-                key: confirmCancelKey,
-                onPressed: _cancelPendingCommand,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.textPrimary,
-                  side: const BorderSide(color: AppColors.textSecondary, width: 2),
+          ConstrainedBox(
+            constraints: BoxConstraints(minHeight: 140 * rs),
+            child: FilledButton(
+              key: confirmRunKey,
+              onPressed: _confirmPendingCommand,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24 * rs),
                 ),
-                child: Text('취소', style: labelStyle),
+              ),
+              child: Text(
+                '실행',
+                style: TextStyle(fontSize: 34 * rs, fontWeight: FontWeight.w900),
               ),
             ),
           ),
-          SizedBox(width: 12 * rs),
-          Expanded(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: 64 * rs),
-              child: FilledButton(
-                key: confirmRunKey,
-                onPressed: _confirmPendingCommand,
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.black,
+          SizedBox(height: 14 * rs),
+          ConstrainedBox(
+            constraints: BoxConstraints(minHeight: 88 * rs),
+            child: OutlinedButton(
+              key: confirmCancelKey,
+              onPressed: _cancelPendingCommand,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.textPrimary,
+                side: const BorderSide(color: AppColors.textSecondary, width: 2),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24 * rs),
                 ),
-                child: Text('실행', style: labelStyle),
+              ),
+              child: Text(
+                '취소',
+                style: TextStyle(fontSize: 26 * rs, fontWeight: FontWeight.w900),
               ),
             ),
           ),
@@ -1248,7 +1259,8 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
         !asksAgain) {
       _pendingCommandData = Map<String, dynamic>.from(data);
       final what = message.isNotEmpty ? message : '버튼 ${commands.length}개를 누릅니다.';
-      final question = '$what 실행할까요?';
+      // 버튼을 찾지 않고 말로 답하면 된다는 것을 질문에 함께 알린다.
+      final question = '$what 실행할까요? "네" 또는 "아니요"로 답해 주세요.';
       setState(() {
         _confirmQuestion = question;
         _statusMessage = question;

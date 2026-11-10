@@ -122,7 +122,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 200));
       }
       expect(rawSent, isEmpty, reason: '확인 전에는 가전 버튼을 누르지 않는다');
-      expect(state.confirmQuestionForTest, '30초 조리를 시작합니다. 실행할까요?');
+      expect(state.confirmQuestionForTest, '30초 조리를 시작합니다. 실행할까요? "네" 또는 "아니요"로 답해 주세요.');
       expect(find.byKey(VoiceListeningScreenState.confirmRunKey), findsOneWidget);
       expect(find.byKey(VoiceListeningScreenState.confirmCancelKey), findsOneWidget);
       await tester.pump(const Duration(seconds: 4));
