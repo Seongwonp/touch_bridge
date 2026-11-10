@@ -47,6 +47,10 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   bool _isStartingListening = false;
   bool _stopInProgress = false;
 
+  /// 마지막 정지가 확인되지 않았을 때의 안내. 음성은 한 번 지나가므로 화면에 남겨
+  /// 낭독기로 다시 훑어도 지금 상태를 알 수 있게 한다.
+  String? _stopFailureMessage;
+
   // 구간 TTS: 동일 구간이 두 번 울리지 않도록 한 번 발화한 초를 기록한다.
   final Set<int> _announcedMilestones = {};
 
@@ -227,6 +231,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     _holdHapticTimer?.cancel();
     setState(() {
       _isHolding = false;
+      _stopFailureMessage = null;
     });
     _speechSession.stop();
     _timerService.stop();
@@ -260,6 +265,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     } else {
       // 전송만 됐거나 실패한 경우: 완료 화면으로 넘기지 않고 재시도할 수 있게 둔다.
       _stopInProgress = false;
+      setState(() => _stopFailureMessage = outcome.message);
       // 정지 실패 시 음성 감지를 즉시 재시작해 "멈춰" 재시도를 받을 수 있게 한다.
       if (mounted && _speechEnabled) _startListening();
     }
@@ -346,7 +352,9 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                     border: Border.all(color: const Color(0xFF27354C)),
                   ),
                   child: Text(
-                    _stopInstruction(),
+                    _stopFailureMessage == null
+                        ? _stopInstruction()
+                        : '$_stopFailureMessage 다시 ${_stopInstruction()}.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: const Color(0xFFD6E3FF),

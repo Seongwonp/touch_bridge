@@ -278,6 +278,11 @@ void main() {
         reason: '타임아웃은 정지 확인이 아니다 — "안전하게 중단" 화면으로 넘기면 거짓 완료다',
       );
       expect(spoke('응답을 확인하지 못했습니다'), isTrue);
+      expect(
+        find.textContaining('응답을 확인하지 못했습니다'),
+        findsOneWidget,
+        reason: '음성은 한 번 지나간다 — 낭독기로 다시 훑으면 실패 상태를 읽을 수 있어야 한다',
+      );
 
       // _stopInProgress가 풀려 재시도가 가능해야 한다.
       //

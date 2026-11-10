@@ -122,7 +122,7 @@ class _DeveloperConsoleScreenState extends State<DeveloperConsoleScreen> {
       value: _stepSize.abs(),
       feedRate: feed,
     );
-    _addLog(okDown && okUp ? '<< [SUCCESS] Z 테스트 완료' : '<< [ERROR] Z 테스트 실패');
+    _addLog(okDown && okUp ? '<< [SUCCESS] Z 테스트 전송 완료' : '<< [ERROR] Z 테스트 전송 실패');
   }
 
   Future<void> _dryRunButton() async {
