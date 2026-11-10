@@ -374,13 +374,19 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: BleStatusBanner(),
                       ),
                       SizedBox(height: 8 * rs),
-                      if (_devices.isEmpty) ...[
-                        HomeEmptyState(
-                          guardianModeEnabled: guardianMode,
-                          onAddDevicePressed: _openDeviceConnect,
-                        ),
-                        SizedBox(height: 24 * rs),
-                      ] else ...[
+                      // 기기가 없으면 안내 카드 하나만 둔다. 예전에는 아래 PageView의
+                      // "새 기기 추가하기" 카드가 함께 떠서 같은 버튼이 두 번 나오고,
+                      // 남은 높이가 모자라 그 카드 글자가 잘렸다(Galaxy A31 실기).
+                      if (_devices.isEmpty)
+                        Expanded(
+                          child: SingleChildScrollView(
+                            child: HomeEmptyState(
+                              guardianModeEnabled: guardianMode,
+                              onAddDevicePressed: _openDeviceConnect,
+                            ),
+                          ),
+                        )
+                      else ...[
                         HomeVoiceActionButton(
                           deviceName:
                               _currentDeviceIndex >= 0 &&
@@ -403,6 +409,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         SizedBox(height: 12 * rs),
                       ],
+                      if (_devices.isNotEmpty)
                       Expanded(
                         child: PageView.builder(
                           controller: _pageController,
@@ -467,6 +474,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
+              if (_devices.isNotEmpty)
               HomeFooterNavHint(
                 scale: rs,
                 onPrevious: () => _pageController.previousPage(
