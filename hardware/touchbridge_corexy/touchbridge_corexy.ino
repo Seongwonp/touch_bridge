@@ -367,6 +367,25 @@ void emitState(const char* id, const char* state, const char* extra = "") {
   out("{\"version\":2,\"commandId\":\"%s\",\"state\":\"%s\"%s}\n", id, state, extra);
 }
 
+// 위치 오차 진단: 시리얼에는 목표·실제 위치와 오차를 자세히, BLE에는 짧은 상태만 보낸다.
+void emitStateSerialDetail(const char* id, const char* state, const char* extra) {
+  char line[256];
+  int n = snprintf(line, sizeof(line),
+                   "{\"version\":2,\"commandId\":\"%s\",\"state\":\"%s\"%s}\n",
+                   id, state, extra);
+  if (n <= 0 || n >= (int)sizeof(line)) { emitState(id, state); return; }
+  Serial.print(line);
+  if (bleConnected) {
+    char brief[128];
+    int m = snprintf(brief, sizeof(brief),
+                     "{\"version\":2,\"commandId\":\"%s\",\"state\":\"%s\"}\n", id, state);
+    if (m > 0 && m < (int)sizeof(brief)) {
+      bleNotify(bleIo, brief, m);
+      bleNotify(bleTx, brief, m);
+    }
+  }
+}
+
 // ---------------- 실행 ----------------
 void endActive() { active = false; }
 
@@ -555,7 +574,26 @@ void handleEvent(MotionEvent e) {
       out("STOPPED\n");
       break;
     case MotionEvent::FAULT_FOLLOW: failActive("ERROR_STALL", "FOLLOW_ERROR"); break;
-    case MotionEvent::FAULT_SETTLE: failActive("ERROR_POSITION", "SETTLE"); break;
+    case MotionEvent::FAULT_SETTLE: {
+      if (active && cur.org == ORG_JSON && cur.type == StepType::MOVE) {
+        auto fault = motion.faultSnapshot();
+        if (!fault.valid) { failActive("ERROR_POSITION", "SETTLE"); break; }
+        float err = hypotf(fault.x - cur.x, fault.y - cur.y);
+        char extra[160];
+        snprintf(extra, sizeof(extra),
+                 ",\"reason\":\"SETTLE\",\"target\":{\"xMm\":%.2f,\"yMm\":%.2f},"
+                 "\"position\":{\"xMm\":%.2f,\"yMm\":%.2f},\"errorMm\":%.3f,\"settleMs\":%lu",
+                 cur.x, cur.y, fault.x, fault.y, err, (unsigned long)fault.settleMs);
+        emitStateSerialDetail(cur.id, "ERROR_POSITION", extra);
+        qClear();
+        active = false;
+        planValid = false;
+        invalidateToken();
+      } else {
+        failActive("ERROR_POSITION", "SETTLE");
+      }
+      break;
+    }
     case MotionEvent::FAULT_HOME:   failActive("ERROR_TIMEOUT", "HOME_NOT_FOUND"); break;
   }
 }

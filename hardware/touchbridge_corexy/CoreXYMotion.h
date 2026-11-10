@@ -147,6 +147,7 @@ public:
     Guard g(lock_);
     encA_.write(0);
     encB_.write(0);
+    fault_.valid = false;
     homed_ = true;
     syncToMeasured();
     if (state_ != MotionState::RAW) state_ = MotionState::IDLE;
@@ -170,6 +171,17 @@ public:
       p->kp = kp; p->ki = ki; p->kd = kd; p->kff = kff;
       p->reset();
     }
+  }
+
+  struct FaultSnapshot {
+    bool valid = false;
+    float x = 0, y = 0, xRef = 0, yRef = 0;
+    uint32_t settleMs = 0;
+  };
+
+  FaultSnapshot faultSnapshot() {
+    Guard g(lock_);
+    return fault_;
   }
 
   struct Status {
@@ -304,6 +316,11 @@ private:
   void emit(MotionEvent e) { if (evq_) xQueueSend(evq_, &e, 0); }
 
   void fault(MotionEvent e) {
+    fault_.valid = true;
+    countsToXY(encA_.read(), encB_.read(), fault_.x, fault_.y);
+    fault_.xRef = xRef_;
+    fault_.yRef = yRef_;
+    fault_.settleMs = (uint32_t)(settleTimeout_ * 1000.0f);
     motA_.brake();
     motB_.brake();
     homingBackoff_ = false;
@@ -313,6 +330,7 @@ private:
 
   // ---------------- 사다리꼴 궤적 ----------------
   void startMove(float x, float y, float speed) {
+    fault_.valid = false;
     p0x_ = xRef_; p0y_ = yRef_;
     p1x_ = x;     p1y_ = y;
     const float dx = x - p0x_, dy = y - p0y_;
@@ -404,6 +422,7 @@ private:
   QuadEncoder encA_, encB_;
   AxisPid pidA_, pidB_;
   QueueHandle_t evq_ = nullptr;
+  FaultSnapshot fault_;
   SemaphoreHandle_t lock_ = nullptr;
 
   volatile MotionState state_ = MotionState::OFF;
