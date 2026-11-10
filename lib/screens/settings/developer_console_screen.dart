@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../services/active_device_service.dart';
 import '../../services/ble_service.dart';
@@ -21,6 +23,7 @@ class _DeveloperConsoleScreenState extends State<DeveloperConsoleScreen> {
   final TextEditingController _controller = TextEditingController();
   final List<String> _messages = [];
   final ScrollController _scrollController = ScrollController();
+  StreamSubscription<String>? _responseSub;
 
   double _stepSize = 1.0; // 이동 거리 (mm)
   double _feedRate = 800; // 이동 속도 (F)
@@ -39,6 +42,21 @@ class _DeveloperConsoleScreenState extends State<DeveloperConsoleScreen> {
     } else {
       _messages.add('[BLE] 연결된 ESP가 없습니다. 상단의 ESP 선택을 사용하세요.');
     }
+    // 기기가 실제로 보낸 응답을 보여 준다. 전송 성공만으로는 움직였는지 알 수 없다
+    // (예: 원점이 없으면 G1은 접수(ok) 뒤 FAULT NOT_HOMED로 실패한다).
+    _responseSub = BleService.instance.responseStream.listen((line) {
+      final text = line.trim();
+      if (text.isEmpty || text.startsWith('{"event":"power"')) return;
+      if (mounted) _addLog('<< [기기] $text');
+    });
+  }
+
+  @override
+  void dispose() {
+    _responseSub?.cancel();
+    _controller.dispose();
+    _scrollController.dispose();
+    super.dispose();
   }
 
   void _addLog(String msg) {
@@ -81,7 +99,8 @@ class _DeveloperConsoleScreenState extends State<DeveloperConsoleScreen> {
       value: val,
       feedRate: feedRate,
     );
-    _addLog(ok ? '<< [SUCCESS] 이동 완료' : '<< [ERROR] 이동 실패');
+    // 전송 성공은 이동 완료가 아니다. 결과는 아래 [기기] 응답(DONE/FAULT)으로 확인한다.
+    _addLog(ok ? '<< [SUCCESS] 전송 완료' : '<< [ERROR] 전송 실패');
   }
 
   Future<void> _home() => _sendRaw('\$H');
@@ -179,6 +198,12 @@ class _DeveloperConsoleScreenState extends State<DeveloperConsoleScreen> {
       appBar: const TopAppBar(title: '개발자 모드 (조깅)', showBack: true),
       body: Column(
         children: [
+          // 키보드가 올라오면 위쪽 조작부만 스크롤로 줄여 넘치지 않게 한다.
+          Flexible(
+            flex: 3,
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
           EspConnectionPanel(
             connected: BleService.instance.connectedDeviceId.isNotEmpty,
             connectedName: BleService.instance.connectedDeviceName,
@@ -196,6 +221,10 @@ class _DeveloperConsoleScreenState extends State<DeveloperConsoleScreen> {
             onJog: _jog,
           ),
           _buildQuickActions(rs),
+                ],
+              ),
+            ),
+          ),
 
           // 2. 메시지 로그
           Expanded(
