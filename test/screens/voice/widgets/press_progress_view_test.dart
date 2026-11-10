@@ -67,7 +67,7 @@ void main() {
 
     expect(stops, 1, reason: '두 번째 탭·확인창·길게 누르기 없이 한 번에 실행');
     expect(find.byType(AlertDialog), findsNothing);
-    expect(find.text('기기를 멈췄습니다. 안전합니다.'), findsOneWidget);
+    expect(find.text('터치브릿지를 멈췄습니다. 가전이 이미 돌고 있으면 가전의 취소 버튼을 눌러 주세요.'), findsOneWidget);
   });
 
   testWidgets('정지 요청 중에는 버튼이 비활성이고 중복 탭이 새 요청을 만들지 않는다', (tester) async {
@@ -92,7 +92,7 @@ void main() {
 
     gate.complete(EmergencyStopOutcome.fromAck('STOPPED'));
     await settle(tester);
-    expect(find.text('기기를 멈췄습니다. 안전합니다.'), findsOneWidget);
+    expect(find.text('터치브릿지를 멈췄습니다. 가전이 이미 돌고 있으면 가전의 취소 버튼을 눌러 주세요.'), findsOneWidget);
   });
 
   testWidgets('미확인 결과는 정지 완료라고 말하지 않고 다시 정지를 허용한다', (tester) async {
@@ -113,7 +113,7 @@ void main() {
 
     await tester.tap(find.byKey(PressProgressView.stopButtonKey));
     await settle(tester);
-    expect(find.text('기기를 멈췄습니다. 안전합니다.'), findsOneWidget);
+    expect(find.text('터치브릿지를 멈췄습니다. 가전이 이미 돌고 있으면 가전의 취소 버튼을 눌러 주세요.'), findsOneWidget);
     expect(c.requestCount, 2);
   });
 

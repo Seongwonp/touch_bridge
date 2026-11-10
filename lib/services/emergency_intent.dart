@@ -91,7 +91,7 @@ class EmergencyStopOutcome {
       return const EmergencyStopOutcome(
         acknowledged: true,
         sent: true,
-        message: '기기를 멈췄습니다. 안전합니다.',
+        message: '터치브릿지를 멈췄습니다. 가전이 이미 돌고 있으면 가전의 취소 버튼을 눌러 주세요.',
       );
     }
 

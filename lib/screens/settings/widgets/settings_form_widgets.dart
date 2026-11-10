@@ -87,7 +87,9 @@ class SliderRow extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(16 * rs, 14 * rs, 16 * rs, 6 * rs),
       child: Column(
         children: [
-          Row(
+          // 낭독기는 아래 슬라이더 하나로 "이름, 현재값"을 읽는다. 위 글자는 중복이라 뺀다.
+          ExcludeSemantics(
+          child: Row(
             children: [
               Text(
                 label,
@@ -108,14 +110,23 @@ class SliderRow extends StatelessWidget {
               ),
             ],
           ),
-          Slider(
-            value: value,
-            min: min,
-            max: max,
-            divisions: divisions,
-            onChanged: onChanged,
-            activeColor: AppColors.primary,
-            inactiveColor: AppColors.borderDefault,
+          ),
+          // MergeSemantics가 없으면 이름과 슬라이더가 따로 읽힌다.
+          MergeSemantics(
+            child: Semantics(
+              label: label,
+              child: Slider(
+                value: value,
+                min: min,
+                max: max,
+                divisions: divisions,
+                onChanged: onChanged,
+                // 기본값은 "50%"뿐이라 화면에 보이는 값 문구를 그대로 읽힌다.
+                semanticFormatterCallback: (_) => display,
+                activeColor: AppColors.primary,
+                inactiveColor: AppColors.borderDefault,
+              ),
+            ),
           ),
         ],
       ),
@@ -139,7 +150,9 @@ class SwitchRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
-    return Padding(
+    // 제목·설명과 스위치를 한 노드로 묶어 "음성 안내, 켜짐, 스위치"처럼 읽힌다.
+    return MergeSemantics(
+      child: Padding(
       padding: EdgeInsets.symmetric(horizontal: 16 * rs, vertical: 4 * rs),
       child: Row(
         children: [
@@ -168,6 +181,7 @@ class SwitchRow extends StatelessWidget {
             activeThumbColor: AppColors.primary,
           ),
         ],
+      ),
       ),
     );
   }

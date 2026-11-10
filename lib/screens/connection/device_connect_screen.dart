@@ -150,12 +150,13 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
         if (ok) {
           setState(() {
             _connected = true;
-            _statusMessage = 'BLE 연결 완료';
+            _statusMessage = '연결되었습니다';
           });
 
           _tts.speak(
             '연결에 성공했습니다. 이제 이 하드웨어에 등록할 가전 기기를 선택해 주세요.',
             source: 'DeviceConnectScreen',
+            priority: TtsPriority.result,
           );
 
           Navigator.of(context).pushReplacement(
@@ -167,7 +168,8 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
             ),
           );
         } else {
-          _tts.speak('연결에 실패했습니다. 다시 시도해 주세요.', source: 'DeviceConnectScreen');
+          setState(() => _statusMessage = '연결에 실패했습니다. 다시 시도해 주세요.');
+          _tts.speak('연결에 실패했습니다. 다시 시도해 주세요.', source: 'DeviceConnectScreen', priority: TtsPriority.result);
         }
       }
     }
@@ -371,7 +373,7 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
 
     if (devices.any((d) => d['id'] == candidateId)) {
       if (context.mounted) {
-        _tts.speak('$name 기기는 이미 등록되어 있습니다.', source: 'DeviceConnectScreen');
+        _tts.speak('$name 기기는 이미 등록되어 있습니다.', source: 'DeviceConnectScreen', priority: TtsPriority.result);
       }
       return;
     }
@@ -395,7 +397,7 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
     );
 
     if (context.mounted) {
-      _tts.speak('$name 기기가 홈에 추가되었습니다.', source: 'DeviceConnectScreen');
+      _tts.speak('$name 기기가 홈에 추가되었습니다.', source: 'DeviceConnectScreen', priority: TtsPriority.result);
     }
   }
 
@@ -419,9 +421,9 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
       final profile = DeviceMappingProfile.fromJson(profileData);
       await DeviceMappingService.instance.save(deviceId, profile);
 
-      _tts.speak('$name 정보 로드 완료.', source: 'DeviceConnectScreen');
+      _tts.speak('$name 정보를 불러왔습니다.', source: 'DeviceConnectScreen', priority: TtsPriority.result);
     } catch (e) {
-      _tts.speak('정보를 가져오지 못했습니다.', source: 'DeviceConnectScreen');
+      _tts.speak('정보를 가져오지 못했습니다.', source: 'DeviceConnectScreen', priority: TtsPriority.result);
     }
   }
 

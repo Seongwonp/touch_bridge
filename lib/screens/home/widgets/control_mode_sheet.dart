@@ -11,6 +11,7 @@ import '../../mapping/manual_mapping_screen.dart';
 import '../../../services/device_mapping_service.dart';
 import '../../../services/ble_service.dart';
 import '../../../services/accessibility_settings.dart';
+import '../../../services/accessibility_confirmation_policy.dart';
 import '../../../services/active_device_service.dart';
 import '../../../services/feedback_service.dart';
 import '../../../services/tts_service.dart';
@@ -110,7 +111,15 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
     required String guide,
     required VoidCallback onConfirmed,
   }) async {
-    if (_armedActionId != id) {
+    // 모든 항목이 화면을 여는 이동이라, 낭독기 사용자는 OS 두 번 탭으로 이미 확인했다.
+    final screenReaderActive =
+        MediaQuery.maybeOf(context)?.accessibleNavigation ??
+        AccessibilitySettings.isScreenReaderActive;
+    if (_armedActionId != id &&
+        AccessibilityConfirmationPolicy.requiresAppConfirmation(
+          kind: ConfirmationActionKind.navigation,
+          screenReaderActive: screenReaderActive,
+        )) {
       setState(() => _armedActionId = id);
       FeedbackService.instance.vibrateSuccess();
       _actionResetTimer?.cancel();

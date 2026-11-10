@@ -36,6 +36,7 @@ import '../../services/single_tap_stop_controller.dart';
 import 'widgets/press_progress_view.dart';
 import '../../services/home_device_store.dart';
 import '../../services/accessibility_settings.dart';
+import '../../services/accessibility_confirmation_policy.dart';
 import '../../theme/app_colors.dart';
 import 'widgets/voice_wave_visualizer.dart';
 import 'widgets/voice_action_buttons.dart';
@@ -468,7 +469,15 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   void _handleMicTap() {
     if (_isProcessing) return;
 
-    if (!_micArmed) {
+    // 마이크를 켜고 끄는 것은 물리 동작이 아니므로 낭독기 사용자에게는 확인 탭을 겹치지 않는다.
+    final screenReaderActive =
+        MediaQuery.maybeOf(context)?.accessibleNavigation ??
+        AccessibilitySettings.isScreenReaderActive;
+    if (!_micArmed &&
+        AccessibilityConfirmationPolicy.requiresAppConfirmation(
+          kind: ConfirmationActionKind.navigation,
+          screenReaderActive: screenReaderActive,
+        )) {
       setState(() => _micArmed = true);
       HapticFeedback.mediumImpact();
       _actionResetTimer?.cancel();
@@ -1427,7 +1436,11 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
                         if (isIdle)
                           VoiceExampleCommands(
                             scale: rs,
-                            onCommandTap: (cmd) {
+                            onArmed: (cmd) {
+                              HapticFeedback.mediumImpact();
+                              _speak('$cmd. 한 번 더 누르면 실행합니다.');
+                            },
+                            onConfirmed: (cmd) {
                               setState(() {
                                 _recognizedText = cmd;
                                 _isProcessing = true;

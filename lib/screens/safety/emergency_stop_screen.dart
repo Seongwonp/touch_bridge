@@ -11,6 +11,7 @@ import '../../services/speech_session_service.dart';
 import '../../services/timer_service.dart';
 import '../../services/tts_service.dart';
 import '../../services/accessibility_experiment_service.dart';
+import '../../services/accessibility_settings.dart';
 
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
@@ -71,9 +72,16 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
           });
 
     _startCountdown();
+    // 안내를 먼저 큐에 넣고 마이크를 연다. _initSpeech가 안내가 끝나길 기다리므로
+    // 안내 속 "중단"이 STT에 들어가 스스로 정지되는 일이 없다.
+    _speak('${widget.deviceName} 작동 중입니다. ${_stopInstruction()}.');
     _initSpeech();
-    _speak('${widget.deviceName} 작동 중입니다. 중단하려면 아래 버튼을 3초간 누르세요.');
   }
+
+  /// 화면 낭독기 사용자는 두 번 탭으로 바로 멈춘다(길게 누르기는 낭독기 제스처와 다르다).
+  String _stopInstruction() => AccessibilitySettings.isScreenReaderActive
+      ? '멈추려면 아래 버튼을 두 번 탭하세요'
+      : '중단하려면 아래 버튼을 3초간 누르세요';
 
   Future<void> _initSpeech() async {
     // 이 화면이 스택 최상단인 동안만 이벤트를 받는다(공용 세션의 스택 구조).
@@ -92,7 +100,8 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     );
     try {
       _speechEnabled = await _speechSession.initialize();
-      if (_speechEnabled) _startListening();
+      await _tts.waitUntilIdle();
+      if (_speechEnabled && mounted) _startListening();
     } catch (_) {}
   }
 
@@ -165,6 +174,15 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     final m = totalSeconds ~/ 60;
     final s = totalSeconds % 60;
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+
+  /// 낭독용 남은 시간. "02:30"은 시각("2시 30분")으로 읽힐 수 있어 단위를 붙인다.
+  String _spokenTime(int totalSeconds) {
+    final m = totalSeconds ~/ 60;
+    final s = totalSeconds % 60;
+    if (m == 0) return '$s초';
+    if (s == 0) return '$m분';
+    return '$m분 $s초';
   }
 
   Future<void> _speak(
@@ -299,7 +317,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                 SizedBox(height: ResponsiveScale.v(context, 8)),
                 Semantics(
                   label: '남은 시간',
-                  value: _formatMMSS(_secondsLeft),
+                  value: _spokenTime(_secondsLeft),
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
                     child: ExcludeSemantics(
@@ -328,7 +346,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                     border: Border.all(color: const Color(0xFF27354C)),
                   ),
                   child: Text(
-                    '중단하려면 아래 버튼을 3초간 누르세요',
+                    _stopInstruction(),
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: const Color(0xFFD6E3FF),
@@ -367,7 +385,10 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                     Semantics(
                       button: true,
                       label: '비상 정지',
-                      hint: '길게 눌러 기기를 즉시 중단합니다',
+                      hint: '두 번 탭하면 터치브릿지를 바로 멈춥니다',
+                      excludeSemantics: true,
+                      // 낭독기의 두 번 탭은 onTap으로 온다. 일반 터치는 아래 길게 누르기만 받는다.
+                      onTap: _onHoldCompleted,
                       onLongPress: _onHoldCompleted,
                       child: GestureDetector(
                         onLongPressStart: (_) => _onHoldStart(),

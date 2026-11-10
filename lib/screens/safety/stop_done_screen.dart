@@ -19,7 +19,10 @@ import '../../theme/app_colors.dart';
 class StopDoneScreen extends StatefulWidget {
   const StopDoneScreen({super.key, this.completed = false});
 
-  /// true면 타이머가 정상적으로 끝난 "작동 완료", false면 사용자/비상 "중단".
+  /// true면 앱 타이머가 끝난 것, false면 터치브릿지 정지가 확인된 것.
+  ///
+  /// 타이머 종료는 앱 시간일 뿐 가전이 멈췄다는 확인이 아니고, 정지 확인도 가전의
+  /// 취소 버튼을 누른 것은 아니다. 문구가 이 차이를 지킨다.
   final bool completed;
 
   @override
@@ -37,8 +40,8 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
     // 스크린리더 활성 시에도 들려야 한다 — result 우선순위 명시.
     _tts.speak(
       widget.completed
-          ? '작동이 끝났습니다. 홈으로 돌아가려면 버튼을 누르세요.'
-          : '즉시 중단했습니다. 홈으로 돌아가려면 버튼을 누르세요.',
+          ? '설정한 시간이 지났습니다. 가전이 멈췄는지 확인해 주세요. 홈으로 돌아가려면 버튼을 누르세요.'
+          : '터치브릿지를 멈췄습니다. 가전이 이미 돌고 있으면 가전의 취소 버튼을 눌러 주세요. 홈으로 돌아가려면 버튼을 누르세요.',
       interrupt: true,
       priority: TtsPriority.result,
     );
@@ -98,14 +101,12 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
   @override
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
-    final headline = widget.completed ? '작동이\n끝났습니다' : '작동이 안전하게\n중단되었습니다';
-    final headlineLabel = widget.completed ? '작동이 끝났습니다.' : '작동이 안전하게 중단되었습니다.';
-    final circleLabel = widget.completed
-        ? '작동이 끝났습니다. 확인 완료.'
-        : '작동이 안전하게 중단되었습니다. 확인 완료.';
+    final headline = widget.completed ? '설정한 시간이\n지났습니다' : '터치브릿지를\n멈췄습니다';
+    final headlineLabel = widget.completed ? '설정한 시간이 지났습니다.' : '터치브릿지를 멈췄습니다.';
+    final circleLabel = widget.completed ? '설정한 시간이 지났습니다.' : '터치브릿지 멈춤 확인.';
     final descText = widget.completed
-        ? '작동이 정상적으로 끝났습니다.\n홈으로 돌아가려면 버튼을 탭하세요.'
-        : '모든 동작이 중단되었습니다.\n홈으로 돌아가려면 버튼을 탭하세요.';
+        ? '가전이 멈췄는지 확인해 주세요.\n홈으로 돌아가려면 버튼을 탭하세요.'
+        : '가전이 이미 돌고 있으면\n가전의 취소 버튼을 눌러 주세요.';
 
     return Scaffold(
       backgroundColor: AppColors.background,

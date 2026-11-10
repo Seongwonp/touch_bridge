@@ -108,7 +108,7 @@ void main() {
       TtsService().getRecentLog().any((line) => line.contains(fragment));
 
   group('비상 정지 화면 — 남은 시간 안내', () {
-    testWidgets('남은 시간을 MM:SS Semantics value로 노출한다 (스크린리더 포커스 시 낭독)', (
+    testWidgets('남은 시간을 "2분 30초" Semantics value로 노출한다 (스크린리더 포커스 시 낭독)', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -117,7 +117,7 @@ void main() {
       await tester.pump();
 
       // 화면에는 시각용 헤딩 Text('남은 시간')와 값을 담은
-      // Semantics(label:'남은 시간', value:'02:30')가 함께 있어 라벨만으로는
+      // Semantics(label:'남은 시간', value:'2분 30초')가 함께 있어 라벨만으로는
       // 노드가 둘 매칭된다. value를 가진 쪽을 정확히 지목한다.
       final semantics = tester.getSemantics(
         find.byWidgetPredicate(
@@ -129,7 +129,7 @@ void main() {
       );
       expect(
         semantics.value,
-        '02:30',
+        '2분 30초',
         reason: '숫자 텍스트는 ExcludeSemantics로 가려져 있어, value가 유일한 낭독 경로다',
       );
 
@@ -223,6 +223,26 @@ void main() {
     });
   });
 
+  group('비상 정지 화면 — 화면 낭독기', () {
+    testWidgets('낭독기의 두 번 탭(semantics tap)으로 바로 정지한다', (tester) async {
+      await registerActiveDevice();
+      stubStopAck('STOPPED');
+      final handle = tester.ensureSemantics();
+
+      await tester.pumpWidget(wrap(const EmergencyStopScreen(initialSeconds: 150)));
+      await tester.pump();
+
+      tester.semantics.tap(find.semantics.byLabel('비상 정지'));
+      await settleStopFlow(tester);
+
+      expect(stopCalls, isNotEmpty, reason: '길게 누르기를 모르는 낭독기 사용자도 멈출 수 있어야 한다');
+      expect(find.byType(StopDoneScreen), findsOneWidget);
+
+      handle.dispose();
+      await disposeScreen(tester);
+    });
+  });
+
   group('비상 정지 화면 — 거짓 완료 금지', () {
     testWidgets('기기가 정지를 확인하면(STOPPED) 완료 화면으로 이동한다', (tester) async {
       await registerActiveDevice();
@@ -235,7 +255,7 @@ void main() {
       await settleStopFlow(tester);
 
       expect(find.byType(StopDoneScreen), findsOneWidget);
-      expect(spoke('기기를 멈췄습니다'), isTrue);
+      expect(spoke('터치브릿지를 멈췄습니다'), isTrue);
 
       await disposeScreen(tester);
     });
