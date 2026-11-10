@@ -60,13 +60,9 @@ void main() {
     expect(find.bySemanticsLabel(RegExp('이동 대기 중')), findsNothing);
   });
 
-  testWidgets('화면읽기가 꺼져 있으면 기존 화면 이동 확인을 유지한다', (tester) async {
+  testWidgets('화면읽기가 꺼져 있어도 탭은 한 번 눌러 바로 이동한다', (tester) async {
     await _pumpWithGuardianMode(tester, enabled: false);
 
-    await tester.tap(find.text('비상'));
-    await tester.pump();
-
-    expect(find.text('비상 정지'), findsNothing);
     await tester.tap(find.text('비상'));
     await tester.pumpAndSettle();
     expect(find.text('비상 정지'), findsWidgets);
