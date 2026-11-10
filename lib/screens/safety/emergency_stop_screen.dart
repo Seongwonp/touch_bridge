@@ -404,10 +404,8 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                         onLongPressCancel: _onHoldEnd,
                         child: Container(
                           width: double.infinity,
-                          constraints: BoxConstraints(
-                            minHeight: 160 * rs,
-                            maxHeight: 220 * rs,
-                          ),
+                          // 최대 높이를 두면 큰 글씨에서 "길게 눌러 중단"이 잘린다.
+                          constraints: BoxConstraints(minHeight: 160 * rs),
                           decoration: BoxDecoration(
                             gradient: const LinearGradient(
                               colors: [Color(0xFFFF5252), Color(0xFF93000A)],

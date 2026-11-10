@@ -78,15 +78,25 @@ class HomeDeviceCard extends StatelessWidget {
                   ),
                 ],
               ),
-              child: Center(
+              // 카드 높이는 화면·글자 크기에 따라 크게 달라진다. 장식 아이콘을 남는
+              // 높이에 맞춰 줄이고, 아주 낮으면 숨겨 이름·상태 글자가 잘리지 않게 한다.
+              child: LayoutBuilder(
+                builder: (context, box) {
+                  // 글자를 1.3배보다 키웠으면 장식 아이콘보다 글자에 높이를 준다.
+                  final bigText = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+                  final iconBox = bigText || box.maxHeight < 260
+                      ? 0.0
+                      : (box.maxHeight * 0.28).clamp(56.0, 100 * rs);
+                  return Center(
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (iconBox > 0) ...[
                       Container(
-                        width: 100 * rs,
-                        height: 100 * rs,
+                        width: iconBox,
+                        height: iconBox,
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
                             colors: AppColors.primaryGradient,
@@ -105,11 +115,12 @@ class HomeDeviceCard extends StatelessWidget {
                           child: Icon(
                             iconFromCodePoint(device['iconCodePoint']),
                             color: Colors.black,
-                            size: 48 * rs,
+                            size: iconBox * 0.48,
                           ),
                         ),
                       ),
                       SizedBox(height: ResponsiveScale.v(context, 16)),
+                      ],
                       Text(
                         device['name'] as String,
                         style: TextStyle(
@@ -133,13 +144,16 @@ class HomeDeviceCard extends StatelessWidget {
                             ),
                           ),
                           SizedBox(width: 8 * rs),
-                          Text(
+                          Flexible(
+                            child: Text(
                             device['status'] as String,
                             style: TextStyle(
                               fontSize: 15 * rs,
                               fontWeight: FontWeight.w600,
                               color: AppColors.textSecondary,
                             ),
+                            textAlign: TextAlign.center,
+                          ),
                           ),
                         ],
                       ),
@@ -169,6 +183,8 @@ class HomeDeviceCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                  );
+                },
               ),
             ),
           ), // ExcludeSemantics

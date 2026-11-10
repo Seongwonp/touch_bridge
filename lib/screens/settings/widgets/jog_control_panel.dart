@@ -24,7 +24,9 @@ class JogControlPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final rs = scale;
     final width = MediaQuery.sizeOf(context).width;
-    final compact = width < 390;
+    // 이동 단위·속도 줄은 Galaxy A31(411dp)에서도 넘쳤다. 폭이 좁거나 글자를
+    // 키웠으면 세로로 쌓는다.
+    final compact = width < 440 || MediaQuery.textScalerOf(context).scale(1) > 1.1;
     // 시각 요소가 축소되더라도 실제 터치 영역은 WCAG 최소 44dp를 유지한다.
     final buttonSize = ((compact ? 44.0 : 52.0) * rs)
         .clamp(44.0, double.infinity)
@@ -220,7 +222,8 @@ class JogControlPanel extends StatelessWidget {
           child: IconButton(
             tooltip: tooltipText,
             onPressed: onTap,
-            icon: Icon(icon, color: color, size: iconSize),
+            // 버튼 크기에서 안쪽 여백을 뺀 만큼만 아이콘을 그려 잘리지 않게 한다.
+            icon: Icon(icon, color: color, size: iconSize.clamp(12.0, size - 2 * padding)),
             style: IconButton.styleFrom(
               backgroundColor: AppColors.surface,
               padding: EdgeInsets.all(padding),

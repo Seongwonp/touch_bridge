@@ -213,9 +213,9 @@ class _GuardianHandoffScreenState extends State<GuardianHandoffScreen> {
                       ),
                     ),
                     SizedBox(height: 16 * rs),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56 * rs,
+                    ConstrainedBox(
+                      // 고정 높이면 큰 글씨에서 라벨이 잘린다. 최소 높이만 둔다.
+                      constraints: BoxConstraints(minWidth: double.infinity, minHeight: 56 * rs),
                       child: ElevatedButton(
                         onPressed: _finishHandoff,
                         style: ElevatedButton.styleFrom(

@@ -589,9 +589,9 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
             SizedBox(height: 22 * rs),
             _buildAdvancedSettings(rs),
             SizedBox(height: 22 * rs),
-            SizedBox(
-              width: double.infinity,
-              height: 62 * rs,
+            ConstrainedBox(
+              // 고정 높이면 큰 글씨에서 라벨이 잘린다. 최소 높이만 둔다.
+              constraints: BoxConstraints(minWidth: double.infinity, minHeight: 62 * rs),
               child: ElevatedButton.icon(
                 onPressed: _isUploading ? null : _saveAndUpload,
                 style: ElevatedButton.styleFrom(
@@ -760,9 +760,9 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
   Widget _buildRegisterButton(double rs) {
     final selected = _selectedButtonId;
     final label = selected == null ? '위치를 저장할 버튼을 선택하세요' : '선택한 버튼 위치 저장';
-    return SizedBox(
-      width: double.infinity,
-      height: 60 * rs,
+    return ConstrainedBox(
+      // 고정 높이면 큰 글씨에서 라벨이 잘린다. 최소 높이만 둔다.
+      constraints: BoxConstraints(minWidth: double.infinity, minHeight: 60 * rs),
       child: ElevatedButton.icon(
         onPressed: selected == null ? null : _registerSelectedButtonHere,
         style: ElevatedButton.styleFrom(
@@ -906,9 +906,9 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
     bool secondary = false,
   }) {
     final armed = _armedAction == id;
-    return SizedBox(
-      width: double.infinity,
-      height: 58 * rs,
+    return ConstrainedBox(
+      // 고정 높이면 큰 글씨에서 라벨이 잘린다. 최소 높이만 둔다.
+      constraints: BoxConstraints(minWidth: double.infinity, minHeight: 58 * rs),
       child: ElevatedButton.icon(
         onPressed: () =>
             _armAndRun(id: id, guide: guide, onConfirmed: onConfirmed),
@@ -1086,19 +1086,25 @@ class _ProgressItem extends StatelessWidget {
                 color: active ? AppColors.primary : AppColors.textTertiary,
               ),
             ),
-            child: Text(
-              number,
-              style: TextStyle(
-                color: active ? Colors.black : AppColors.textSecondary,
-                fontSize: 13 * scale,
-                fontWeight: FontWeight.w900,
+            // 고정 크기 원 안의 숫자라 글자 확대 시 잘린다. 원 안에 맞게 줄인다
+            // (단계 이름은 아래 글자와 낭독으로 전달된다).
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                number,
+                style: TextStyle(
+                  color: active ? Colors.black : AppColors.textSecondary,
+                  fontSize: 13 * scale,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
             ),
           ),
           SizedBox(height: 5 * scale),
           Text(
             label,
-            maxLines: 1,
+            maxLines: 2,
+            textAlign: TextAlign.center,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: active ? AppColors.primary : AppColors.textTertiary,

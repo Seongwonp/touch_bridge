@@ -26,7 +26,9 @@ class CalibrationPrompt extends StatelessWidget {
           border: Border.all(color: AppColors.primary, width: 2 * scale),
           boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 12 * scale)],
         ),
-        child: Column(
+        // 키보드가 올라오거나 글자를 키우면 안내가 넘친다. 넘칠 때는 스크롤한다.
+        child: SingleChildScrollView(
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
@@ -57,6 +59,7 @@ class CalibrationPrompt extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
           ],
+        ),
         ),
       ),
     );

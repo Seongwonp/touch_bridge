@@ -72,12 +72,17 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
             // Status Header — 스크린리더용 통합 레이블으로 연결/기기 상태를 한 번에 읽는다.
             // 연결·기기 선택이 바뀌면 다시 그린다. 한 번만 읽으면 재연결 뒤에도
             // "허브 연결 필요"로 남아 낭독기 사용자에게 틀린 상태를 알린다.
+            // 앱바 높이는 86으로 고정이라, 시스템 글자를 크게 하면 이 줄이 넘친다.
+            // 보조 정보이므로 글자 확대를 1.2배까지만 따른다(낭독은 영향 없음).
             StreamBuilder<bool>(
               stream: BleService.instance.isConnectedStream,
               builder: (context, _) => ValueListenableBuilder<String?>(
                 valueListenable:
                     ActiveDeviceService.instance.activeDeviceNameNotifier,
-                builder: (context, _, _) => _buildStatusHeader(rs),
+                builder: (context, _, _) => MediaQuery.withClampedTextScaling(
+                  maxScaleFactor: 1.2,
+                  child: _buildStatusHeader(rs),
+                ),
               ),
             ),
             const SizedBox(height: 4),

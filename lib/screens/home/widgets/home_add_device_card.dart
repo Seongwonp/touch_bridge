@@ -46,15 +46,25 @@ class HomeAddDeviceCard extends StatelessWidget {
                 BoxShadow(color: AppColors.shadowPrimary, blurRadius: 16),
               ],
             ),
-            child: Center(
+            // 남는 높이에 맞춰 아이콘을 줄이고, 아주 낮으면 숨겨 글자가 잘리지 않게 한다
+            // (Galaxy A31에서 "새 기기 추가하기"가 카드 아래로 잘렸다).
+            child: LayoutBuilder(
+              builder: (context, box) {
+                // 글자를 1.3배보다 키웠으면 장식 아이콘보다 글자에 높이를 준다.
+                final bigText = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+                final iconBox = bigText || box.maxHeight < 240
+                    ? 0.0
+                    : (box.maxHeight * 0.28).clamp(56.0, 100 * rs);
+                return Center(
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (iconBox > 0) ...[
                     Container(
-                      width: 100 * rs,
-                      height: 100 * rs,
+                      width: iconBox,
+                      height: iconBox,
                       decoration: const BoxDecoration(
                         gradient: LinearGradient(
                           colors: AppColors.primaryGradient,
@@ -67,11 +77,12 @@ class HomeAddDeviceCard extends StatelessWidget {
                         child: Icon(
                           Icons.add_rounded,
                           color: Colors.black,
-                          size: 64 * rs,
+                          size: iconBox * 0.64,
                         ),
                       ),
                     ),
-                    SizedBox(height: ResponsiveScale.v(context, 32)),
+                    SizedBox(height: ResponsiveScale.v(context, 20)),
+                    ],
                     Text(
                       '새 기기 추가하기',
                       style: TextStyle(
@@ -94,6 +105,8 @@ class HomeAddDeviceCard extends StatelessWidget {
                   ],
                 ),
               ),
+                );
+              },
             ),
           ),
           ),  // ExcludeSemantics

@@ -146,8 +146,14 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
             child: Column(
               children: [
                 // 메인 콘텐츠
+                // 작은 화면·큰 글씨에서는 내용이 화면보다 길어진다. 넘치지 않고
+                // 스크롤되게 하되, 남을 때는 지금처럼 가운데에 둔다.
                 Expanded(
-                  child: Padding(
+                  child: LayoutBuilder(
+                    builder: (context, box) => SingleChildScrollView(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(minHeight: box.maxHeight),
+                        child: Padding(
                     padding: EdgeInsets.fromLTRB(
                       ResponsiveScale.v(context, 24),
                       ResponsiveScale.v(context, 20),
@@ -242,9 +248,11 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
                         ),
                         SizedBox(height: ResponsiveScale.v(context, 20)),
                         // 홈으로 돌아가기 버튼
-                        SizedBox(
-                          width: double.infinity,
-                          height: ResponsiveScale.v(context, 86),
+                        ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minWidth: double.infinity,
+                            minHeight: ResponsiveScale.v(context, 86),
+                          ),
                           child: Semantics(
                             // 역할("버튼")은 button: true가 붙인다. 라벨과 자식 글자가 겹쳐
                             // 두 번 읽히지 않게 자식 시맨틱은 뺀다.
@@ -260,6 +268,8 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
                                 borderRadius: BorderRadius.circular(18),
                                 child: AnimatedContainer(
                                   duration: const Duration(milliseconds: 140),
+                                  alignment: Alignment.center,
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
                                   decoration: BoxDecoration(
                                     gradient: const LinearGradient(
                                       colors: AppColors.primaryGradient,
@@ -292,13 +302,16 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
                                       SizedBox(
                                         width: ResponsiveScale.v(context, 10),
                                       ),
-                                      Text(
-                                        '홈으로 돌아가기',
-                                        style: TextStyle(
-                                          fontSize: 28 * rs,
-                                          fontWeight: FontWeight.w900,
-                                          letterSpacing: -0.4,
-                                          color: Colors.black,
+                                      Flexible(
+                                        child: Text(
+                                          '홈으로 돌아가기',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontSize: 28 * rs,
+                                            fontWeight: FontWeight.w900,
+                                            letterSpacing: -0.4,
+                                            color: Colors.black,
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -309,6 +322,9 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
                           ),
                         ),
                       ],
+                    ),
+                  ),
+                      ),
                     ),
                   ),
                 ),
