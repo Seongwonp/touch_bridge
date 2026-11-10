@@ -20,15 +20,9 @@ class _EmergencyAccessScreenState extends State<EmergencyAccessScreen> {
   final TtsService _tts = TtsService();
   bool _isStopping = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _tts.speak(
-      '비상 정지 화면입니다. 큰 빨간 버튼을 한 번 누르면 안내하고, 한 번 더 누르면 현재 기기를 즉시 중단합니다.',
-      source: 'EmergencyAccessScreen',
-      interrupt: true,
-    );
-  }
+  // 진입 안내는 하지 않는다. 하단 탭이 IndexedStack이라 이 화면은 앱 시작 때 함께
+  // 만들어지므로, 여기서 말하면 홈에 있는데도 비상 정지 안내가 들린다.
+  // 탭으로 들어올 때의 안내는 MainNavigationScreen이 맡는다.
 
   @override
   void dispose() {

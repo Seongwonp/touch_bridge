@@ -182,7 +182,9 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
       if (_isExecuting) _stopRequestedThisRun = true;
     });
     if (!AiBackendService.instance.isConfigured) {
-      _statusMessage = 'AI_BACKEND_URL이 설정되지 않았습니다.';
+      // 사용자에게는 설정 키 이름이 아니라 할 수 있는 일을 알린다. 키 이름은 로그로 남긴다.
+      AppLogger.warn('voice.backend_not_configured', {'key': 'AI_BACKEND_URL'});
+      _statusMessage = '음성 해석 서버가 설정되지 않아 음성 명령을 쓸 수 없습니다. 보호자에게 설정을 요청해 주세요.';
       _speak(_statusMessage);
     } else {
       _initSpeech().then((_) {
@@ -1202,7 +1204,11 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
             MaterialPageRoute<void>(
               builder: (_) => EmergencyStopScreen(
                 initialSeconds: seconds,
-                deviceName: '전자레인지',
+                // 실제 대상 기기 이름. 세탁기 등에서도 "전자레인지 작동 중"이라고 하지 않게 한다.
+                deviceName: widget.deviceName ??
+                    _resolvedDeviceName ??
+                    ActiveDeviceService.instance.getActiveDeviceName() ??
+                    '가전',
               ),
             ),
           );
@@ -1328,14 +1334,15 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     if (_isExecuting || _pressDoneLabel.isNotEmpty) {
       return Scaffold(
         backgroundColor: AppColors.background,
-        appBar: const TopAppBar(title: 'Touch Bridge AI'),
+        // 이 화면에는 한 번 탭 정지가 있으므로 두 단계인 앱바 정지는 숨겨 정지가 하나만 보이게 한다.
+        appBar: const TopAppBar(title: 'Touch Bridge', showEmergency: false),
         body: SafeArea(child: Center(child: _buildPressStatusView(rs))),
       );
     }
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: const TopAppBar(title: 'Touch Bridge AI'),
+      appBar: const TopAppBar(title: 'Touch Bridge'),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -1361,7 +1368,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
                           child: Text(
                             _isProcessing
                                 ? '분석 중...'
-                                : (_isRecording ? 'Listening...' : '말씀해 주세요.'),
+                                : (_isRecording ? '듣고 있습니다' : '말씀해 주세요.'),
                             style: TextStyle(
                               color: (_isRecording || _isProcessing)
                                   ? AppColors.primary

@@ -418,16 +418,20 @@ class _HomeScreenState extends State<HomeScreen> {
                             });
                             HapticFeedback.selectionClick();
                             if (index < _devices.length) {
+                              // 기기가 바뀐 결과 보고다. 낭독기는 이전·다음 버튼 이름만 읽고
+                              // 바뀐 기기는 읽지 않으므로 result로 낭독기 사용 중에도 들리게 한다.
                               _tts.speak(
                                 '${_devices[index]['name']}. ${_devices[index]['status']}.',
                                 source: 'HomeScreen',
                                 interrupt: true,
+                                priority: TtsPriority.result,
                               );
                             } else {
                               _tts.speak(
                                 '새 기기 추가하기.',
                                 source: 'HomeScreen',
                                 interrupt: true,
+                                priority: TtsPriority.result,
                               );
                             }
                           },
