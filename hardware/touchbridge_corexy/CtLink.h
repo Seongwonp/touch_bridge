@@ -15,6 +15,11 @@
 #include <math.h>
 #include <string.h>
 #include "config.h"
+#if CT_LINK_ESPNOW
+#include <WiFi.h>
+#include <esp_now.h>
+#include <esp_wifi.h>
+#endif
 
 namespace ctlink {
 
@@ -47,10 +52,38 @@ static State    judged = State::OFF;
 static bool     above = false, below = false;
 static uint32_t aboveSince = 0, belowSince = 0;
 
+#if CT_LINK_ESPNOW
+// 무선 수신: 콜백(와이파이 태스크)은 최신 줄 하나만 맡겨 두고, loop의 poll()이 꺼내 해석한다.
+// 1초에 한 줄이라 한 칸이면 충분하고, 덮어써도 최신 값이 남는다.
+static portMUX_TYPE rxMux = portMUX_INITIALIZER_UNLOCKED;
+static char     rxLine[CT_LINE_MAX + 1];
+static size_t   rxLen = 0;
+static bool     rxReady = false;
+
+inline void onEspNowRecv(const esp_now_recv_info_t*, const uint8_t* data, int len) {
+  if (len <= 0 || len > (int)CT_LINE_MAX) return;
+  size_t n = (size_t)len;
+  while (n > 0 && (data[n - 1] == '\n' || data[n - 1] == '\r')) n--;
+  portENTER_CRITICAL(&rxMux);
+  memcpy(rxLine, data, n);
+  rxLine[n] = '\0';
+  rxLen = n;
+  rxReady = true;
+  portEXIT_CRITICAL(&rxMux);
+}
+#endif
+
 inline void begin() {
   Serial2.setRxBufferSize(CT_LINK_RX_BUFFER_BYTES);
   // 기본 핀 16/17은 엔코더다. 반드시 핀을 지정해서 연다.
   Serial2.begin(CT_LINK_BAUD, SERIAL_8N1, PIN_CT_LINK_RX, PIN_CT_LINK_TX);
+#if CT_LINK_ESPNOW
+  // 공유기에 붙지 않고 CT 노드와 같은 고정 채널에서 받는다. BLE와 함께 동작한다.
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  esp_wifi_set_channel(CT_ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
+  if (esp_now_init() == ESP_OK) esp_now_register_recv_cb(onEspNowRecv);
+#endif
   lastEmitMs = millis();
 }
 
@@ -90,6 +123,20 @@ inline void parseLine(char* line, size_t len, uint32_t now) {
 
 // loop()에서 호출한다. 한 번에 CT_POLL_BUDGET 바이트까지만 처리한다.
 inline void poll() {
+#if CT_LINK_ESPNOW
+  {
+    char line[CT_LINE_MAX + 1];
+    size_t len = 0;
+    portENTER_CRITICAL(&rxMux);
+    if (rxReady) {
+      memcpy(line, rxLine, rxLen + 1);
+      len = rxLen;
+      rxReady = false;
+    }
+    portEXIT_CRITICAL(&rxMux);
+    if (len > 0) parseLine(line, len, millis());
+  }
+#endif
   int budget = CT_POLL_BUDGET;
   while (budget-- > 0 && Serial2.available() > 0) {
     const int c = Serial2.read();

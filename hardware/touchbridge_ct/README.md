@@ -3,9 +3,8 @@
 DFRobot SEN0211로 가전 전류를 재서 모터 ESP32(`hardware/touchbridge_corexy/`)로 1초마다 보고한다.
 보드는 FireBeetle ESP32, 빌드 환경은 `firebeetle32_adc`뿐이다.
 
-**상태: 이 폴더의 코드는 어떤 하드웨어에서도 실행한 적 없다. 컴파일 여부도 작업 기록을 확인할 것.**
-`src/ct.cpp`, `src/ct.h`는 검증된 콘센트 펌웨어에서 수정 없이 가져왔지만, 그 측정 기록(2026-10-30)은
-다른 기기·다른 보고 주기의 값이다. 릴레이와 비상정지 입력은 뺐다.
+2026-11-10에 4MB ESP32 두 대(이 노드와 모터 ESP32)에서 ESP-NOW로 보고가 오가는 것을 확인했다(부하 0 W 상태).
+`src/ct.cpp`, `src/ct.h`는 검증된 콘센트 펌웨어에서 수정 없이 가져왔다. 릴레이와 비상정지 입력은 뺐다.
 
 ## 활선 안전 경고
 
@@ -13,7 +12,13 @@ DFRobot SEN0211로 가전 전류를 재서 모터 ESP32(`hardware/touchbridge_co
 반드시 플러그를 뽑은 상태에서 결선하고, 노출부를 절연한 뒤 전원을 넣는다. 전원선 전체를 물리면
 전류가 상쇄되어 0으로 나온다. 혼자 작업하지 말고, 자신이 없으면 절연된 측정용 분기 어댑터를 쓴다.
 
-## 배선
+## 무선 연결 (ESP-NOW, 기본)
+
+`include/config.h`의 `CT_LINK_ESPNOW`가 1이면 보고 줄을 ESP-NOW 브로드캐스트로도 보낸다. 채널은
+`CT_ESPNOW_CHANNEL`(1)이며 모터 ESP32의 같은 이름 값과 맞아야 한다. 이 경우 아래 결선은 필요 없다.
+Wi-Fi AP에는 접속하지 않는다.
+
+## 배선 (유선 예비)
 
 선 3개를 **교차**해서 잇고, 두 보드의 **GND를 반드시 묶는다**. 두 보드 모두 3.3V 로직이다.
 
@@ -47,6 +52,8 @@ DFRobot SEN0211로 가전 전류를 재서 모터 ESP32(`hardware/touchbridge_co
 ```bash
 pio run -e firebeetle32_adc
 ```
+
+4MB 플래시 보드(일반 ESP32 DevKit)에 올릴 때는 `platformio.ini`의 `board`를 `esp32dev`로 바꿔 빌드한다.
 
 ## 측정 전 미확정 값
 

@@ -2,13 +2,17 @@
 //
 // 샘플링: esp_timer가 SAMPLE_HZ로 깨우는 전용 태스크가 CT를 읽어 1초 창에 누적하고, 창이 차면
 //   전력 추정을 우편함에 넣는다. 시리얼에는 쓰지 않는다.
-// loop: 우편함의 값을 Serial2로 한 줄 JSON으로 보낸다.
+// loop: 우편함의 값을 한 줄 JSON으로 보낸다. 선(Serial2)과 무선(ESP-NOW 브로드캐스트)에 같은 줄을
+//   보내므로 모터 ESP32는 어느 쪽으로든 받을 수 있다.
 //   {"t":"ct","w":<float>,"a":<float>,"seq":<n>}
 // 창 샘플이 모자라거나 CT 초기화에 실패하면 보내지 않는다. 받는 쪽은 끊김을 "모름"으로 처리한다.
 // 0 W를 지어내지 않는다.
 #include <Arduino.h>
 #include <esp_task_wdt.h>
 #include <esp_timer.h>
+#include <WiFi.h>
+#include <esp_now.h>
+#include <esp_wifi.h>
 
 #include "config.h"
 #include "ct.h"
@@ -88,7 +92,26 @@ void send_report(const PowerReport& r) {
   if (n <= 0 || n >= static_cast<int>(sizeof(line))) return;
   Serial2.write(reinterpret_cast<const uint8_t*>(line), n);
   Serial.write(reinterpret_cast<const uint8_t*>(line), n);
+#if CT_LINK_ESPNOW
+  static const uint8_t kBroadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+  esp_now_send(kBroadcast, reinterpret_cast<const uint8_t*>(line), n);  // 실패해도 다음 초에 다시 보낸다
+#endif
 }
+
+#if CT_LINK_ESPNOW
+// 공유기에 붙지 않고 고정 채널에서 브로드캐스트한다. 받는 쪽도 같은 채널이어야 한다.
+bool start_espnow() {
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  esp_wifi_set_channel(CT_ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
+  if (esp_now_init() != ESP_OK) return false;
+  esp_now_peer_info_t peer = {};
+  memset(peer.peer_addr, 0xFF, 6);
+  peer.channel = CT_ESPNOW_CHANNEL;
+  peer.encrypt = false;
+  return esp_now_add_peer(&peer) == ESP_OK;
+}
+#endif
 
 }  // namespace
 
@@ -98,6 +121,9 @@ void setup() {
   Serial2.setTxBufferSize(CT_LINK_TX_BUFFER_BYTES);
   Serial2.begin(CT_LINK_BAUD, SERIAL_8N1, PIN_CT_LINK_RX, PIN_CT_LINK_TX);
   g_ct_ok = ct_init();
+#if CT_LINK_ESPNOW
+  if (!start_espnow()) Serial.println("touchbridge_ct: ESP-NOW start failed (wire only)");
+#endif
   setup_task_watchdog();
   if (!start_sampling()) {
     Serial.println("touchbridge_ct: sampling start failed");

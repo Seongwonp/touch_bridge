@@ -43,10 +43,12 @@ ESP32 + JMOD-MOTOR-1(TB6612FNG) + DFRobot FIT0482 x2, 엔코더 폐루프 CoreXY
 
 ## CT 노드 수신 (기본 꺼짐)
 
-`config.h`의 `CT_LINK_ENABLED`가 0이면 UART를 열지 않으며 기존 빌드와 동작이 같다. 배선한 뒤에만 1로 바꾼다.
+`config.h`의 `CT_LINK_ENABLED`가 0이면 CT 수신을 하지 않으며 기존 빌드와 동작이 같다. CT 노드를 쓸 때만 1로 바꾼다.
+`CT_LINK_ESPNOW`가 1이면 CT 노드의 보고를 ESP-NOW(채널 `CT_ESPNOW_CHANNEL`)로 받아 선이 필요 없다. UART 수신도 함께 열려 있어 유선으로도 받을 수 있다.
+Wi-Fi 스택이 더해져 기본 파티션(1.2MB)을 넘으므로 **Huge APP(3MB No OTA)** 파티션으로 빌드한다(Arduino IDE: 도구 → Partition Scheme, PlatformIO: `board_build.partitions = huge_app.csv`).
 결선과 활선 안전 경고는 [`hardware/touchbridge_ct/README.md`](../touchbridge_ct/README.md)를 따른다.
 
-- `Serial2` 기본 핀 16/17은 이 보드의 **엔코더 입력**이다. 그래서 RX를 **GPIO21**, TX를 **GPIO22**로 옮겼다.
+- 유선일 때 `Serial2` 기본 핀 16/17은 이 보드의 **엔코더 입력**이다. 그래서 RX를 **GPIO21**, TX를 **GPIO22**로 옮겼다.
 - 작동 판정은 `CT_ON_WATTS`(100 W) 이상이 5초 이어지면 작동, `CT_OFF_WATTS`(15 W) 이하가 3초 이어지면 종료다. 2026-11-02 전자레인지 1분 가열 측정(별도 ESP32 장치)에서 쓴 기준이며, 가전마다 다시 잴 수 있다. 보고의 `w`는 5초 이동 평균이다.
 - 보고가 3초 넘게 끊기면 `unknown`이고 `w`는 `null`이다. 0W로 보지 않는다.
 - 전력 값은 표시 전용이다. 정지·누름 허용·완료 판정에 쓰지 않는다.

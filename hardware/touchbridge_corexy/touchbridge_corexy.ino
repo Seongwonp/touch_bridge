@@ -208,6 +208,15 @@ class ServerCallbacks : public BLEServerCallbacks {
   }
 };
 
+// Bot 링크를 닫으면 BLE 라이브러리가 GATT client 앱을 등록 해제하고, Bluedroid는 그때
+// 어떤 앱도 붙잡지 않은 링크를 모두 바로 끊는다. 앱(폰)이 접속한 링크가 바로 그런 링크라
+// Bot을 누를 때마다 폰 연결이 끊기고 비상 정지가 걸렸다(reason 0x16).
+// 서버 앱이 폰 링크를 붙잡도록 표시한다. 이미 연결된 링크라 새 연결은 만들지 않는다.
+static void gattsHoldLink(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t* param) {
+  if (event != ESP_GATTS_CONNECT_EVT || isBotAddr(param->connect.remote_bda)) return;
+  esp_ble_gatts_open(gatts_if, param->connect.remote_bda, true);
+}
+
 class RxCallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic* c) override {
     String v = c->getValue().c_str();
@@ -253,6 +262,7 @@ class RxCallbacks : public BLECharacteristicCallbacks {
 void bleBegin() {
   bleLines = xQueueCreate(8, sizeof(LineMsg));
   BLEDevice::init(BLE_DEVICE_NAME);
+  BLEDevice::setCustomGattsHandler(gattsHoldLink);
   BLEDevice::setMTU(517);          // 앱 JSON(최대 ~200B)을 한 패킷으로 주고받기 위함
   bleServer = BLEDevice::createServer();
   bleServer->setCallbacks(new ServerCallbacks());

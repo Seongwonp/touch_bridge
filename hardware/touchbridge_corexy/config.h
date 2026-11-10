@@ -36,6 +36,10 @@ constexpr int  PIN_LIMIT_Y = 100;
 constexpr int      PIN_CT_LINK_RX = 21;  // <- CT 노드 GPIO17(TX)
 constexpr int      PIN_CT_LINK_TX = 22;  // -> CT 노드 GPIO16(RX), 예비선
 constexpr uint32_t CT_LINK_BAUD   = 115200;
+// 무선(ESP-NOW) 수신. 선(UART)과 함께 받는다. 채널은 CT 노드와 같아야 한다.
+// 와이파이 스택이 더해져 앱 영역(1.3 MB)을 넘으므로 파티션을 Huge APP(3 MB, OTA 없음)으로 빌드한다.
+#define CT_LINK_ESPNOW 1
+constexpr uint8_t  CT_ESPNOW_CHANNEL = 1;
 constexpr size_t   CT_LINK_RX_BUFFER_BYTES = 256;
 constexpr size_t   CT_LINE_MAX     = 96;      // 넘는 줄은 버린다
 constexpr int      CT_POLL_BUDGET  = 64;      // loop 1회당 처리할 최대 바이트
