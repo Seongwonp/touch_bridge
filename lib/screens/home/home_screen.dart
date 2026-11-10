@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../services/tts_service.dart';
 import '../../services/accessibility_settings.dart';
 import '../../services/active_device_service.dart';
+import '../../services/ble_service.dart';
 import '../../services/device_mapping_service.dart';
 import '../../services/home_device_store.dart';
 import '../../widgets/responsive_scale.dart';
@@ -127,12 +128,25 @@ class _HomeScreenState extends State<HomeScreen> {
     final bleName = device['bleName'] as String?;
 
     if (deviceId.isNotEmpty) {
-      await ActiveDeviceService.instance.setActiveDevice(
+      // 허브에 연결하는 동안 몇 초 걸릴 수 있다. 아무 소리 없이 멈춘 것처럼 보이지 않게 알리고,
+      // 실패하면 실패를 알린다(메뉴는 열어 둔다: 연결 없이도 확인할 수 있는 항목이 있다).
+      final needsConnect = bleId != null && BleService.instance.connectedDeviceId != bleId;
+      if (needsConnect) {
+        _tts.speak('$deviceName에 연결하는 중입니다.', source: 'HomeScreen', priority: TtsPriority.result);
+      }
+      final connected = await ActiveDeviceService.instance.setActiveDevice(
         deviceId: deviceId,
         deviceName: deviceName,
         bleId: bleId,
         bleName: bleName,
       );
+      if (needsConnect && !connected) {
+        _tts.speak(
+          '$deviceName에 연결하지 못했습니다. 기기 전원과 거리를 확인해 주세요.',
+          source: 'HomeScreen',
+          priority: TtsPriority.result,
+        );
+      }
     }
 
     if (!mounted) return;
