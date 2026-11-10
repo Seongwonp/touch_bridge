@@ -91,6 +91,10 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   double _lastConfidence = SpeechRecognitionWords.missingConfidence;
   String? _pendingLowConfidenceText;
 
+  /// 가전 실행 확인 질문. [_pendingCommandData]와 함께 있을 때 화면에
+  /// '실행'·'취소' 버튼을 보인다(음성 '네'·'아니요'도 그대로 받는다).
+  String? _confirmQuestion;
+
   Timer? _waveTimer;
   List<double> _waveHeights = const [
     0.20,
@@ -167,8 +171,21 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
   /// 테스트에서 해석된 명령을 직접 넣어 실행 화면까지 진행시킨다.
   @visibleForTesting
-  Future<void> handleCommandForTest(Map<String, dynamic> data) =>
-      _handleCommand(data, recognizedText: 'test');
+  Future<void> handleCommandForTest(
+    Map<String, dynamic> data, {
+    bool confirmed = false,
+  }) =>
+      _handleCommand(data, recognizedText: 'test', forceExecution: confirmed);
+
+  /// 테스트용: 사용자가 이미 '실행'으로 확인한 명령을 넣는다.
+  @visibleForTesting
+  Future<void> runConfirmedForTest(Map<String, dynamic> data) =>
+      handleCommandForTest(data, confirmed: true);
+
+  /// 테스트용: 화면에 떠 있는 실행 확인 질문.
+  @visibleForTesting
+  String? get confirmQuestionForTest =>
+      _pendingCommandData == null ? null : _confirmQuestion;
   Timer? _pressDoneTimer;
   static const _kExamplesSeenKey = 'voice_examples_announced';
 
@@ -471,6 +488,86 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
         _isStartingRecording = false;
       }
     }
+  }
+
+  static const confirmRunKey = Key('voice_confirm_run');
+  static const confirmCancelKey = Key('voice_confirm_cancel');
+
+  /// 화면의 '실행' 버튼. 음성 '네'와 같은 경로로 확인된 명령을 실행한다.
+  Future<void> _confirmPendingCommand() async {
+    final data = _pendingCommandData;
+    if (data == null || _isExecuting) return;
+    _stopListeningForConfirm();
+    setState(() {
+      _pendingCommandData = null;
+      _confirmQuestion = null;
+    });
+    await _handleCommand(
+      data,
+      recognizedText: _recognizedText,
+      forceExecution: true,
+    );
+  }
+
+  /// 화면의 '취소' 버튼. 음성 '아니요'와 같다.
+  Future<void> _cancelPendingCommand() async {
+    if (_pendingCommandData == null) return;
+    _stopListeningForConfirm();
+    setState(() {
+      _pendingCommandData = null;
+      _confirmQuestion = null;
+      _statusMessage = '알겠습니다. 취소할게요.';
+    });
+    await _speak('알겠습니다. 취소할게요.');
+  }
+
+  /// 확인 질문 뒤에 다시 열어 둔 마이크를 닫는다(버튼으로 답했으므로).
+  void _stopListeningForConfirm() {
+    _speechSession.stop();
+    _silenceTimer?.cancel();
+    _recordingTimeoutTimer?.cancel();
+    _stopWaveAnimation();
+    if (_isRecording) setState(() => _isRecording = false);
+  }
+
+  Widget _buildConfirmButtons(double rs) {
+    final labelStyle = TextStyle(fontSize: 22 * rs, fontWeight: FontWeight.w900);
+    return Padding(
+      padding: EdgeInsets.only(bottom: 16 * rs),
+      child: Row(
+        children: [
+          Expanded(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: 64 * rs),
+              child: OutlinedButton(
+                key: confirmCancelKey,
+                onPressed: _cancelPendingCommand,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.textPrimary,
+                  side: const BorderSide(color: AppColors.textSecondary, width: 2),
+                ),
+                child: Text('취소', style: labelStyle),
+              ),
+            ),
+          ),
+          SizedBox(width: 12 * rs),
+          Expanded(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: 64 * rs),
+              child: FilledButton(
+                key: confirmRunKey,
+                onPressed: _confirmPendingCommand,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.black,
+                ),
+                child: Text('실행', style: labelStyle),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _handleMicTap() {
@@ -804,6 +901,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
         setState(() {
           _statusMessage = '알겠습니다. 취소할게요.';
           _isProcessing = false;
+          _confirmQuestion = null;
         });
         await _speak('알겠습니다. 취소할게요.');
         return;
@@ -1128,7 +1226,37 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     setState(() {
       _isProcessing = false;
       _recognizedText = recognizedText;
+      _confirmQuestion = null;
     });
+
+    // 가전 버튼을 누르는 명령은 모두 실행 전에 확인한다(재설계 결정 ①).
+    // "30초 돌려줘"처럼 명확한 명령도 예외가 아니다. 화면의 '실행'·'취소'나
+    // 음성 '네'·'아니요'로 답한다. 정지는 확인하지 않는다.
+    // 백엔드가 이미 확인 질문을 만든 경우(needs_confirmation)와 다시 말해 달라고
+    // 할 경우(저신뢰)는 아래 각 분기가 맡는다.
+    const physicalActions = {
+      'IMMEDIATE_PRESS',
+      'MICROWAVE_CONTROL',
+      'WASHER_CONTROL',
+      'AC_CONTROL',
+    };
+    final asksAgain = action == 'MICROWAVE_CONTROL' &&
+        (needsConfirmation || confidence < 0.55);
+    if (!forceExecution &&
+        physicalActions.contains(action) &&
+        commands.isNotEmpty &&
+        !asksAgain) {
+      _pendingCommandData = Map<String, dynamic>.from(data);
+      final what = message.isNotEmpty ? message : '버튼 ${commands.length}개를 누릅니다.';
+      final question = '$what 실행할까요?';
+      setState(() {
+        _confirmQuestion = question;
+        _statusMessage = question;
+      });
+      await _speak(question, interrupt: true);
+      _restartListeningAfterPrompt();
+      return;
+    }
 
     switch (action) {
       case 'IMMEDIATE_PRESS':
@@ -1164,6 +1292,8 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
               : '명령을 다시 말씀해 주세요.';
           setState(() {
             _statusMessage = clarification;
+            // 실행할 명령이 있으면 같은 '실행'·'취소' 버튼으로도 답할 수 있게 한다.
+            if (commands.isNotEmpty) _confirmQuestion = clarification;
           });
           await _speak(clarification);
           // 확인 질문/재발화 요청 뒤에는 답을 들을 수 있게 마이크를 자동으로 연다.
@@ -1453,14 +1583,14 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
                           onCancelAnalysis: _cancelAnalysis,
                         ),
                         SizedBox(height: ResponsiveScale.v(context, 24)),
-                        if (isIdle)
+                        // 실행 확인 중에는 '실행'·'취소'를 보이고 예시 명령은 숨긴다.
+                        if (_pendingCommandData != null &&
+                            _confirmQuestion != null)
+                          _buildConfirmButtons(rs)
+                        else if (isIdle)
                           VoiceExampleCommands(
                             scale: rs,
-                            onArmed: (cmd) {
-                              HapticFeedback.mediumImpact();
-                              _speak('$cmd. 한 번 더 누르면 실행합니다.');
-                            },
-                            onConfirmed: (cmd) {
+                            onSelected: (cmd) {
                               setState(() {
                                 _recognizedText = cmd;
                                 _isProcessing = true;
