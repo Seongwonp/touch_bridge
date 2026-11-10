@@ -109,18 +109,27 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         priority: TtsPriority.result,
       );
     } else {
+      // 홈에서 사용자가 직접 기기를 추가할 수 있다(보호자 모드 불필요).
       await _tts.speak(
-        'Touch Bridge입니다. 보호자가 기기를 먼저 등록해야 합니다.',
+        'Touch Bridge입니다. 홈 화면의 기기 추가하기로 기기를 등록하거나, 보호자에게 등록을 요청하세요.',
         source: 'MainNavigationScreen',
         interrupt: true,
         priority: TtsPriority.result,
       );
       await _tts.speak(
-        '설정에서 보호자 모드를 켜고 기기를 등록한 뒤, 홈에서 말하기를 누르세요.',
+        '등록한 뒤에는 홈에서 말하기를 누르세요.',
         source: 'MainNavigationScreen',
         priority: TtsPriority.result,
       );
     }
+    // 비상 정지 버튼은 위치를 알려 주지 않으면 화면을 볼 수 없는 사용자가 찾을 수 없다.
+    // 모서리는 손으로 더듬어 찾기 쉬운 자리이고, 모든 화면에서 같은 자리에 있다.
+    await _tts.speak(
+      '어느 화면에서든 오른쪽 위 모서리의 빨간 비상 정지 버튼을 한 번 누르면 바로 멈춥니다. '
+      '화면 읽기를 쓰면 화면 제목 바로 다음에 있습니다.',
+      source: 'MainNavigationScreen',
+      priority: TtsPriority.result,
+    );
     await prefs.setBool('quick_start_seen', true);
 
     // 사용자 모드 첫 실행 시 시각적 온보딩 다이얼로그도 노출한다.
@@ -144,11 +153,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               ),
             ),
             content: const Text(
-              '보호자가 아래 순서로 먼저 설정해야 합니다.\n\n'
-              '1. 설정 → 보호자 모드 켜기\n'
-              '2. 기기 관리 → 기기 등록\n'
-              '3. 보호자 모드 끄기\n\n'
-              '이후 홈 화면에서 음성으로 기기를 제어할 수 있습니다.',
+              '1. 홈 화면의 "기기 추가하기"로 기기를 등록하거나, 보호자에게 요청하세요.\n'
+              '2. 등록한 뒤 홈에서 "말하기"를 누르면 음성으로 제어합니다.\n\n'
+              '비상 정지: 어느 화면에서든 오른쪽 위 모서리의 빨간 버튼을 한 번 누르면 바로 멈춥니다.',
               style: TextStyle(
                 color: AppColors.textSecondary,
                 height: 1.6,
