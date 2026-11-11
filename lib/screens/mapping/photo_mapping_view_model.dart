@@ -137,11 +137,12 @@ class PhotoMappingViewModel extends ChangeNotifier {
             ),
           );
       } else if (calibration != null) {
-        final invalidated = DeviceMappingService.invalidatePanelCalibration(
-          profile,
-        );
-        await DeviceMappingService.instance.save(deviceId, invalidated);
-        AppLogger.warn('mapping.calibration_invalidated', {
+        // 사진이 바뀌면 이 화면에서는 예전 보정을 쓰지 않는다(모서리를 새로 찍어야 한다).
+        // 저장소는 건드리지 않는다. 저장된 mm 좌표는 실제 패널 위치라 사진과 무관하게
+        // 유효하고, 새 사진으로 매핑하다 저장하지 않고 나가면 예전 설정으로 계속 눌러야
+        // 한다. 예전에는 화면을 열자마자 보정을 지워 저장해, 뒤로 가기만 해도 쓰던 기기가
+        // 버튼을 누르지 못하게 됐다. 새 보정과 좌표는 저장할 때 통째로 바뀐다.
+        AppLogger.warn('mapping.calibration_ignored_for_new_photo', {
           'device_id': deviceId,
           'reason': 'image_fingerprint_changed',
         });

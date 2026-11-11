@@ -6,9 +6,6 @@ import '../../../theme/app_icons.dart';
 
 class HomeDeviceCard extends StatelessWidget {
   // 스크린리더 커스텀 액션은 재빌드마다 새로 만들지 않도록 한 번만 생성한다.
-  static final CustomSemanticsAction _manageAction = CustomSemanticsAction(
-    label: '기기 관리 및 삭제',
-  );
   static final CustomSemanticsAction _voiceAction = CustomSemanticsAction(
     label: '음성 명령 시작',
   );
@@ -17,25 +14,14 @@ class HomeDeviceCard extends StatelessWidget {
     super.key,
     required this.device,
     required this.onTap,
-    this.onLongPressStart,
-    this.onLongPressEnd,
-    this.onManage,
     this.onVoiceControl,
-    this.managementEnabled = false,
   });
 
   final Map<String, dynamic> device;
   final VoidCallback onTap;
-  final Function(LongPressStartDetails)? onLongPressStart;
-  final Function(LongPressEndDetails)? onLongPressEnd;
-
-  /// 스크린리더 접근성: 5초 길게 누르기(삭제)의 대안 액션.
-  /// VoiceOver 로터 / TalkBack 액션 메뉴에서 바로 실행할 수 있게 한다.
-  final VoidCallback? onManage;
-
-  /// 스크린리더 접근성: 사용자 모드에서 TalkBack 액션 메뉴로 음성 명령을 바로 시작.
+  /// 스크린리더 접근성: TalkBack 액션 메뉴로 음성 명령을 바로 시작.
+  /// 기기 관리·삭제는 홈이 아니라 설정의 보호자 설정에서 한다.
   final VoidCallback? onVoiceControl;
-  final bool managementEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -44,26 +30,18 @@ class HomeDeviceCard extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 6 * rs),
       child: Semantics(
-        label: managementEnabled
-            ? '${device['name']}. 현재 상태 ${device['status']}. 선택하려면 두 번 누르세요. 관리하려면 5초간 길게 누르세요.'
-            : '${device['name']}. 현재 상태 ${device['status']}. 선택하려면 두 번 누르세요. 음성 명령은 액션 메뉴에서 바로 시작할 수 있습니다.',
+        label:
+            '${device['name']}. 현재 상태 ${device['status']}. 선택하려면 두 번 누르세요. 음성 명령은 액션 메뉴에서 바로 시작할 수 있습니다.',
         button: true,
         // onTap을 Semantics에 직접 등록 — ExcludeSemantics가 하위 Tree를
         // 가리기 때문에 GestureDetector의 탭이 Semantics로 올라오지 않는다.
         onTap: onTap,
         customSemanticsActions: {
-          if (managementEnabled && onManage != null) _manageAction: onManage!,
-          if (!managementEnabled && onVoiceControl != null)
-            _voiceAction: onVoiceControl!,
+          _voiceAction: ?onVoiceControl,
         },
         child: ExcludeSemantics(
           child: GestureDetector(
             onTap: onTap,
-            onLongPressStart: onLongPressStart,
-            onLongPressEnd: onLongPressEnd,
-            onLongPressCancel: onLongPressEnd == null
-                ? null
-                : () => onLongPressEnd!(LongPressEndDetails()),
             child: Container(
               padding: EdgeInsets.all(22 * rs),
               decoration: BoxDecoration(

@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../../models/appliance_config.dart';
 import '../../services/active_device_service.dart';
@@ -14,8 +13,8 @@ import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../../theme/app_colors.dart';
 import '../mapping/manual_mapping_screen.dart';
+import '../mapping/mapping_image_source.dart';
 import '../mapping/photo_mapping_screen.dart';
-import 'widgets/camera_alignment_guide.dart';
 
 IconData _iconForApplianceType(ApplianceType type) {
   switch (type) {
@@ -57,91 +56,6 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
     // TtsService는 앱 전역 싱글톤 큐라 여기서 stop()을 부르면 다음 화면이
     // 막 넣은 안내까지 지워버린다.
     super.dispose();
-  }
-
-  /// 매핑용 이미지 선택.
-  ///
-  /// 반환 계약: null = 사용자가 취소(시트 dismiss 또는 피커 취소). 이때 호출부는
-  /// 매핑 화면으로 진입하면 안 된다. 샘플 이미지 선택은
-  /// `(path: null, useSample: true)`로 구분한다.
-  Future<({String? path, bool useSample})?> _chooseImageForMapping(
-    BuildContext context,
-  ) async {
-    final choice = await showModalBottomSheet<int>(
-      context: context,
-      backgroundColor: AppColors.surfaceElevated,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.camera_alt, color: Colors.white),
-              title: const Text('사진 촬영', style: TextStyle(color: Colors.white)),
-              onTap: () => Navigator.of(ctx).pop(0),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library, color: Colors.white),
-              title: const Text(
-                '갤러리에서 선택',
-                style: TextStyle(color: Colors.white),
-              ),
-              onTap: () => Navigator.of(ctx).pop(1),
-            ),
-            ListTile(
-              leading: const Icon(Icons.image, color: Colors.white),
-              title: const Text(
-                '샘플 이미지 사용',
-                style: TextStyle(color: Colors.white),
-              ),
-              onTap: () => Navigator.of(ctx).pop(2),
-            ),
-            const SizedBox(height: 12),
-          ],
-        ),
-      ),
-    );
-
-    if (choice == null) return null; // 시트 dismiss = 취소
-    if (choice == 2) return (path: null, useSample: true); // 샘플 이미지로 진행
-
-    if (choice == 0) {
-      if (!context.mounted) return null;
-      final ready = await showCameraAlignmentGuide(context);
-      if (!ready) return null;
-    }
-
-    try {
-      // iOS 리소스 격리: 피커를 열기 전에 고부하 작업을 멈춘다.
-      await _tts.stop();
-      // TODO: 블루투스 스캔 중이면 중지.
-
-      // iOS XPC 세션 안정화를 위해 충분한 대기
-      await Future.delayed(const Duration(milliseconds: 1500));
-
-      final ImagePicker isolatedPicker = ImagePicker();
-      final xfile = await isolatedPicker.pickImage(
-        source: choice == 0 ? ImageSource.camera : ImageSource.gallery,
-        maxWidth: 1024, // 해상도 하향 조정으로 메모리 부담 완화
-        imageQuality: 80,
-      );
-
-      // 피커 종료 후 다시 대기
-      await Future.delayed(const Duration(milliseconds: 800));
-
-      if (xfile == null) {
-        // 피커에서 취소 — 매핑 진입 없이 원래 화면 유지.
-        _tts.speak('사진 선택을 취소했습니다.', priority: TtsPriority.result);
-        return null;
-      }
-      return (path: xfile.path, useSample: false);
-    } catch (e) {
-      debugPrint('Error picking image (Critical Isolation): $e');
-      _tts.speak('사진을 가져오는 중 오류가 발생했습니다.', priority: TtsPriority.result);
-      return null;
-    }
   }
 
   String _newDeviceId(String prefix) {
@@ -265,7 +179,7 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
                 Navigator.of(sheetCtx).pop();
               }
 
-              final result = await _chooseImageForMapping(context);
+              final result = await chooseImageForMapping(context, tts: _tts);
               if (result == null) return; // 취소 — 매핑 화면으로 넘어가지 않는다
               if (!context.mounted) return;
 

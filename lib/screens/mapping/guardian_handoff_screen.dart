@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../models/handoff_report.dart';
-import '../../services/accessibility_settings.dart';
 import '../../services/guardian_handoff_service.dart';
 import '../../services/tts_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
+import '../main_navigation_screen.dart';
 
 /// 보호자가 기기 설정(매핑/등록)을 마친 직후 보여주는 인수 체크리스트 화면.
 ///
@@ -61,19 +61,21 @@ class _GuardianHandoffScreenState extends State<GuardianHandoffScreen> {
     );
   }
 
+  // 보호자 모드는 없앴다. 보호자 기능은 설정의 보호자 설정에만 있으므로 홈으로 돌아가면
+  // 그대로 사용자 화면이다.
   Future<void> _finishHandoff() async {
-    AccessibilitySettings.instance.setGuardianModeEnabled(false);
     await _tts.speak(
-      '사용자 모드로 전환합니다.',
+      '설정을 마쳤습니다. 홈에서 말하기로 쓸 수 있습니다.',
       source: 'GuardianHandoffScreen',
       interrupt: true,
     );
     if (!mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
+    MainNavigationScreen.tabRequest.value = MainNavigationScreen.homeTab;
   }
 
-  void _keepGuardianMode() {
-    Navigator.of(context).popUntil((route) => route.isFirst);
+  void _keepEditing() {
+    Navigator.of(context).pop();
   }
 
   @override
@@ -226,7 +228,7 @@ class _GuardianHandoffScreenState extends State<GuardianHandoffScreen> {
                           ),
                         ),
                         child: Text(
-                          '완료 — 사용자 모드로 전환',
+                          '완료 — 홈으로',
                           style: TextStyle(
                             fontSize: 16 * rs,
                             fontWeight: FontWeight.w800,
@@ -236,9 +238,9 @@ class _GuardianHandoffScreenState extends State<GuardianHandoffScreen> {
                     ),
                     SizedBox(height: 8 * rs),
                     TextButton(
-                      onPressed: _keepGuardianMode,
+                      onPressed: _keepEditing,
                       child: const Text(
-                        '설정을 더 진행할게요 (보호자 모드 유지)',
+                        '설정을 더 진행할게요',
                         style: TextStyle(color: AppColors.textTertiary),
                       ),
                     ),

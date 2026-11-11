@@ -7,18 +7,16 @@ import '../../services/tts_service.dart';
 import '../../services/accessibility_settings.dart';
 import '../../services/active_device_service.dart';
 import '../../services/ble_service.dart';
-import '../../services/device_mapping_service.dart';
 import '../../services/home_device_store.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_icons.dart';
 import '../voice/voice_listening_screen.dart';
-import '../connection/device_connect_screen.dart';
+import '../guardian/guardian_hub_screen.dart';
 
 import 'widgets/home_empty_state.dart';
 import 'widgets/home_device_card.dart';
-import 'widgets/home_add_device_card.dart';
 import 'widgets/control_mode_sheet.dart';
 import 'widgets/home_header.dart';
 import 'widgets/home_voice_action_button.dart';
@@ -66,8 +64,8 @@ class _HomeScreenState extends State<HomeScreen> {
         _devices = devices;
         _isLoading = false;
         // 다른 화면에서 기기가 지워져 목록이 줄면 현재 위치가 범위를 벗어난다.
-        if (_currentDeviceIndex > _devices.length) {
-          _currentDeviceIndex = _devices.length;
+        if (_currentDeviceIndex >= _devices.length) {
+          _currentDeviceIndex = _devices.isEmpty ? 0 : _devices.length - 1;
         }
       });
       if (!_announcedOnce) {
@@ -83,23 +81,18 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _announceScreen() async {
-    final guardianMode = AccessibilitySettings.instance.guardianModeEnabled;
     // interrupt를 쓰지 않는다 — 첫 실행 온보딩 안내(main_navigation)가 재생 중일
     // 수 있으므로 큐 뒤에 자연스럽게 이어 붙인다.
     if (_devices.isEmpty) {
       await _tts.speak(
-        guardianMode
-            ? '홈입니다. 등록된 기기가 없습니다. 기기 관리에서 새 기기를 추가하세요.'
-            : '홈입니다. 등록된 기기가 없습니다. 화면의 기기 추가하기 버튼으로 직접 등록하거나, 보호자에게 요청하세요.',
+        '홈입니다. 등록된 가전이 없습니다. 보호자에게 설정의 보호자 설정에서 등록을 요청하세요.',
         source: 'HomeScreen',
       );
       return;
     }
 
     await _tts.speak(
-      guardianMode
-          ? '홈입니다. 등록된 기기 ${_devices.length}개가 있습니다. 기기를 선택하거나 말하기 버튼을 누르세요.'
-          : '홈입니다. 등록된 기기 ${_devices.length}개가 있습니다. 기기를 선택한 뒤 말하기 버튼을 누르세요.',
+      '홈입니다. 등록된 기기 ${_devices.length}개가 있습니다. 기기를 선택한 뒤 말하기 버튼을 누르세요.',
       source: 'HomeScreen',
     );
   }
@@ -107,9 +100,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _quickVoiceTapTimer?.cancel();
-    // 롱프레스 도중 화면이 사라지면 5초 뒤 죽은 context로 다이얼로그를 띄우지
-    // 않도록 타이머를 취소한다.
-    _deleteTimer?.cancel();
     _pageController.dispose();
     ActiveDeviceService.instance.deviceListUpdateNotifier.removeListener(
       _loadDevices,
@@ -168,7 +158,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _currentDeviceIndex >= 0 && _currentDeviceIndex < _devices.length;
     if (!hasDevice) {
       await _tts.speak(
-        '선택된 기기가 없습니다. 화면의 기기 추가하기 버튼으로 직접 등록하거나, 보호자에게 요청하세요.',
+        '선택된 기기가 없습니다. 보호자에게 설정의 보호자 설정에서 가전 등록을 요청하세요.',
         source: 'HomeScreen',
         interrupt: true,
       );
@@ -226,11 +216,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<void> _openDeviceConnect() async {
+  /// 기기가 없을 때 보호자가 바로 등록할 수 있게 보호자 설정을 연다.
+  Future<void> _openGuardianHub() async {
     HapticFeedback.mediumImpact();
     await Navigator.of(
       context,
-    ).push(MaterialPageRoute(builder: (_) => const DeviceConnectScreen()));
+    ).push(MaterialPageRoute(builder: (_) => const GuardianHubScreen()));
     _loadDevices();
   }
 
@@ -253,118 +244,11 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  Future<void> _deleteDevice(int index) async {
-    try {
-      final deviceName = _devices[index]['name'];
-      final deviceId = _devices[index]['id'] as String? ?? '';
-      // 저장소를 다시 읽어 이 기기만 지운다. 화면이 들고 있던 목록을 통째로 저장하면
-      // 기기 관리 탭이 그사이 바꾼 별명·연결 정보를 덮어쓴다.
-      await HomeDeviceStore.removeById(deviceId);
-      await DeviceMappingService.instance.delete(deviceId);
-      if (ActiveDeviceService.instance.getActiveDeviceId() == deviceId) {
-        // 지운 기기가 활성으로 남으면 음성 명령이 지운 기기의 매핑으로 누를 수 있다.
-        await ActiveDeviceService.instance.clearActiveDevice();
-      }
-      ActiveDeviceService.instance.notifyDeviceListChanged();
-      await _loadDevices();
-      if (!mounted) return;
-      if (_pageController.hasClients && _devices.isNotEmpty) {
-        _pageController.jumpToPage(_currentDeviceIndex);
-      }
-      await _tts.speak(
-        '$deviceName 기기가 삭제되었습니다.',
-        source: 'HomeScreen',
-        interrupt: true,
-        priority: TtsPriority.result,
-      );
-    } catch (e) {
-      debugPrint('Error deleting device: $e');
-    }
-  }
-
-  void _showDeleteConfirmation(int index) {
-    HapticFeedback.heavyImpact();
-    final deviceName = _devices[index]['name'];
-    _tts.speak(
-      '$deviceName 기기를 삭제하시겠습니까? 삭제하려면 예 버튼을 누르세요.',
-      source: 'HomeScreen',
-      interrupt: true,
-    );
-
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surfaceElevated,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: AppColors.borderDefault),
-        ),
-        title: const Text(
-          '기기 삭제',
-          style: TextStyle(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: Text(
-          '$deviceName 기기를 삭제하시겠습니까?',
-          style: const TextStyle(color: AppColors.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text(
-              '아니오',
-              style: TextStyle(color: AppColors.textTertiary),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              _deleteDevice(index);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.emergency,
-            ),
-            child: const Text(
-              '예',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Timer? _deleteTimer;
-
-  void _onLongPressStart(int index) {
-    HapticFeedback.mediumImpact();
-    _tts.speak(
-      '삭제 확인 중... 5초간 더 누르면 삭제 창이 뜹니다.',
-      source: 'HomeScreen',
-      interrupt: true,
-    );
-    _deleteTimer = Timer(const Duration(seconds: 5), () {
-      if (!mounted) return;
-      _showDeleteConfirmation(index);
-    });
-  }
-
-  void _onLongPressEnd() {
-    _deleteTimer?.cancel();
-  }
-
   @override
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
-    final guardianMode = AccessibilitySettings.instance.guardianModeEnabled;
-    // "기기 추가하기" 카드는 보호자 모드 여부와 상관없이 항상 마지막 페이지로 노출한다.
-    // 혼자 쓰는 시각장애인 사용자도 보호자 모드를 켜지 않고 기기를 등록할 수 있어야 한다.
-    final itemCount = _devices.length + 1;
+    // 홈에는 등록된 가전만 둔다. 가전 추가·삭제는 설정의 보호자 설정에서 한다.
+    final itemCount = _devices.length;
 
     if (_isLoading) {
       return const Scaffold(
@@ -409,8 +293,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         Expanded(
                           child: SingleChildScrollView(
                             child: HomeEmptyState(
-                              guardianModeEnabled: guardianMode,
-                              onAddDevicePressed: _openDeviceConnect,
+                              onOpenGuardianSettings: _openGuardianHub,
                             ),
                           ),
                         )
@@ -431,7 +314,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         SizedBox(height: 14 * rs),
                         DevicePageIndicator(
-                          count: _devices.length + 1,
+                          count: _devices.length,
                           currentIndex: _currentDeviceIndex,
                           scale: rs,
                         ),
@@ -452,48 +335,21 @@ class _HomeScreenState extends State<HomeScreen> {
                               _currentDeviceIndex = index;
                             });
                             HapticFeedback.selectionClick();
-                            if (index < _devices.length) {
-                              // 기기가 바뀐 결과 보고다. 낭독기는 이전·다음 버튼 이름만 읽고
-                              // 바뀐 기기는 읽지 않으므로 result로 낭독기 사용 중에도 들리게 한다.
-                              _tts.speak(
-                                '${_devices[index]['name']}. ${_devices[index]['status']}.',
-                                source: 'HomeScreen',
-                                interrupt: true,
-                                priority: TtsPriority.result,
-                              );
-                            } else {
-                              _tts.speak(
-                                '새 기기 추가하기.',
-                                source: 'HomeScreen',
-                                interrupt: true,
-                                priority: TtsPriority.result,
-                              );
-                            }
+                            // 기기가 바뀐 결과 보고다. 낭독기는 이전·다음 버튼 이름만 읽고
+                            // 바뀐 기기는 읽지 않으므로 result로 낭독기 사용 중에도 들리게 한다.
+                            _tts.speak(
+                              '${_devices[index]['name']}. ${_devices[index]['status']}.',
+                              source: 'HomeScreen',
+                              interrupt: true,
+                              priority: TtsPriority.result,
+                            );
                           },
                           itemCount: itemCount,
                           itemBuilder: (context, index) {
-                            if (index == _devices.length) {
-                              return HomeAddDeviceCard(
-                                onDeviceAdded: _loadDevices,
-                              );
-                            }
-
                             return HomeDeviceCard(
                               device: _devices[index],
                               onTap: () => _openDeviceControl(index),
-                              managementEnabled: guardianMode,
-                              onLongPressStart: guardianMode
-                                  ? (_) => _onLongPressStart(index)
-                                  : null,
-                              onLongPressEnd: guardianMode
-                                  ? (_) => _onLongPressEnd()
-                                  : null,
-                              onManage: guardianMode
-                                  ? () => _showDeleteConfirmation(index)
-                                  : null,
-                              onVoiceControl: !guardianMode
-                                  ? () => _openVoiceForDevice(index)
-                                  : null,
+                              onVoiceControl: () => _openVoiceForDevice(index),
                             );
                           },
                         ),

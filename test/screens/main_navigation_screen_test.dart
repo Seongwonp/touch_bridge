@@ -35,15 +35,29 @@ void main() {
     expect(find.text('기기 관리'), findsNothing);
   });
 
-  testWidgets('보호자 모드 하단 바는 기기 관리를 표시한다', (tester) async {
+  testWidgets('예전 보호자 모드 값이 켜져 있어도 하단 바는 홈/비상/설정뿐이다', (tester) async {
+    // 보호자 기능은 설정의 보호자 설정 한곳으로 옮겼다. 저장된 옛 설정이 남아 있어도
+    // 사용자 화면에 "기기 관리" 탭이 다시 나타나면 안 된다.
     await _pumpWithGuardianMode(tester, enabled: true);
 
     expect(find.text('홈'), findsOneWidget);
-    expect(find.text('기기 관리'), findsOneWidget);
     expect(find.text('비상'), findsOneWidget);
     expect(find.text('설정'), findsOneWidget);
-    expect(find.text('연결'), findsNothing);
-    expect(find.text('음성'), findsNothing);
+    expect(find.text('기기 관리'), findsNothing);
+  });
+
+  testWidgets('다른 화면이 홈 탭을 요청하면 설정 탭에서 홈으로 돌아간다', (tester) async {
+    // 설정 → 보호자 설정에서 등록을 마치고 "완료 — 홈으로"를 누르면 홈이 보여야 한다.
+    await _pumpWithGuardianMode(tester, enabled: false, accessibleNavigation: true);
+    await tester.tap(find.text('설정'));
+    await tester.pumpAndSettle();
+    expect(find.text('가전 추가, 버튼 위치 수정, 장치 점검'), findsOneWidget);
+
+    MainNavigationScreen.tabRequest.value = MainNavigationScreen.homeTab;
+    await tester.pumpAndSettle();
+
+    expect(find.text('가전 추가, 버튼 위치 수정, 장치 점검'), findsNothing);
+    expect(MainNavigationScreen.tabRequest.value, isNull);
   });
 
   testWidgets('화면읽기 사용자는 하단 화면 이동에 앱 추가 확인이 필요 없다', (tester) async {

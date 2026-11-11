@@ -8,7 +8,6 @@ import 'home/home_screen.dart';
 import 'voice/voice_listening_screen.dart';
 import 'safety/emergency_access_screen.dart';
 import 'settings/settings_screen.dart';
-import 'settings/device_management_screen.dart';
 import '../services/tts_service.dart';
 import '../services/accessibility_settings.dart';
 import '../services/feedback_service.dart';
@@ -19,6 +18,14 @@ import '../../theme/app_colors.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
+
+  /// 다른 화면이 하단 탭을 바꿔 달라고 요청한다(예: 보호자 설정을 마치고 "홈으로").
+  /// 설정 탭에서 보호자 설정에 들어갔다가 첫 화면까지 돌아오면 설정 탭이 그대로 보여,
+  /// "홈에서 말하기"라는 안내와 화면이 어긋난다.
+  static final ValueNotifier<int?> tabRequest = ValueNotifier<int?>(null);
+
+  /// 홈 탭 번호. 하단 탭 순서는 홈·비상·설정으로 고정이다.
+  static const int homeTab = 0;
   @override
   State<MainNavigationScreen> createState() => _MainNavigationScreenState();
 }
@@ -29,36 +36,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Timer? _navResetTimer;
   int? _armedNavIndex;
 
-  List<_NavDestination> _destinations(bool guardianMode) {
-    if (guardianMode) {
-      return const [
-        _NavDestination(
-          icon: Icons.home_rounded,
-          label: '홈',
-          guide: '홈 화면입니다. 말하기 버튼으로 음성 제어를 시작합니다.',
-          screen: HomeScreen(),
-        ),
-        _NavDestination(
-          icon: Icons.manage_search_rounded,
-          label: '기기 관리',
-          guide: '기기 관리 화면입니다. 기기를 등록합니다.',
-          screen: DeviceManagementScreen(),
-        ),
-        _NavDestination(
-          icon: Icons.emergency_rounded,
-          label: '비상',
-          guide: '비상 정지입니다. 버튼을 눌러 기기를 중단합니다.',
-          screen: EmergencyAccessScreen(),
-        ),
-        _NavDestination(
-          icon: Icons.settings_rounded,
-          label: '설정',
-          guide: '설정 화면입니다. 음성 속도와 접근성을 조정합니다.',
-          screen: SettingsScreen(),
-        ),
-      ];
-    }
-
+  /// 하단 탭은 모드와 상관없이 홈·비상·설정 세 개다. 가전 등록·버튼 위치 같은 보호자 기능은
+  /// 설정의 "보호자 설정" 한곳에만 둔다(예전 보호자 모드의 "기기 관리" 탭은 없앴다).
+  List<_NavDestination> _destinations() {
     return const [
       _NavDestination(
         icon: Icons.home_rounded,
@@ -84,7 +64,20 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   @override
   void initState() {
     super.initState();
+    MainNavigationScreen.tabRequest.addListener(_onTabRequest);
     _announceQuickStart();
+  }
+
+  void _onTabRequest() {
+    final index = MainNavigationScreen.tabRequest.value;
+    if (index == null || !mounted) return;
+    MainNavigationScreen.tabRequest.value = null;
+    if (index < 0 || index >= _destinations().length) return;
+    _navResetTimer?.cancel();
+    setState(() {
+      _currentIndex = index;
+      _armedNavIndex = null;
+    });
   }
 
   Future<void> _announceQuickStart() async {
@@ -92,36 +85,20 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     final seen = prefs.getBool('quick_start_seen') ?? false;
     if (seen) return;
 
-    final guardianMode = AccessibilitySettings.instance.guardianModeEnabled;
     // 첫 실행 1회뿐인 핵심 온보딩 안내 — result 우선순위로 재생해
     // (a) 스크린리더 활성 시에도 들리고, (b) 홈 화면의 navigation 안내가
     // 큐에서 이 안내를 대체(navigation 최신 1건 유지 규칙)하지 못하게 한다.
-    if (guardianMode) {
-      await _tts.speak(
-        '보호자 안내입니다. 기기 관리에서 기기를 등록하세요.',
-        source: 'MainNavigationScreen',
-        interrupt: true,
-        priority: TtsPriority.result,
-      );
-      await _tts.speak(
-        '등록 후 홈에서 기기를 선택하고 말하기 버튼으로 제어합니다.',
-        source: 'MainNavigationScreen',
-        priority: TtsPriority.result,
-      );
-    } else {
-      // 홈에서 사용자가 직접 기기를 추가할 수 있다(보호자 모드 불필요).
-      await _tts.speak(
-        'Touch Bridge입니다. 홈 화면의 기기 추가하기로 기기를 등록하거나, 보호자에게 등록을 요청하세요.',
-        source: 'MainNavigationScreen',
-        interrupt: true,
-        priority: TtsPriority.result,
-      );
-      await _tts.speak(
-        '등록한 뒤에는 홈에서 말하기를 누르세요.',
-        source: 'MainNavigationScreen',
-        priority: TtsPriority.result,
-      );
-    }
+    await _tts.speak(
+      'Touch Bridge입니다. 가전 등록은 보호자가 설정의 보호자 설정에서 합니다.',
+      source: 'MainNavigationScreen',
+      interrupt: true,
+      priority: TtsPriority.result,
+    );
+    await _tts.speak(
+      '등록한 뒤에는 홈에서 말하기를 누르세요.',
+      source: 'MainNavigationScreen',
+      priority: TtsPriority.result,
+    );
     // 비상 정지 버튼은 위치를 알려 주지 않으면 화면을 볼 수 없는 사용자가 찾을 수 없다.
     // 모서리는 손으로 더듬어 찾기 쉬운 자리이고, 모든 화면에서 같은 자리에 있다.
     await _tts.speak(
@@ -134,7 +111,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
     // 사용자 모드 첫 실행 시 시각적 온보딩 다이얼로그도 노출한다.
     // TalkBack이 AlertDialog content를 자동으로 낭독 → TTS와 이중 보장.
-    if (!guardianMode && mounted) {
+    if (mounted) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         showDialog<void>(
@@ -153,7 +130,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               ),
             ),
             content: const Text(
-              '1. 홈 화면의 "기기 추가하기"로 기기를 등록하거나, 보호자에게 요청하세요.\n'
+              '1. 가전 등록은 보호자가 설정의 "보호자 설정"에서 합니다.\n'
               '2. 등록한 뒤 홈에서 "말하기"를 누르면 음성으로 제어합니다.\n\n'
               '비상 정지: 어느 화면에서든 오른쪽 위 모서리의 빨간 버튼을 한 번 누르면 바로 멈춥니다.',
               style: TextStyle(
@@ -184,9 +161,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 
   Future<void> _handleBottomTap(int index) async {
-    final destinations = _destinations(
-      AccessibilitySettings.instance.guardianModeEnabled,
-    );
+    final destinations = _destinations();
     if (_currentIndex == index) {
       // 다른 탭이 armed 상태로 남아 있으면 여기서 해제한다. 그러지 않으면
       // 그 탭으로 되돌아왔을 때 armed가 유지돼, 한 번만 눌러도 확인 없이 이동한다.
@@ -352,6 +327,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   @override
   void dispose() {
+    MainNavigationScreen.tabRequest.removeListener(_onTabRequest);
     _navResetTimer?.cancel();
     // TtsService는 앱 전역 싱글톤 큐다. 여기서 stop()을 부르면 이 화면이
     // dispose되는 순간(보통 다음 화면 initState 직후) 다음 화면이 막 넣은
@@ -362,9 +338,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   @override
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
-    final destinations = _destinations(
-      AccessibilitySettings.instance.guardianModeEnabled,
-    );
+    final destinations = _destinations();
     final currentIndex = _currentIndex.clamp(0, destinations.length - 1);
     if (currentIndex != _currentIndex) {
       _currentIndex = currentIndex;

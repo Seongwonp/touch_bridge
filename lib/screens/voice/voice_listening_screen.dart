@@ -43,8 +43,7 @@ import 'widgets/voice_wave_visualizer.dart';
 import 'widgets/voice_action_buttons.dart';
 import 'widgets/voice_example_commands.dart';
 import '../../widgets/ble_status_banner.dart';
-import '../connection/device_connect_screen.dart';
-import '../mapping/manual_mapping_screen.dart';
+import '../guardian/guardian_hub_screen.dart';
 import '../settings/settings_screen.dart';
 
 class VoiceListeningScreen extends StatefulWidget {
@@ -1424,12 +1423,11 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
         final Widget? navigateDest;
         final String destName;
         switch (target) {
+          // 기기 연결·버튼 위치는 보호자 기능이라 보호자 설정 한곳으로 보낸다.
           case 'connection':
-            navigateDest = const DeviceConnectScreen();
-            destName = '기기 연결';
           case 'mapping':
-            navigateDest = const ManualMappingScreen();
-            destName = '버튼 매핑';
+            navigateDest = const GuardianHubScreen();
+            destName = '보호자 설정';
           case 'settings':
             navigateDest = const SettingsScreen();
             destName = '설정';

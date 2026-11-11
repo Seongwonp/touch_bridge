@@ -9,8 +9,7 @@ import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import 'ble_log_screen.dart';
 import 'developer_console_screen.dart';
-import 'device_management_screen.dart';
-import '../connection/device_connect_screen.dart';
+import '../guardian/guardian_hub_screen.dart';
 import '../practice/practice_screen.dart';
 import '../voice/voice_listening_screen.dart';
 import '../../theme/app_colors.dart';
@@ -28,7 +27,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late double _speed;
   late double _volume;
   late double _sttSilenceTimeout;
-  late bool _guardianModeEnabled;
   late bool _developerModeEnabled;
   late bool _voiceGuidanceEnabled;
   late bool _largeTextEnabled;
@@ -46,12 +44,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _voiceGuidanceEnabled = s.voiceGuidanceEnabled;
     _largeTextEnabled = s.largeTextEnabled;
     _highContrastEnabled = s.highContrastEnabled;
-    _guardianModeEnabled = s.guardianModeEnabled;
     _developerModeEnabled = s.developerModeEnabled;
     _contactName = s.contactName;
     _contactPhone = s.contactPhone;
     _tts.speak(
-      '설정입니다. 음성 속도, 보호자 모드, 개발자 모드를 변경할 수 있습니다.',
+      '설정입니다. 보호자 설정, 음성 안내, 접근성을 바꿀 수 있습니다.',
       source: 'SettingsScreen',
     );
   }
@@ -183,6 +180,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             SizedBox(height: ResponsiveScale.v(context, 24)),
+            // 보호자 기능(가전 등록·버튼 위치·장치 점검)의 유일한 입구. 켜고 끄는 모드 없이 늘 보인다.
+            SectionLabel(icon: Icons.family_restroom_rounded, label: '보호자 설정'),
+            SizedBox(height: ResponsiveScale.v(context, 10)),
+            SettingsCard(
+              children: [
+                NavRow(
+                  icon: Icons.admin_panel_settings_rounded,
+                  title: '보호자 설정',
+                  subtitle: '가전 추가, 버튼 위치 수정, 장치 점검',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const GuardianHubScreen()),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: ResponsiveScale.v(context, 24)),
             SectionLabel(icon: Icons.record_voice_over_rounded, label: '음성 안내'),
             SizedBox(height: ResponsiveScale.v(context, 10)),
             SettingsCard(
@@ -278,54 +292,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     MaterialPageRoute(builder: (_) => const PracticeScreen()),
                   ),
                 ),
-              ],
-            ),
-            SizedBox(height: ResponsiveScale.v(context, 24)),
-            SectionLabel(icon: Icons.family_restroom_rounded, label: '보호자 설정'),
-            SizedBox(height: ResponsiveScale.v(context, 10)),
-            SettingsCard(
-              children: [
-                SwitchRow(
-                  title: '보호자 안내 모드',
-                  subtitle: '초기 세팅과 사용법을 더 자세히 안내',
-                  value: _guardianModeEnabled,
-                  onChanged: (v) {
-                    setState(() => _guardianModeEnabled = v);
-                    AccessibilitySettings.instance.setGuardianModeEnabled(v);
-                    _tts.speak(
-                      v
-                          ? '보호자 모드를 켰습니다. 기기 관리와 매핑에 접근할 수 있습니다.'
-                          : '보호자 모드를 껐습니다. 기기 추가와 매핑은 숨겨집니다.',
-                      source: 'SettingsScreen',
-                    );
-                  },
-                ),
-                if (_guardianModeEnabled) ...[
-                  const SettingsDivider(),
-                  NavRow(
-                    icon: Icons.add_link_rounded,
-                    title: '기기 추가 및 연결',
-                    subtitle: 'QR, 블루투스, NFC로 새 기기 등록',
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const DeviceConnectScreen(),
-                      ),
-                    ),
-                  ),
-                  const SettingsDivider(),
-                  NavRow(
-                    icon: Icons.settings_bluetooth_rounded,
-                    title: '기기 및 하드웨어 관리',
-                    subtitle: '등록된 기기와 ESP32 연결 설정',
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const DeviceManagementScreen(),
-                      ),
-                    ),
-                  ),
-                ],
               ],
             ),
             // 개발자 설정: 디버그 빌드에서만 노출 — 릴리스 APK에는 raw 명령

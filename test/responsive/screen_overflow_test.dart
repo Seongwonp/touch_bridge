@@ -21,7 +21,6 @@ import 'package:touch_bridge/screens/control/image_control_screen.dart';
 import 'package:touch_bridge/screens/control/remote_control_screen.dart';
 import 'package:touch_bridge/screens/home/appliance_selection_screen.dart';
 import 'package:touch_bridge/screens/home/home_screen.dart';
-import 'package:touch_bridge/screens/home/widgets/home_add_device_card.dart';
 import 'package:touch_bridge/screens/main_navigation_screen.dart';
 import 'package:touch_bridge/screens/mapping/guardian_handoff_screen.dart';
 import 'package:touch_bridge/screens/mapping/manual_mapping_screen.dart';
@@ -32,7 +31,8 @@ import 'package:touch_bridge/screens/safety/emergency_stop_screen.dart';
 import 'package:touch_bridge/screens/safety/stop_done_screen.dart';
 import 'package:touch_bridge/screens/settings/ble_log_screen.dart';
 import 'package:touch_bridge/screens/settings/developer_console_screen.dart';
-import 'package:touch_bridge/screens/settings/device_management_screen.dart';
+import 'package:touch_bridge/screens/guardian/guardian_device_screen.dart';
+import 'package:touch_bridge/screens/guardian/guardian_hub_screen.dart';
 import 'package:touch_bridge/screens/settings/settings_screen.dart';
 import 'package:touch_bridge/screens/voice/voice_listening_screen.dart';
 import 'package:touch_bridge/services/accessibility_settings.dart';
@@ -108,14 +108,12 @@ class _Screen {
     this.hasTextField = false,
     this.prefs = const {},
     this.withActiveDevice = false,
-    this.afterPump,
   });
   final String name;
   final Widget Function() builder;
   final bool hasTextField;
   final Map<String, Object> prefs;
   final bool withActiveDevice;
-  final Future<void> Function(WidgetTester tester)? afterPump;
 }
 
 final _oneDevice = jsonEncode([
@@ -129,48 +127,17 @@ final _oneDevice = jsonEncode([
   },
 ]);
 
-/// 홈 PageView를 마지막 페이지("새 기기 추가하기" 카드)로 넘긴다.
-Future<void> _jumpToAddCard(WidgetTester tester) async {
-  final pv = find.byType(PageView);
-  if (pv.evaluate().isEmpty) return;
-  final w = tester.widget<PageView>(pv.first);
-  final ctrl = w.controller;
-  if (ctrl == null || !ctrl.hasClients) return;
-  final count = (w.childrenDelegate.estimatedChildCount ?? 1);
-  ctrl.jumpToPage(count - 1);
-  await tester.pump(const Duration(milliseconds: 300));
-  // 진단: 추가 카드 안 SingleChildScrollView가 숨긴 높이(조용한 잘림)를 기록.
-  final card = find.byType(HomeAddDeviceCard);
-  if (card.evaluate().isEmpty) {
-    _notes['$_currentKey add-card'] = 'HomeAddDeviceCard not built';
-    return;
-  }
-  final sc = find.descendant(of: card, matching: find.byType(Scrollable));
-  final label = find.descendant(of: card, matching: find.text('새 기기 추가하기'));
-  final pos = tester.state<ScrollableState>(sc.first).position;
-  final cardBox = tester.getRect(card);
-  final labelRect = label.evaluate().isEmpty ? null : tester.getRect(label);
-  _notes['$_currentKey add-card'] =
-      'card ${cardBox.width.toStringAsFixed(0)}x${cardBox.height.toStringAsFixed(0)}, '
-      'scroll viewport ${pos.viewportDimension.toStringAsFixed(0)}, hidden ${pos.maxScrollExtent.toStringAsFixed(1)}px, '
-      'label rect ${labelRect == null ? '-' : '${labelRect.top.toStringAsFixed(0)}..${labelRect.bottom.toStringAsFixed(0)}'}';
-}
-
-String _currentKey = '';
-
 final _screens = <_Screen>[
   _Screen('HomeScreen (no devices)', () => const HomeScreen()),
   _Screen(
-    'HomeScreen (1 device, add-card page)',
+    'HomeScreen (1 device)',
     () => const HomeScreen(),
     prefs: {'home_devices': _oneDevice},
-    afterPump: _jumpToAddCard,
   ),
   _Screen(
-    'MainNavigation>Home (1 device, add-card page)',
+    'MainNavigation>Home (1 device)',
     () => const MainNavigationScreen(),
     prefs: {'home_devices': _oneDevice, 'quick_start_seen': true},
-    afterPump: _jumpToAddCard,
   ),
   _Screen(
     'MainNavigation>Home (no devices)',
@@ -251,9 +218,13 @@ final _screens = <_Screen>[
     hasTextField: true,
   ),
   _Screen(
-    'DeviceManagementScreen',
-    () => const DeviceManagementScreen(),
-    hasTextField: true,
+    'GuardianHubScreen',
+    () => const GuardianHubScreen(),
+    prefs: {'home_devices': _oneDevice},
+  ),
+  _Screen(
+    'GuardianDeviceScreen',
+    () => const GuardianDeviceScreen(deviceId: 'test-microwave'),
     prefs: {'home_devices': _oneDevice},
   ),
   _Screen('SettingsScreen', () => const SettingsScreen(), hasTextField: true),
@@ -494,7 +465,6 @@ void main() {
           // 키보드가 올라오면 하단 패딩은 inset에 흡수된다.
           tester.view.padding = const FakeViewPadding(top: 24 * dpr);
         }
-        _currentKey = '${s.name} @ ${c.id}';
         addTearDown(tester.view.reset);
         addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 
@@ -513,11 +483,6 @@ void main() {
             await tester.pump(const Duration(milliseconds: 250));
           }
           _scanSilentClipping(tester, record);
-          if (s.afterPump != null) {
-            await s.afterPump!(tester);
-            await tester.pump(const Duration(milliseconds: 250));
-            _scanSilentClipping(tester, record);
-          }
           // 트리를 내려 타이머·애니메이션을 정리한다.
           await tester.pumpWidget(const SizedBox.shrink());
           await tester.pump(const Duration(seconds: 30));
