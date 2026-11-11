@@ -129,7 +129,8 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   /// 실행 확인("네"/"아니요")을 기다리는 중인지. 질문을 듣고 생각할 시간이 필요하므로
   /// 듣는 시간을 길게 둔다. 예전에는 녹음 상한이 10초뿐이라 침묵 설정을 늘려도
   /// 먼저 끊겼다(외부 평가).
-  bool get _awaitingConfirm => _pendingCommandData != null;
+  bool get _awaitingConfirm =>
+      _pendingCommandData != null || _pendingLowConfidenceText != null;
 
   /// 무입력이어도 확인 답을 기다리는 최소 시간(WCAG 2.2.1의 20초를 따름).
   static const int _confirmWaitSeconds = 20;
@@ -236,22 +237,13 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
       if (_isExecuting) _stopRequestedThisRun = true;
     });
     if (!AiBackendService.instance.isConfigured) {
-      // 사용자에게는 설정 키 이름이 아니라 할 수 있는 일을 알린다. 키 이름은 로그로 남긴다.
+      // 서버가 없어도 마이크는 연다. "30초 돌려줘" 같은 앱 안 규칙은 서버 없이 처리되고,
+      // 서버가 필요한 명령만 실패를 알린다. 예전에는 마이크 자체를 막아 간단한 명령도
+      // 못 했다(외부 평가). 키 이름은 사용자에게 말하지 않고 로그로 남긴다.
       AppLogger.warn('voice.backend_not_configured', {'key': 'AI_BACKEND_URL'});
-      _statusMessage = '음성 해석 서버가 설정되지 않아 음성 명령을 쓸 수 없습니다. 보호자에게 설정을 요청해 주세요.';
-      final initial = widget.initialText;
-      if (initial != null && initial.isNotEmpty) {
-        // "취소" 같은 앱 안 규칙은 서버 없이도 처리된다.
-        _recognizedText = initial;
-        _isProcessing = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _sendTextToGemini(initial);
-        });
-      } else {
-        _speak(_statusMessage);
-      }
-    } else {
-      _initSpeech().then((_) async {
+      _statusMessage = '음성 해석 서버가 설정되지 않아 "30초 돌려줘" 같은 간단한 명령만 쓸 수 있습니다.';
+    }
+    _initSpeech().then((_) async {
         if (!mounted) return;
         final initial = widget.initialText;
         if (initial != null && initial.isNotEmpty) {
@@ -274,7 +266,6 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
           _toggleRecording();
         }
       });
-    }
   }
 
   @override
@@ -707,6 +698,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
   /// 확인 질문 뒤에 다시 열어 둔 마이크를 닫는다(버튼으로 답했으므로).
   void _stopListeningForConfirm() {
+    _cancelPendingRelisten();
     _speechSession.stop();
     _silenceTimer?.cancel();
     _recordingTimeoutTimer?.cancel();
@@ -847,6 +839,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     if (!mounted) return;
     _stopController.reset(); // 이전 실행의 정지 결과를 새 실행 화면에 남기지 않는다.
     _stopRequestedThisRun = false;
+    _cancelPendingRelisten(); // 실행 중에는 예약된 다시 듣기가 마이크를 열지 않는다.
     setState(() {
       _isExecuting = true;
       _executingLabel = label;
@@ -854,7 +847,17 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
       _statusMessage = label;
     });
     await _speak(label, interrupt: true, priority: TtsPriority.result);
+    // 누르는 동안에는 마이크가 닫혀 "멈춰"를 듣지 못한다. 멈추는 방법을 처음 한 번 알린다.
+    if (!_stopHintSpoken) {
+      _stopHintSpoken = true;
+      await _speak(
+        '누르는 동안 멈추려면 화면의 정지나 오른쪽 위 비상 정지를 누르세요.',
+        priority: TtsPriority.result,
+      );
+    }
   }
+
+  bool _stopHintSpoken = false;
 
   /// 누르기 결과를 완료 화면으로 보여준 뒤 잠시 후 원래 화면으로 돌아온다.
   /// 결과 보고이므로 스크린리더 활성 시에도 들리도록 result 우선순위를 명시한다.
@@ -919,14 +922,23 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     return Duration(milliseconds: ms);
   }
 
+  /// 예약해 둔 "다시 듣기"의 세대. 실행·취소·버튼 답·정지가 오면 올려서, 기다리던
+  /// 예약이 뒤늦게 마이크를 열지 못하게 한다. 예전에는 '실행'을 누른 뒤에도 예약이
+  /// 살아 있어 실행 중이나 취소 뒤에 다시 듣기 시작했다(외부 평가).
+  int _relistenGen = 0;
+
+  void _cancelPendingRelisten() => _relistenGen++;
+
   void _restartListeningAfterPrompt() {
     if (!_speechEnabled || !mounted) return;
+    final gen = ++_relistenGen;
     Future<void>(() async {
       await _tts.waitUntilIdle();
       // 낭독기가 상태 문구(liveRegion)를 읽는 동안에는 열지 않는다. 앱 음성이 끝난 것만
       // 기다리면 낭독 도중 마이크가 열려 낭독이 끊기고 낭독 소리가 녹음된다(실기).
       await Future<void>.delayed(_screenReaderAllowance(_statusMessage));
-      if (!mounted || _isRecording || _isProcessing) return;
+      if (!mounted || gen != _relistenGen) return;
+      if (_isRecording || _isProcessing || _isExecuting) return;
       _toggleRecording();
     });
   }
@@ -1003,6 +1015,14 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
       case VoiceIntentKind.replayLastSpeech:
         AppLogger.info('voice.replay_intercept', {'requestId': requestId});
         setState(() => _isProcessing = false);
+        // 답을 기다리는 중이면 지금 질문을 다시 들려주고 계속 듣는다. 낭독기를 써도
+        // 들리게 result로 낸다(예전엔 navigation이라 낭독기 사용 중 무음이었다).
+        final question = _lowConfidenceQuestion ?? _confirmQuestion;
+        if (_awaitingConfirm && question != null) {
+          await _speak(question, interrupt: true, priority: TtsPriority.result);
+          _restartListeningAfterPrompt();
+          return;
+        }
         await _tts.replayLast();
         return;
 
@@ -1827,16 +1847,18 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
                         ),
                         SizedBox(height: ResponsiveScale.v(context, 24)),
                         // 실행 확인 중에는 '실행'·'취소'를 보이고 예시 명령은 숨긴다.
-                        if (_pendingCommandData != null &&
-                            _confirmQuestion != null) ...[
-                          _buildConfirmQuestionCard(rs),
-                          SizedBox(height: ResponsiveScale.v(context, 16)),
-                          _buildConfirmButtons(rs),
-                        ] else if (_pendingLowConfidenceText != null &&
+                        // 실행 확인에 답한 "네"를 잘못 들었을 수 있어 되물으면 두 질문이 함께
+                        // 걸린다. 더 최근인 되묻기를 먼저 보여 준다(외부 평가).
+                        if (_pendingLowConfidenceText != null &&
                             _lowConfidenceQuestion != null) ...[
                           _buildConfirmQuestionCard(rs, _lowConfidenceQuestion),
                           SizedBox(height: ResponsiveScale.v(context, 16)),
                           _buildLowConfidenceButtons(rs),
+                        ] else if (_pendingCommandData != null &&
+                            _confirmQuestion != null) ...[
+                          _buildConfirmQuestionCard(rs),
+                          SizedBox(height: ResponsiveScale.v(context, 16)),
+                          _buildConfirmButtons(rs),
                         ]
                         else if (isIdle)
                           VoiceExampleCommands(

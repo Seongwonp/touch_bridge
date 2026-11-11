@@ -575,7 +575,14 @@ class BleService {
     });
   }
 
-  Future<bool> sendRaw(String command) async {
+  /// [epoch]를 주면 그 실행 토큰이 바뀌었을 때(정지·끊김) 보내지 않는다. 여러 줄로 된
+  /// 한 동작(상대 이동, 눌러보기)은 시작할 때 토큰을 잡아 모든 줄에 넘겨야 한다.
+  /// 줄마다 새로 잡으면 줄 사이에 들어온 정지 뒤에도 남은 줄이 나간다(외부 평가).
+  Future<bool> sendRaw(String command, {int? epoch}) async {
+    if (epoch != null && epoch != _motionEpoch) {
+      _addLog('CANCELLED_RAW: stop before send ($command)');
+      return false;
+    }
     if (_sendRawOverride != null) return _sendRawOverride!(command);
     if (_demoMode) {
       _addLog('DEMO SEND_RAW: $command');
@@ -584,8 +591,8 @@ class BleService {
     final c = _commandCharacteristic;
     if (c == null) return false;
     // 인증 핸드셰이크와 큐 대기 사이에 비상 정지/끊김이 끼어들 수 있다.
-    // 이 시점의 epoch를 기억해 두고 실제 write 직전에 다시 비교한다.
-    final epoch = _motionEpoch;
+    // 이 시점의(또는 호출자가 준) epoch를 기억해 두고 실제 write 직전에 다시 비교한다.
+    final startEpoch = epoch ?? _motionEpoch;
 
     // 물리 동작 인증 게이트: 페어링 키가 프로비저닝된 기기는 유효한 HMAC
     // 세션 없이는 raw 명령(G-code/BTN_n/SET_GRID)을 보내지 않는다.
@@ -604,7 +611,7 @@ class BleService {
       // 비상 정지는 큐를 우회해 먼저 나간다. 그 뒤에 큐에서 차례가 온 이동·누름
       // 명령은 정지 이전에 준비된 것이므로 버린다 — 정지를 눌렀는데 갠트리가
       // 다음 버튼으로 이동하는 사고를 막는다. (sendProtocolPayload와 같은 계약)
-      if (epoch != _motionEpoch || !identical(c, _commandCharacteristic)) {
+      if (startEpoch != _motionEpoch || !identical(c, _commandCharacteristic)) {
         _addLog('CANCELLED_RAW: connection/stop changed ($command)');
         return false;
       }
@@ -673,12 +680,16 @@ class BleService {
       return false;
     }
 
-    final okMode = await sendRaw('G91');
+    // 세 줄을 한 동작으로 묶는다: 시작할 때 토큰을 잡아 모든 줄에 넘긴다.
+    final epoch = _motionEpoch;
+    final okMode = await sendRaw('G91', epoch: epoch);
+    if (!okMode) return false;
     await Future<void>.delayed(const Duration(milliseconds: 120));
-    final okMove = await sendRaw('G1 $normalizedAxis$value F$feedRate');
+    final okMove = await sendRaw('G1 $normalizedAxis$value F$feedRate', epoch: epoch);
+    if (!okMove) return false;
     await Future<void>.delayed(const Duration(milliseconds: 350));
-    final okReset = await sendRaw('G90');
-    return okMode && okMove && okReset;
+    final okReset = await sendRaw('G90', epoch: epoch);
+    return okReset;
   }
 
   Future<bool> sendPress({

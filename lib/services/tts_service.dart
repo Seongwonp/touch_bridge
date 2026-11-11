@@ -324,10 +324,11 @@ class TtsService {
   /// force:true로 "동일 멘트 반복" 억제를 우회하고, interrupt로 즉시 재생한다.
   Future<void> replayLast() async {
     if (_lastSpokenText.isEmpty) {
-      await speak('다시 들려줄 안내가 없습니다.', interrupt: true);
+      await speak('다시 들려줄 안내가 없습니다.', interrupt: true, priority: TtsPriority.result);
       return;
     }
-    await speak(_lastSpokenText, force: true, interrupt: true);
+    // 사용자가 직접 다시 들려 달라고 한 것이라 낭독기를 써도 들려야 한다(navigation이면 억제됨).
+    await speak(_lastSpokenText, force: true, interrupt: true, priority: TtsPriority.result);
   }
 
   static const _preferredEngines = ['com.samsung.SMT', 'com.google.android.tts'];

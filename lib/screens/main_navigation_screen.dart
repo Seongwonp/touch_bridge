@@ -243,13 +243,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     BuildContext context,
     List<_NavDestination> destinations,
   ) {
+    // 높이를 고정하지 않고 최소 높이만 둔다. 시스템 글자를 키우면 탭 글자도 커지고
+    // 바가 따라 높아진다(예전엔 80 고정에 11 크기 글자였다 — 외부 평가).
     return Container(
-      height: ResponsiveScale.v(context, 80),
+      constraints: BoxConstraints(minHeight: ResponsiveScale.v(context, 80)),
       decoration: const BoxDecoration(
         color: AppColors.surface,
         border: Border(top: BorderSide(color: AppColors.borderDefault)),
       ),
-      child: Row(
+      child: IntrinsicHeight(
+        child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: List.generate(destinations.length, (index) {
           final item = destinations[index];
           final bool isActive = _currentIndex == index;
@@ -265,6 +269,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               value: isArmed ? '이동 대기 중' : null,
               hint: isArmed ? '한 번 더 누르면 이동합니다' : null,
               liveRegion: isArmed,
+              // 라벨이 '홈 탭'이므로 아래 글자 '홈'을 한 번 더 읽지 않게 한다.
+              excludeSemantics: true,
+              onTap: () => _handleBottomTap(index),
               child: GestureDetector(
                 onTap: () => _handleBottomTap(index),
                 child: AnimatedContainer(
@@ -295,8 +302,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                           ]
                         : null,
                   ),
+                  padding: EdgeInsets.symmetric(vertical: 6 * rs),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
                         item.icon,
@@ -307,7 +316,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                       Text(
                         item.label,
                         style: TextStyle(
-                          fontSize: 11 * rs,
+                          fontSize: 15 * rs,
                           fontWeight: FontWeight.w800,
                           color: isActive
                               ? Colors.black
@@ -321,6 +330,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             ),
           );
         }),
+        ),
       ),
     );
   }

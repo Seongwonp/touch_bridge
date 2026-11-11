@@ -101,12 +101,18 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     _lastPowerState = now;
     if (!mounted) return;
     setState(() {});
-    if (before == PowerState.on && now == PowerState.off) {
-      _speak(
+    // 의미가 바뀌는 순간만 한 번씩 알린다(전력 수치의 매초 변화는 읽지 않는다).
+    // 예전에는 켜짐→꺼짐만 말해, 나중에 켜짐이 확인되거나 센서가 끊겨도 몰랐다(외부 평가).
+    final String? msg = switch ((before, now)) {
+      (PowerState.on, PowerState.off) =>
         '전류 센서 기준으로 ${widget.deviceName} 전원이 꺼진 것으로 보입니다.',
-        priority: TtsPriority.result,
-      );
-    }
+      (PowerState.unknown, PowerState.on) || (PowerState.off, PowerState.on) =>
+        '전류 센서 기준으로 ${widget.deviceName} 전원이 켜져 있습니다.',
+      (PowerState.on, PowerState.unknown) || (PowerState.off, PowerState.unknown) =>
+        '전류 센서 정보가 끊겨 가전 전원 상태를 알 수 없습니다.',
+      _ => null,
+    };
+    if (msg != null) _speak(msg, priority: TtsPriority.result);
   }
 
   /// 전류 센서가 연결되어 있을 때만 보이는 가전 작동 상태 문구.

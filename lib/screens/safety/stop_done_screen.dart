@@ -63,8 +63,12 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
     if (!mounted || now == _power) return;
     final before = _power;
     setState(() => _power = now);
-    // 켜짐 → 꺼짐만 알린다(결과가 바뀐 순간). 모름으로 돌아가는 것은 조용히 반영한다.
-    if (before == PowerState.on && now == PowerState.off) {
+    // 의미가 바뀌는 순간만 한 번씩 알린다. 센서가 끊기면 앞의 판단을 더는 쓸 수 없다고
+    // 알린다(외부 평가: 예전엔 켜짐→꺼짐만 말했다).
+    if (now == PowerState.unknown && before != PowerState.unknown) {
+      _tts.speak('전류 센서 정보가 끊겨 가전 전원 상태를 알 수 없습니다.',
+          priority: TtsPriority.result);
+    } else if (now != PowerState.unknown) {
       _tts.speak(powerSentence(now), priority: TtsPriority.result);
     }
   }

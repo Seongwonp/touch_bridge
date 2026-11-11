@@ -381,8 +381,12 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
       if (ok) {
         if (axis.toUpperCase() == 'X') _currentXmm += value;
         if (axis.toUpperCase() == 'Y') _currentYmm += value;
+        // 지금 값은 요청한 이동량을 더한 추정이다. '장치 기준'이라 표시하지 않고,
+        // 이동이 끝나면 장치에 다시 물어 맞춘다(외부 평가).
+        _positionKnown = false;
       }
     });
+    if (ok) unawaited(_syncPosition(waitIdle: true));
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('허브 연결이 필요합니다. 위치는 변경되지 않았습니다.')),
@@ -403,12 +407,12 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
       );
       return;
     }
-    var ok = await ble.sendRaw('G91');
-    if (ok) ok = await ble.sendRaw('G1 Z-1.0 F150');
-    // 올림과 절대 좌표 복귀는 누름 성공 여부와 상관없이 보낸다.
-    final up = await ble.sendRaw('G1 Z1.0 F150');
-    final abs = await ble.sendRaw('G90');
-    ok = ok && up && abs;
+    // 한 동작으로 묶는다. 중간에 정지가 들어오면 남은 줄(누름·올림 포함)을 보내지 않는다.
+    final epoch = ble.motionEpoch;
+    var ok = await ble.sendRaw('G91', epoch: epoch);
+    if (ok) ok = await ble.sendRaw('G1 Z-1.0 F150', epoch: epoch);
+    if (ok) ok = await ble.sendRaw('G1 Z1.0 F150', epoch: epoch);
+    if (ok) ok = await ble.sendRaw('G90', epoch: epoch);
     if (!mounted) return;
     await _tts.speak(
       ok ? '지금 위치를 누르도록 기기에 전달했습니다.' : '눌러보기 명령을 보내지 못했습니다. 연결을 확인하세요.',
