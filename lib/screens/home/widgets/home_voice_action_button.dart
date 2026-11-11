@@ -19,9 +19,13 @@ class HomeVoiceActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final rs = scale;
+    // 버튼 글자 '말하기'와 라벨이 이어 읽혀 같은 말이 두 번 나오지 않게 하나로 합친다.
     return Semantics(
-      label: '$deviceName 음성 제어 시작',
+      label: '말하기',
+      hint: '$deviceName에 음성으로 명령합니다',
       button: true,
+      excludeSemantics: true,
+      onTap: enabled ? onTap : null,
       child: Container(
         constraints: BoxConstraints(minHeight: 80 * rs),
         decoration: BoxDecoration(

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../services/ble_service.dart';
+import '../services/speech_session_service.dart';
 import '../services/tts_service.dart';
 import '../theme/app_colors.dart';
 
@@ -53,9 +54,13 @@ class _BleStatusBannerState extends State<BleStatusBanner> {
           case BleReconnectState.reconnected:
             _status = _BleStatus.connected;
             _deviceName = BleService.instance.connectedDeviceName;
-            _tts.speak('블루투스 재연결됐습니다.', source: 'BleStatusBanner');
+            if (!SpeechSessionService.instance.shouldStayQuiet) {
+              _tts.speak('블루투스 재연결됐습니다.', source: 'BleStatusBanner');
+            }
           case BleReconnectState.failed:
             _status = _BleStatus.failed;
+            // 마이크가 말을 기다리는 중이면 말하지 않는다(녹음에 섞인다). 배너 글자는 바뀐다.
+            if (SpeechSessionService.instance.shouldStayQuiet) break;
             _tts.speak(
               // 연결 설정은 보호자 기능이라 사용자에게 시키지 않는다(외부 평가).
               // 다음 명령 때 앱이 자동으로 다시 연결을 시도한다.
@@ -113,8 +118,11 @@ class _BleStatusBannerState extends State<BleStatusBanner> {
     };
 
     return Semantics(
-      // liveRegion: true → 상태가 바뀔 때마다 스크린리더가 label을 자동 낭독.
-      liveRegion: true,
+      // 다른 글자와 한 덩어리로 합쳐 읽히지 않게 따로 둔다.
+      container: true,
+      // 상태가 바뀔 때마다 낭독기가 읽는다. 단, 마이크가 사용자의 말을 기다리는 동안에는
+      // 읽지 않는다(그 소리가 녹음돼 명령으로 들어갔다 — 실기).
+      liveRegion: !SpeechSessionService.instance.shouldStayQuiet,
       label: label,
       child: ExcludeSemantics(
         child: AnimatedContainer(

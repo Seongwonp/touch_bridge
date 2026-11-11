@@ -141,6 +141,18 @@ class TtsService {
   }
 
   /// 최근 TTS 로그 반환 (디버깅용)
+  /// 최근 30초 안에 말했거나 낭독기에 넘긴 문장들(억제·누락 표시는 제외).
+  /// 마이크가 그 소리를 다시 받았는지(메아리) 가리는 데 쓴다.
+  List<String> recentSpokenTexts({Duration within = const Duration(seconds: 30)}) {
+    final since = DateTime.now().subtract(within);
+    return [
+      for (final e in _speakLog)
+        if (e.timestamp.isAfter(since) && !e.text.startsWith('(SUPPRESSED') &&
+            !e.text.startsWith('(DROPPED'))
+          e.text.replaceFirst('(ANNOUNCE) ', ''),
+    ];
+  }
+
   List<String> getRecentLog() {
     return _speakLog
         .map(

@@ -37,6 +37,14 @@ class SpeechSessionService {
   SpeechClient? get _current => _clients.isEmpty ? null : _clients.last;
 
   bool get isListening => _speech.isListening;
+
+  /// 음성 화면이 사용자의 말을 기다리는 동안(엔진을 조용히 다시 여는 틈 포함) true.
+  /// 이때 다른 화면 요소가 낭독기를 말하게 하면 그 소리가 녹음돼 명령으로 들어간다
+  /// (실기: 연결 배너의 "Touch Bridge 연결 안 됨"이 녹음됐다).
+  bool micWindowActive = false;
+
+  /// 지금 낭독기·앱 음성을 내면 마이크에 들어갈 수 있는지.
+  bool get shouldStayQuiet => micWindowActive || _speech.isListening;
   bool get isAvailable => _available;
 
   /// 패키지 초기화 — 몇 번을 불러도 실제 초기화(콜백 등록)는 한 번만 한다.

@@ -358,7 +358,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-              if (_devices.isNotEmpty)
+              // 가전이 하나면 넘길 곳이 없다. 쓸모없는 이전·다음 버튼을 낭독기가 읽지 않게 숨긴다.
+              if (_devices.length > 1)
               HomeFooterNavHint(
                 scale: rs,
                 onPrevious: () => _pageController.previousPage(

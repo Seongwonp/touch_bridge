@@ -30,8 +30,9 @@ class HomeDeviceCard extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 6 * rs),
       child: Semantics(
-        label:
-            '${device['name']}. 현재 상태 ${device['status']}. 선택하려면 두 번 누르세요. 음성 명령은 액션 메뉴에서 바로 시작할 수 있습니다.',
+        // 낭독기가 "두 번 탭하여 활성화"를 스스로 붙이므로 조작법은 반복하지 않는다.
+        label: '${device['name']}, ${device['status']}',
+        hint: '조작 방법을 엽니다',
         button: true,
         // onTap을 Semantics에 직접 등록 — ExcludeSemantics가 하위 Tree를
         // 가리기 때문에 GestureDetector의 탭이 Semantics로 올라오지 않는다.

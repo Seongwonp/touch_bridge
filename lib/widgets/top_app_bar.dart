@@ -112,6 +112,8 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
         connected ? BleService.instance.connectedDeviceName : '연결 안 됨';
     final deviceName = ActiveDeviceService.instance.getActiveDeviceName();
     return Semantics(
+      // 화면 본문과 합쳐져 한 덩어리로 읽히지 않게 따로 둔다(실기 접근성 트리 확인).
+      container: true,
       label: [
         connected ? 'Touch Bridge 연결됨: $hubText' : 'Touch Bridge 연결 안 됨',
         '선택 기기: ${deviceName ?? '없음'}',

@@ -270,6 +270,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
   @override
   void dispose() {
+    _speechSession.micWindowActive = false;
     _waveTimer?.cancel();
     _recordingTimeoutTimer?.cancel();
     _silenceTimer?.cancel();
@@ -298,6 +299,12 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
         onStatus: (status) {
           if (!mounted) return;
           if (status == 'listening') {
+            // 듣기 창이 이미 끝났는데 늦게 열린 엔진이면 바로 닫는다(끝 안내 뒤 마이크가
+            // 몇 초 더 열려 있던 문제 — 실기).
+            if ((_listenWindowStart == null && !_isRecording) || _isProcessing) {
+              _speechSession.stop();
+              return;
+            }
             setState(() {
               _isRecording = true;
               _statusMessage = '듣고 있습니다.';
@@ -309,6 +316,17 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
           }
         },
         onError: (_) {
+          // 조용히 다시 여는 중이거나 이미 끝난 듣기에서 늦게 온 오류는 무시한다. 예전에는
+          // 다시 여는 사이에 "음성 인식에 실패했습니다"를 알렸다(실기).
+          if (_quietRestart || !_isRecording) return;
+          // "말 없음"·"인식 결과 없음"으로 일찍 끝난 것이면 듣기 창 안에서 조용히 다시 연다.
+          if (mounted && _lastWords.isEmpty && _canQuietRelisten) {
+            AppLogger.info('voice.stt_quiet_relisten_after_error');
+            _quietRelisten();
+            return;
+          }
+          _listenWindowStart = null;
+          _speechSession.micWindowActive = false;
           if (mounted) {
             _speak('음성 인식에 실패했습니다. 마이크 버튼을 다시 눌러주세요.');
             setState(() {
@@ -370,7 +388,13 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
             : setting,
       ),
       () {
-      if (!mounted || !_isRecording) return;
+      if (!mounted || !_isRecording || _isProcessing) return;
+
+      // 앱·낭독기 안내가 녹음된 것이면 말이 없던 것으로 본다.
+      if (_lastWords.isNotEmpty && _isEcho(_lastWords)) {
+        AppLogger.info('voice.stt_echo_ignored', {'lastWords': _lastWords});
+        _lastWords = '';
+      }
 
       // 인식된 말이 있으면 녹음을 끝내고 분석으로 넘긴다.
       if (_lastWords.isNotEmpty) {
@@ -381,6 +405,14 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
         return;
       }
 
+      // 듣기 창이 열려 있는 동안은 끝내지 않는다. 끝은 창 타이머가 한 번만 알린다.
+      // (실기: 말을 막 시작했는데 "말씀이 들리지 않았습니다"가 먼저 나왔다.)
+      if (_listenWindowStart != null) {
+        _resetSilenceTimer();
+        return;
+      }
+      _listenWindowStart = null;
+      _speechSession.micWindowActive = false;
       AppLogger.info('voice.silence_timer.no_input');
       _speechSession.stop();
       _recordingTimeoutTimer?.cancel();
@@ -388,14 +420,121 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
       setState(() {
         _isRecording = false;
         _isProcessing = false;
-        _statusMessage = '말씀이 들리지 않았습니다. 다시 말하려면 마이크를 누르세요.';
+        _statusMessage = '말씀이 들리지 않았습니다. 다시 말하려면 말하기 시작을 누르세요.';
       });
-      _speak('말씀이 들리지 않았습니다. 다시 말하려면 마이크를 누르세요.');
+      _speak('말씀이 들리지 않았습니다. 다시 말하려면 말하기 시작을 누르세요.');
     });
+  }
+
+  /// 한 번의 "듣기"가 시작된 시각. 안드로이드 음성 엔진은 말이 시작되기 전 몇 초만
+  /// 기다리고 "말 없음"으로 끝내 버려(설정한 대기 시간을 무시), 생각하는 사이 마이크가
+  /// 닫혔다(실기). 이 시각부터 [_maxRecordingDuration] 안이면 조용히 다시 연다.
+  DateTime? _listenWindowStart;
+  bool _quietRestart = false;
+
+  bool get _canQuietRelisten {
+    final start = _listenWindowStart;
+    if (start == null || !mounted || _isExecuting || _isProcessing) return false;
+    // 다시 여는 데 드는 시간을 감안해 끝나기 2초 전까지만.
+    return DateTime.now().difference(start) <
+        _maxRecordingDuration - const Duration(seconds: 2);
+  }
+
+  /// 듣기 창이 끝났다. 들은 말이 있으면 처리하고, 없으면 한 번만 알린다.
+  void _onListenWindowEnd() {
+    if (!mounted) return;
+    _listenWindowStart = null; // 이후에는 조용히 다시 열지 않는다.
+    _speechSession.micWindowActive = false;
+    if (!_isRecording && !_quietRestart) return;
+    _quietRestart = false;
+    if (_lastWords.isNotEmpty && !_isEcho(_lastWords)) {
+      if (_isRecording) _toggleRecording();
+      return;
+    }
+    _speechSession.stop();
+    _silenceTimer?.cancel();
+    _stopWaveAnimation();
+    const msg = '말씀이 들리지 않았습니다. 다시 말하려면 말하기 시작을 누르세요.';
+    setState(() {
+      _isRecording = false;
+      _isProcessing = false;
+      _statusMessage = msg;
+    });
+    _speak(msg);
+  }
+
+  /// 말 없이 끝난 듣기를 띵 소리 없이 다시 연다(같은 듣기 창 안에서).
+  void _quietRelisten() {
+    if (_isProcessing || _listenWindowStart == null) return;
+    _silenceTimer?.cancel();
+    setState(() => _isRecording = false);
+    _quietRestart = true;
+    Future<void>(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      // 기다리는 사이 듣기 창이 끝났으면(끝 안내를 이미 했으면) 다시 열지 않는다.
+      if (!mounted ||
+          _listenWindowStart == null ||
+          _isRecording ||
+          _isProcessing ||
+          _isExecuting) {
+        _quietRestart = false;
+        return;
+      }
+      await _toggleRecording();
+      _quietRestart = false;
+    });
+  }
+
+  /// 앱이나 낭독기가 방금 읽은 문구를 마이크가 다시 받은 것인지. 그런 소리를 명령으로
+  /// 보내지 않는다(실기: 낭독기의 '말씀해 주세요'가 녹음돼 서버로 갔다).
+  bool _isEcho(String words) => echoMatches(words, [
+        '말씀해 주세요',
+        '듣고 있습니다',
+        '말하기 시작',
+        '분석 중',
+        // 이 화면의 고정 문구(낭독기가 화면을 읽을 때 나오는 말).
+        '말하기 버튼을 눌러 명령하세요',
+        '음성 명령입니다. 마이크 버튼을 눌러 명령하세요',
+        '예시 명령어',
+        '명령을 확인하고 있습니다',
+        ..._tts.recentSpokenTexts(),
+        // 화면의 영어 'Touch Bridge'를 엔진이 한글로 받아 적는 경우.
+        '터치 브릿지 연결 안 됨',
+        '터치 브리지 연결 안 됨',
+        '재연결 중',
+        _statusMessage,
+        ?_confirmQuestion,
+        ?_lowConfidenceQuestion,
+      ]);
+
+  /// [words]가 [prompts] 중 하나를 다시 받은 소리인지(띄어쓰기·문장부호 무시).
+  /// 4글자 이상이면 안내 문장의 일부만 들려도 같은 것으로 본다.
+  @visibleForTesting
+  static bool echoMatches(String words, List<String> prompts) {
+    String n(String t) => t.replaceAll(RegExp(r'[\s.,!?~"]'), '');
+    // 따옴표 안은 사용자가 한 말을 되읽은 부분이다("…라고 들었어요"). 사용자가 같은
+    // 말을 다시 하면 메아리로 오인하지 않게 빼고 비교한다.
+    String unquote(String t) => t.replaceAll(RegExp(r'"[^"]*"'), '');
+    final w = n(words);
+    if (w.isEmpty) return false;
+    return prompts.map((p) => n(unquote(p))).any(
+          (p) => p.isNotEmpty && (w == p || (w.length >= 4 && p.contains(w))),
+        );
   }
 
   void _onSttNaturalEnd() {
     if (!_isRecording || _isProcessing) return;
+    if (_lastWords.isNotEmpty && _isEcho(_lastWords)) {
+      AppLogger.info('voice.stt_echo_ignored', {'lastWords': _lastWords});
+      _lastWords = '';
+    }
+    if (_lastWords.isEmpty && _canQuietRelisten) {
+      AppLogger.info('voice.stt_quiet_relisten');
+      _quietRelisten();
+      return;
+    }
+    _listenWindowStart = null;
+    _speechSession.micWindowActive = false;
 
     AppLogger.info('voice.stt_natural_end', {'lastWords': _lastWords});
     _silenceTimer?.cancel();
@@ -415,7 +554,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
       _speak('명령을 확인하고 있습니다.');
       _sendTextToGemini(_lastWords);
     } else {
-      _speak('말씀이 들리지 않았습니다. 다시 말하려면 마이크를 누르세요.');
+      _speak('말씀이 들리지 않았습니다. 다시 말하려면 말하기 시작을 누르세요.');
     }
   }
 
@@ -460,6 +599,8 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     }
 
     if (_isRecording) {
+      _listenWindowStart = null;
+      _speechSession.micWindowActive = false;
       _speechSession.stop();
       _recordingTimeoutTimer?.cancel();
       setState(() {
@@ -469,6 +610,10 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
       });
       _stopWaveAnimation();
       _speak('녹음이 종료되었습니다.', priority: TtsPriority.navigation);
+      if (_lastWords.isNotEmpty && _isEcho(_lastWords)) {
+        AppLogger.info('voice.stt_echo_ignored', {'lastWords': _lastWords});
+        _lastWords = '';
+      }
       if (_lastWords.isNotEmpty) {
         _sendTextToGemini(_lastWords);
       } else {
@@ -479,7 +624,13 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
         });
       }
     } else {
+      // 조용히 다시 열려던 참에 듣기 창이 끝났으면 열지 않는다.
+      if (_quietRestart && (_listenWindowStart == null || _isProcessing)) return;
       _isStartingRecording = true;
+      if (!_quietRestart) {
+        _listenWindowStart = DateTime.now();
+        _speechSession.micWindowActive = true;
+      }
       _lastWords = '';
       // 이전 녹음의 신뢰도가 다음 녹음 게이트에 재사용되는 것을 막는다.
       _lastConfidence = SpeechRecognitionWords.missingConfidence;
@@ -523,8 +674,11 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
         await Future<void>.delayed(const Duration(milliseconds: 200));
         if (_speechSession.isListening || _isRecording) {
           _startWaveAnimation();
-          FeedbackService.instance.playDing();
-          FeedbackService.instance.vibrateSuccess();
+          if (!_quietRestart) {
+            // 조용히 다시 열 때는 띵 소리를 반복하지 않는다(처음 열 때 한 번만).
+            FeedbackService.instance.playDing();
+            FeedbackService.instance.vibrateSuccess();
+          }
           // "녹음을 시작합니다"는 말하지 않는다. 마이크가 이미 열린 뒤라 낭독기를
           // 쓰지 않는 사용자는 앱 자신의 안내가 녹음됐다(외부 평가). 띵 소리와
           // 진동, 낭독기의 "듣고 있습니다"(liveRegion)로 알린다.
@@ -534,12 +688,10 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
             if (mounted && _isRecording) _resetSilenceTimer();
           });
 
-          _recordingTimeoutTimer = Timer(_maxRecordingDuration, () {
-            if (_isRecording) {
-              _speak('녹음 시간이 초과되었습니다.');
-              _toggleRecording();
-            }
-          });
+          // 듣기 창 전체에 한 번만 건다(조용히 다시 열 때는 새로 걸지 않는다).
+          if (!_quietRestart) {
+            _recordingTimeoutTimer = Timer(_maxRecordingDuration, _onListenWindowEnd);
+          }
         }
       } catch (_) {
         setState(() {
@@ -699,6 +851,8 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   /// 확인 질문 뒤에 다시 열어 둔 마이크를 닫는다(버튼으로 답했으므로).
   void _stopListeningForConfirm() {
     _cancelPendingRelisten();
+    _listenWindowStart = null;
+    _speechSession.micWindowActive = false;
     _speechSession.stop();
     _silenceTimer?.cancel();
     _recordingTimeoutTimer?.cancel();
@@ -800,6 +954,14 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
     _resolvedDeviceId = device.id;
     _resolvedDeviceName = device.name;
+
+    // 이미 이 가전이 활성이면 다시 고르지 않는다. 다시 고르면 연결을 기다리느라(장치가
+    // 꺼져 있으면 약 5초) 확인 질문이 늦게 나왔다(실기). 연결은 보낼 때 따로 한다.
+    final active = ActiveDeviceService.instance;
+    if (active.getActiveDeviceId() == device.id &&
+        active.getActiveBleId() == preservedBleId) {
+      return;
+    }
 
     await ActiveDeviceService.instance.setActiveDevice(
       deviceId: device.id,
@@ -1385,9 +1547,9 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
       if (_stopRequestedBeforeSend()) return false;
       if (!connected) {
         if (mounted) {
-          setState(() => _statusMessage = '연결에 실패했습니다. 기기 전원을 확인하세요.');
+          setState(() => _statusMessage = 'Touch Bridge에 연결하지 못했습니다. 전원이 켜져 있는지 확인하거나 보호자에게 알려 주세요.');
         }
-        _speak('연결에 실패했습니다. 기기 전원을 확인하세요.');
+        _speak('Touch Bridge에 연결하지 못했습니다. 전원이 켜져 있는지 확인하거나 보호자에게 알려 주세요.');
         return false;
       }
       deviceId = BleService.instance.connectedDeviceId;
@@ -1769,12 +1931,18 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
                         // liveRegion: true — 스크린리더 활성 시 억제되는
                         // navigation 우선순위 TTS 대신 스크린리더 채널로
                         // 상태 변화를 알린다.
+                        // 큰 제목은 낭독기가 자동으로 읽지 않는다(liveRegion 아님). 상태는 아래
+                        // 상태 문구 하나가 알린다. 예전에는 조용히 다시 여는 짧은 틈에 제목이
+                        // '말씀해 주세요.'로 바뀌며 낭독기가 읽었고, 다시 열린 마이크가 그 소리를
+                        // 명령으로 받아 서버로 보냈다(실기).
                         Semantics(
-                          liveRegion: true,
+                          header: true,
                           child: Text(
                             _isProcessing
                                 ? '분석 중...'
-                                : (_isRecording ? '듣고 있습니다' : '말씀해 주세요.'),
+                                : ((_isRecording || _quietRestart)
+                                    ? '듣고 있습니다'
+                                    : '말씀해 주세요.'),
                             style: TextStyle(
                               color: (_isRecording || _isProcessing)
                                   ? AppColors.primary
