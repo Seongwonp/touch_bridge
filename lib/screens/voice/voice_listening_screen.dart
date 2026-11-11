@@ -399,6 +399,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
       if (!mounted || !_isRecording || _isProcessing) return;
 
       // 앱·낭독기 안내가 녹음된 것이면 말이 없던 것으로 본다.
+      if (_lastWords.isNotEmpty) _lastWords = stripEchoPhrases(_lastWords);
       if (_lastWords.isNotEmpty && _isEcho(_lastWords)) {
         AppLogger.info('voice.stt_echo_ignored', {'lastWords': _lastWords});
         _lastWords = '';
@@ -499,6 +500,10 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
         '말씀해 주세요',
         '듣고 있습니다',
         '말하기 시작',
+        '말하기',
+        '듣는 중 누르면 멈춤',
+        '녹음 취소',
+        '분석 취소',
         '분석 중',
         // 이 화면의 고정 문구(낭독기가 화면을 읽을 때 나오는 말).
         '말하기 버튼을 눌러 명령하세요',
@@ -514,6 +519,27 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
         ?_confirmQuestion,
         ?_lowConfidenceQuestion,
       ]);
+
+  /// 사용자 말 앞뒤에 섞여 녹음된 앱·낭독기 고정 문구를 지운다(예: "듣고 있습니다 30초
+  /// 돌려줘" → "30초 돌려줘"). 문구만 남는 경우는 [echoMatches]가 걸러낸다.
+  @visibleForTesting
+  static String stripEchoPhrases(String words) {
+    var out = words;
+    for (final phrase in const [
+      '듣고 있습니다',
+      '듣고 있어요',
+      '말씀해 주세요',
+      '말하기 시작',
+      '녹음 취소',
+      '듣는 중',
+      '누르면 멈춤',
+    ]) {
+      // 띄어쓰기가 달라도 지운다.
+      final pattern = phrase.split('').where((c) => c != ' ').map(RegExp.escape).join(r'\s*');
+      out = out.replaceAll(RegExp(pattern), ' ');
+    }
+    return out.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
 
   /// [words]가 [prompts] 중 하나를 다시 받은 소리인지(띄어쓰기·문장부호 무시).
   /// 4글자 이상이면 안내 문장의 일부만 들려도 같은 것으로 본다.
@@ -532,6 +558,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
   void _onSttNaturalEnd() {
     if (!_isRecording || _isProcessing) return;
+    if (_lastWords.isNotEmpty) _lastWords = stripEchoPhrases(_lastWords);
     if (_lastWords.isNotEmpty && _isEcho(_lastWords)) {
       AppLogger.info('voice.stt_echo_ignored', {'lastWords': _lastWords});
       _lastWords = '';
@@ -618,6 +645,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
       });
       _stopWaveAnimation();
       _speak('녹음이 종료되었습니다.', priority: TtsPriority.navigation);
+      if (_lastWords.isNotEmpty) _lastWords = stripEchoPhrases(_lastWords);
       if (_lastWords.isNotEmpty && _isEcho(_lastWords)) {
         AppLogger.info('voice.stt_echo_ignored', {'lastWords': _lastWords});
         _lastWords = '';
@@ -1975,8 +2003,12 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
                         // 자동으로 읽는다. 성공/실패 결과 메시지를 _statusMessage에
                         // 저장하면 TTS 억제(navigation 우선순위)와 관계없이
                         // 스크린리더 채널로 전달된다.
+                        // 마이크가 듣는 동안에는 바뀌어도 낭독기가 읽지 않는다. 듣기 시작에
+                        // "듣고 있습니다"를 읽으면 그 소리가 녹음됐다(실기). 시작은 띵 소리로 알린다.
                         Semantics(
-                          liveRegion: true,
+                          liveRegion: !(_isRecording ||
+                              _quietRestart ||
+                              _speechSession.shouldStayQuiet),
                           child: Text(
                             _isRecording ? '듣고 있습니다.' : _statusMessage,
                             style: TextStyle(

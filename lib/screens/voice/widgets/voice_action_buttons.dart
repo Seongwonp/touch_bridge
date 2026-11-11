@@ -22,124 +22,91 @@ class VoiceActionButtons extends StatelessWidget {
   final VoidCallback onCancelRecording;
   final VoidCallback onCancelAnalysis;
 
-  @override
-  Widget build(BuildContext context) {
-    if (isRecording) {
-      return Row(
-        children: [
-          Expanded(
-            flex: 3,
-            child: Semantics(
-              label: '듣기 멈추기',
-              button: true,
-              child: GestureDetector(
-                onTap: onMicTap,
-                child: Container(
-                  constraints: BoxConstraints(minHeight: 80 * scale),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(16 * scale),
-                    border: micArmed
-                        ? Border.all(color: Colors.white, width: 3 * scale)
-                        : null,
-                  ),
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 10 * scale),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.stop_circle_outlined, color: Colors.black, size: 28 * scale),
-                        SizedBox(width: 8 * scale),
-                        Text(
-                          '듣기 멈추기',
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontSize: 19 * scale,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          SizedBox(width: 12 * scale),
-          Expanded(
-            flex: 2,
-            child: Semantics(
-              label: '취소',
-              button: true,
-              child: GestureDetector(
-                onTap: onCancelRecording,
-                child: Container(
-                  constraints: BoxConstraints(minHeight: 80 * scale),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceElevated,
-                    borderRadius: BorderRadius.circular(16 * scale),
-                    border: Border.all(color: AppColors.borderDefault),
-                  ),
-                  child: Center(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(vertical: 10 * scale),
-                      child: Text(
-                        '취소',
-                        style: TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 19 * scale,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-
-    if (isIdle) {
-      return Semantics(
-        // 화면 글자와 같은 이름 하나만 읽힌다(예전엔 '음성 명령 시작'과 '녹음 준비'를 이어 읽었다).
-        label: '말하기 시작',
-        button: true,
-        excludeSemantics: true,
+  /// 대기·듣기 상태에서 같은 자리에 있는 하나의 큰 버튼. 낭독기가 읽는 이름을 '말하기'로
+  /// 고정한다. 예전에는 듣기가 시작되면 버튼이 '듣기 멈추기'·'취소' 두 개로 바뀌어 낭독기
+  /// 포커스가 '취소'로 옮겨 가며 그 이름을 읽었고, 막 열린 마이크가 그 소리를 '취소' 명령으로
+  /// 받아 처리했다(실기). 이름이 그대로면 낭독기는 다시 읽지 않는다. 상태는 띵 소리와 상태
+  /// 문구로 알리고, 같은 버튼을 다시 누르면 듣기를 멈춘다.
+  Widget _mainButton() {
+    return Semantics(
+      key: const ValueKey('voice_main_action'),
+      label: '말하기',
+      button: true,
+      excludeSemantics: true,
+      onTap: onMicTap,
+      child: GestureDetector(
         onTap: onMicTap,
-        child: GestureDetector(
-          onTap: onMicTap,
-          child: Container(
-            width: double.infinity,
-            constraints: BoxConstraints(minHeight: 80 * scale),
-            decoration: BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: BorderRadius.circular(16 * scale),
-              border: micArmed
-                  ? Border.all(color: Colors.white, width: 3 * scale)
-                  : null,
-            ),
-            child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 10 * scale),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.mic, color: Colors.black, size: 30 * scale),
-                  SizedBox(width: 10 * scale),
-                  Text(
-                    '말하기 시작',
+        child: Container(
+          width: double.infinity,
+          constraints: BoxConstraints(minHeight: 80 * scale),
+          decoration: BoxDecoration(
+            color: AppColors.primary,
+            borderRadius: BorderRadius.circular(16 * scale),
+            border: micArmed
+                ? Border.all(color: Colors.white, width: 3 * scale)
+                : null,
+          ),
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 10 * scale),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  isRecording ? Icons.stop_circle_outlined : Icons.mic,
+                  color: Colors.black,
+                  size: 30 * scale,
+                ),
+                SizedBox(width: 10 * scale),
+                Flexible(
+                  child: Text(
+                    isRecording ? '듣는 중 · 누르면 멈춤' : '말하기 시작',
+                    textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.black,
                       fontSize: 19 * scale,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (isRecording || isIdle) {
+      // 대기와 듣기에서 같은 트리 모양을 유지해 큰 버튼이 같은 낭독 항목으로 남게 한다.
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _mainButton(),
+          if (isRecording) ...[
+            SizedBox(height: 12 * scale),
+            ConstrainedBox(
+              constraints: BoxConstraints(minHeight: 64 * scale),
+              child: OutlinedButton(
+                // '취소'는 실제 가전 명령이기도 해서, 듣는 중에 읽혀도 명령으로 오인되지
+                // 않는 이름을 쓴다.
+                onPressed: onCancelRecording,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.textPrimary,
+                  side: const BorderSide(color: AppColors.borderDefault),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16 * scale),
+                  ),
+                ),
+                child: Text(
+                  '녹음 취소',
+                  style: TextStyle(fontSize: 18 * scale, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ],
+        ],
       );
     }
 

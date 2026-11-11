@@ -23,4 +23,11 @@ void main() {
     expect(VoiceListeningScreenState.echoMatches('30초 돌려줘', reask), isFalse);
     expect(VoiceListeningScreenState.echoMatches('라고 들었어요 맞으면', reask), isTrue);
   });
+
+  test('사용자 말 앞뒤에 섞인 앱 문구는 지운다', () {
+    expect(VoiceListeningScreenState.stripEchoPhrases('듣고 있습니다 30초 돌려줘'), '30초 돌려줘');
+    expect(VoiceListeningScreenState.stripEchoPhrases('듣고있습니다'), '');
+    expect(VoiceListeningScreenState.stripEchoPhrases('30초 돌려줘'), '30초 돌려줘');
+    expect(VoiceListeningScreenState.stripEchoPhrases('취소'), '취소');
+  });
 }
