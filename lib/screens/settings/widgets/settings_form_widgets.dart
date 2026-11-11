@@ -10,7 +10,11 @@ class SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
-    return Row(
+    // 낭독기에서 구역 제목으로 건너뛸 수 있게 제목으로 표시한다(아이콘은 읽지 않음).
+    return Semantics(
+      header: true,
+      container: true,
+      child: Row(
       children: [
         Icon(icon, color: AppColors.primary, size: 18 * rs),
         const SizedBox(width: 8),
@@ -23,6 +27,7 @@ class SectionLabel extends StatelessWidget {
           ),
         ),
       ],
+    ),
     );
   }
 }

@@ -11,6 +11,7 @@ import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../connection/device_connect_screen.dart';
 import '../settings/widgets/settings_form_widgets.dart';
+import 'experiment_metrics_card.dart';
 import 'guardian_device_screen.dart';
 
 /// 보호자 설정. 가전 등록·버튼 위치·장치 점검을 한곳에 모은다.
@@ -208,6 +209,13 @@ class _GuardianHubScreenState extends State<GuardianHubScreen> {
                       ),
                     ],
                   ),
+                  SizedBox(height: gap),
+                  const SectionLabel(
+                    icon: Icons.insights_rounded,
+                    label: '실험 기록',
+                  ),
+                  SizedBox(height: small),
+                  const ExperimentMetricsCard(),
                 ],
               ),
       ),
