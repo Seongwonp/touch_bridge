@@ -12,7 +12,11 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.showBack = false,
     this.actions,
     this.showEmergency = true,
+    this.onEmergency,
   });
+
+  /// 오른쪽 위 비상 정지가 이 화면의 정지 절차를 부르게 한다([GlobalEmergencyAction.onStop]).
+  final VoidCallback? onEmergency;
 
   final String title;
   final bool showBack;
@@ -62,7 +66,7 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
               ),
               actions: [
                 ...?actions,
-                if (showEmergency) const GlobalEmergencyAction(),
+                if (showEmergency) GlobalEmergencyAction(onStop: onEmergency),
               ].map((a) => Padding(
                     padding: EdgeInsets.only(right: 8 * rs),
                     child: a,

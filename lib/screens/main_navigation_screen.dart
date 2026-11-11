@@ -359,16 +359,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       customSemanticsActions: {
         const CustomSemanticsAction(label: '음성 명령 시작'): openVoice,
       },
-      child: GestureDetector(
-        onLongPress: openVoice,
-        child: Scaffold(
-          backgroundColor: AppColors.background,
-          body: IndexedStack(
-            index: _currentIndex,
-            children: destinations.map((d) => d.screen).toList(growable: false),
-          ),
-          bottomNavigationBar: _buildBottomBar(rs, context, destinations),
+      // 화면 전체 길게 누르기로 음성을 여는 단축은 없앴다. 앱 전체를 감싼 길게 누르기가
+      // 비상 정지 버튼의 탭을 이겨서, 정지 버튼을 꾹 누르면 멈추지 않고 음성 화면이
+      // 열렸다(외부 평가). 낭독기 사용자는 위의 '음성 명령 시작' 동작을 그대로 쓴다.
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        body: IndexedStack(
+          index: _currentIndex,
+          children: destinations.map((d) => d.screen).toList(growable: false),
         ),
+        bottomNavigationBar: _buildBottomBar(rs, context, destinations),
       ),
     );
   }

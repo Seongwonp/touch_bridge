@@ -771,6 +771,9 @@ class MappingExecutionService {
   }) {
     final mapped = profile.buttonMap[buttonId];
     if (mapped != null) return mapped;
+    // 보호자가 버튼을 하나라도 직접 등록한 프로필이면, 등록하지 않은 버튼을 기본 격자
+    // 위치로 짐작해 누르지 않는다. 짐작한 자리는 다른 버튼일 수 있다(외부 평가).
+    if (profile.buttonMap.isNotEmpty) return null;
 
     final fallback = MicrowaveCommandService.btnToGrid(buttonId);
     if (fallback == null) return null;

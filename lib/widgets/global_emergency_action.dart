@@ -14,7 +14,12 @@ import '../theme/app_colors.dart';
 /// 오른쪽 위 모서리는 화면을 더듬어 찾기 쉬운 자리이고, 낭독 순서에서는 화면
 /// 제목 바로 다음이다. 모든 발화는 emergency 우선순위로 낭독기 사용 중에도 들린다.
 class GlobalEmergencyAction extends StatefulWidget {
-  const GlobalEmergencyAction({super.key});
+  const GlobalEmergencyAction({super.key, this.onStop});
+
+  /// 화면이 자기 정지 절차를 갖고 있으면(실행 진행·남은 시간 화면) 그 절차를 부른다.
+  /// 타이머·마이크 정리와 결과 안내를 그 화면이 맡아야 정지가 두 갈래로 나뉘지 않는다.
+  /// 버튼 자리는 모든 화면에서 같게 둔다("어느 화면에서든 오른쪽 위").
+  final VoidCallback? onStop;
 
   @override
   State<GlobalEmergencyAction> createState() => _GlobalEmergencyActionState();
@@ -31,6 +36,12 @@ class _GlobalEmergencyActionState extends State<GlobalEmergencyAction> {
   }
 
   Future<void> _handleTap() async {
+    final custom = widget.onStop;
+    if (custom != null) {
+      FeedbackService.instance.vibrateError();
+      custom();
+      return;
+    }
     if (_stopping) return;
     setState(() => _stopping = true);
     FeedbackService.instance.vibrateError();
@@ -73,6 +84,8 @@ class _GlobalEmergencyActionState extends State<GlobalEmergencyAction> {
       onTap: _handleTap,
       child: InkWell(
         onTap: _handleTap,
+        // 급할 때 꾹 누르는 사람도 있다. 길게 눌러도 똑같이 바로 멈춘다.
+        onLongPress: _handleTap,
         borderRadius: BorderRadius.circular(28),
         child: Container(
           // 앱바 안에서 가능한 크게. 최소 터치 영역 48dp보다 넉넉히 둔다.

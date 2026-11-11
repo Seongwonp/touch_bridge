@@ -79,7 +79,13 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     _startCountdown();
     // 안내를 먼저 큐에 넣고 마이크를 연다. _initSpeech가 안내가 끝나길 기다리므로
     // 안내 속 "중단"이 STT에 들어가 스스로 정지되는 일이 없다.
-    _speak('${widget.deviceName} 작동 중입니다. ${_stopInstruction()}.');
+    // 멈추는 방법은 낭독기를 써도 들려야 하는 안전 정보라 result로 낸다(navigation이면
+    // 낭독기 사용 중 억제됐다). "작동 중"이라 단정하지 않는다: 앱은 명령을 전달하고
+    // 시간을 셀 뿐, 가전이 실제로 돌았는지는 모른다(외부 평가).
+    _speak(
+      '${widget.deviceName}에 명령을 전달했고, 설정한 시간을 세고 있습니다. ${_stopInstruction()}.',
+      priority: TtsPriority.result,
+    );
     _initSpeech();
     _lastPowerState = PowerStatusService.instance.state;
     PowerStatusService.instance.status.addListener(_onPowerStatus);
@@ -122,7 +128,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   /// 화면 낭독기 사용자는 두 번 탭으로 바로 멈춘다(길게 누르기는 낭독기 제스처와 다르다).
   String _stopInstruction() => AccessibilitySettings.isScreenReaderActive
       ? '멈추려면 아래 버튼을 두 번 탭하세요'
-      : '중단하려면 아래 버튼을 3초간 누르세요';
+      : '중단하려면 아래 빨간 버튼을 한 번 누르세요';
 
   Future<void> _initSpeech() async {
     // 이 화면이 스택 최상단인 동안만 이벤트를 받는다(공용 세션의 스택 구조).
@@ -345,10 +351,10 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     return Scaffold(
       backgroundColor: const Color(0xFF041329),
       appBar: TopAppBar(
-        title: '${widget.deviceName} 작동 중',
+        title: '${widget.deviceName} 남은 시간',
         showBack: true,
-        // 화면 중앙에 전용 비상 정지 버튼이 있으므로 앱바 중복 노출은 끈다.
-        showEmergency: false,
+        // 오른쪽 위 정지도 남긴다("어느 화면에서든 오른쪽 위"). 가운데 버튼과 같은 절차를 부른다.
+        onEmergency: _onHoldCompleted,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -451,13 +457,16 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                     SizedBox(height: ResponsiveScale.v(context, 16)),
                     Semantics(
                       button: true,
-                      label: '비상 정지',
+                      // 오른쪽 위 '비상 정지'와 이름을 구분한다. 둘 다 같은 정지 절차를 부른다.
+                      label: '즉시 중단',
                       hint: '두 번 탭하면 터치브릿지를 바로 멈춥니다',
                       excludeSemantics: true,
-                      // 낭독기의 두 번 탭은 onTap으로 온다. 일반 터치는 아래 길게 누르기만 받는다.
+                      // 한 번 누르면 바로 멈춘다. 예전에는 일반 터치는 3초를 눌러야 해서,
+                      // 탭해도 반응이 없었다(외부 평가). 길게 눌러도 3초가 차면 멈춘다.
                       onTap: _onHoldCompleted,
                       onLongPress: _onHoldCompleted,
                       child: GestureDetector(
+                        onTap: _onHoldCompleted,
                         onLongPressStart: (_) => _onHoldStart(),
                         onLongPressEnd: (_) => _onHoldEnd(),
                         onLongPressCancel: _onHoldEnd,
@@ -489,7 +498,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                               ),
                               SizedBox(height: 8 * rs),
                               Text(
-                                '길게 눌러 중단',
+                                '눌러서 중단',
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 28 * rs,

@@ -35,6 +35,20 @@ class ApplianceCommandRouter {
     return {'confidence': 1.0, ...result};
   }
 
+  /// 이 가전의 버튼 목록(논리 ID → 이름). 음성 명령은 이 ID로 버튼을 고르므로,
+  /// 보호자가 버튼 위치를 등록할 때도 이 목록에서 기능을 골라야 이름과 실행이 맞는다.
+  static Map<String, String> buttonCatalog({
+    String? deviceName,
+    String? deviceType,
+  }) {
+    return switch (_resolveKind(deviceName: deviceName, deviceType: deviceType)) {
+      _ApplianceKind.washer => WashingMachineCommandService.buttonLabel,
+      _ApplianceKind.ac => AcCommandService.buttonLabel,
+      _ApplianceKind.microwave ||
+      _ApplianceKind.unknown => MicrowaveCommandService.buttonLabel,
+    };
+  }
+
   static _ApplianceKind _resolveKind({
     String? deviceName,
     String? deviceType,

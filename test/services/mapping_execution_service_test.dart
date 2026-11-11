@@ -127,6 +127,25 @@ void main() {
       expect(resolved, (row: 1, col: 1));
     });
 
+    test('보호자가 등록한 버튼이 있으면 등록하지 않은 버튼을 격자로 짐작하지 않는다', () {
+      const profile = DeviceMappingProfile(
+        rows: 3,
+        cols: 3,
+        originX: 0,
+        originY: 0,
+        pitchX: 1,
+        pitchY: 1,
+        buttonMap: {'BT-05': (row: 1, col: 1)},
+      );
+
+      final resolved = MappingExecutionService.instance.resolveButton(
+        profile: profile,
+        buttonId: 'BT-02',
+      );
+
+      expect(resolved, isNull);
+    });
+
     test('fallback 좌표가 현재 그리드 밖이면 null을 반환한다', () {
       final profile = DeviceMappingProfile.defaultGrid(rows: 2, cols: 2);
 

@@ -75,7 +75,7 @@ void main() {
     required Duration hold,
   }) async {
     final gesture = await tester.startGesture(
-      tester.getCenter(find.bySemanticsLabel('비상 정지')),
+      tester.getCenter(find.bySemanticsLabel('즉시 중단')),
     );
     await tester.pump(const Duration(milliseconds: 600));
     // AnimationController는 첫 tick에서 기준 시각만 잡고 elapsed=0이다.
@@ -143,8 +143,10 @@ void main() {
       );
       await tester.pump();
 
-      expect(spoke('세탁기 작동 중입니다'), isTrue);
-      expect(spoke('3초간 누르세요'), isTrue);
+      // 가전이 실제로 돌았는지는 모르므로 "작동 중"이라 단정하지 않는다.
+      expect(spoke('세탁기에 명령을 전달했고'), isTrue);
+      expect(spoke('작동 중입니다'), isFalse);
+      expect(spoke('한 번 누르세요'), isTrue);
 
       await disposeScreen(tester);
     });
@@ -174,6 +176,37 @@ void main() {
   });
 
   group('비상 정지 화면 — 3초 홀드', () {
+    testWidgets('가운데 버튼을 한 번 탭하면 바로 정지 명령을 보낸다', (tester) async {
+      // 예전에는 일반 터치가 3초 홀드만 받아, 탭해도 반응이 없었다(외부 평가).
+      await registerActiveDevice();
+      stubStopAck('STOPPED');
+      await tester.pumpWidget(
+        wrap(const EmergencyStopScreen(initialSeconds: 60, deviceName: '전자레인지')),
+      );
+      await tester.pump();
+
+      await tester.tap(find.bySemanticsLabel('즉시 중단'));
+      await settleStopFlow(tester);
+
+      expect(stopCalls, ['TEST-BLE-0001']);
+      await disposeScreen(tester);
+    });
+
+    testWidgets('오른쪽 위 비상 정지도 이 화면의 정지 절차로 바로 멈춘다', (tester) async {
+      await registerActiveDevice();
+      stubStopAck('STOPPED');
+      await tester.pumpWidget(
+        wrap(const EmergencyStopScreen(initialSeconds: 60, deviceName: '전자레인지')),
+      );
+      await tester.pump();
+
+      await tester.tap(find.bySemanticsLabel('비상 정지'));
+      await settleStopFlow(tester);
+
+      expect(stopCalls, ['TEST-BLE-0001']);
+      await disposeScreen(tester);
+    });
+
     testWidgets('3초를 채우기 전에 떼면 정지 명령이 나가지 않는다', (tester) async {
       await registerActiveDevice();
       stubStopAck('STOPPED');
@@ -265,7 +298,7 @@ void main() {
       await tester.pumpWidget(wrap(const EmergencyStopScreen(initialSeconds: 150)));
       await tester.pump();
 
-      tester.semantics.tap(find.semantics.byLabel('비상 정지'));
+      tester.semantics.tap(find.semantics.byLabel('즉시 중단'));
       await settleStopFlow(tester);
 
       expect(stopCalls, isNotEmpty, reason: '길게 누르기를 모르는 낭독기 사용자도 멈출 수 있어야 한다');

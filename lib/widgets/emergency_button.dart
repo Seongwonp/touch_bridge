@@ -35,6 +35,11 @@ class EmergencyButton extends StatelessWidget {
               HapticFeedback.heavyImpact();
               onPressed();
             },
+            // 급할 때 꾹 누르는 사람도 있다. 길게 눌러도 똑같이 바로 멈춘다.
+            onLongPress: () {
+              HapticFeedback.heavyImpact();
+              onPressed();
+            },
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.error,
               foregroundColor: Theme.of(context).colorScheme.onError,

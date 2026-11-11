@@ -755,6 +755,45 @@ class BleService {
     return sendRawWithResponse(cmd, timeout: timeout);
   }
 
+  static final RegExp _statusLine = RegExp(
+    r'homed=(\d).*?pos=\(\s*(-?[\d.]+),\s*(-?[\d.]+)\).*?q=(\d+)',
+  );
+
+  /// 펌웨어 상태 줄(`STATE … homed=1 pos=(12.30, 4.00) … q=0 …`)에서 실제 위치를 읽는다.
+  /// 상태 줄이 아니면 null.
+  static ({double x, double y, bool homed, int queue})? parseMotionStatus(
+    String line,
+  ) {
+    final m = _statusLine.firstMatch(line);
+    if (m == null) return null;
+    final x = double.tryParse(m.group(2)!);
+    final y = double.tryParse(m.group(3)!);
+    final q = int.tryParse(m.group(4)!);
+    if (x == null || y == null || q == null) return null;
+    return (x: x, y: y, homed: m.group(1) == '1', queue: q);
+  }
+
+  /// 장치에 실제 위치를 묻는다. 위치 맞추기 화면이 앱의 추정이 아니라 장치가 아는
+  /// 좌표로 버튼 위치를 저장하게 한다. 응답 대기자 대신 응답 스트림을 보는 이유:
+  /// 1초마다 오는 전력 보고 등 다른 줄이 먼저 와도 상태 줄을 놓치지 않게.
+  Future<({double x, double y, bool homed, int queue})?> queryMotionStatus({
+    Duration timeout = const Duration(seconds: 2),
+  }) async {
+    if (!isConnected) return null;
+    final completer = Completer<({double x, double y, bool homed, int queue})?>();
+    final sub = responseStream.listen((line) {
+      final status = parseMotionStatus(line);
+      if (status != null && !completer.isCompleted) completer.complete(status);
+    });
+    try {
+      final sent = await sendRaw('\$\$');
+      if (!sent) return null;
+      return await completer.future.timeout(timeout, onTimeout: () => null);
+    } finally {
+      await sub.cancel();
+    }
+  }
+
   Future<String?> sendGetStatus() async {
     // 하드웨어 상태를 요청하는 텍스트 명령 '$$'. waiter를 먼저 등록하므로
     // write 직후 도착한 응답도 유실되지 않는다.

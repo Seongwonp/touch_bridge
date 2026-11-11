@@ -1496,8 +1496,9 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     if (_isExecuting || _pressDoneLabel.isNotEmpty) {
       return Scaffold(
         backgroundColor: AppColors.background,
-        // 이 화면에는 한 번 탭 정지가 있으므로 두 단계인 앱바 정지는 숨겨 정지가 하나만 보이게 한다.
-        appBar: const TopAppBar(title: 'Touch Bridge', showEmergency: false),
+        // 오른쪽 위 정지도 남긴다. 첫 실행 안내가 "어느 화면에서든 오른쪽 위"라고 가르치므로
+        // 실행 중에 그 버튼이 사라지면 안 된다(외부 평가). 이 화면의 한 번 탭 정지와 같은 절차를 부른다.
+        appBar: TopAppBar(title: 'Touch Bridge', onEmergency: _onSingleTapStop),
         body: SafeArea(child: Center(child: _buildPressStatusView(rs))),
       );
     }

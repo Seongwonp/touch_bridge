@@ -44,8 +44,8 @@ class VoiceTextMatcher {
 
   /// 긍정 판별 — 엄격 매칭.
   ///
-  /// 긍정 오탐은 곧 의도하지 않은 물리 버튼 누름으로 이어지므로, 정확 일치
-  /// 또는 "토큰으로 시작하고 어미 1~2자만 붙은" 짧은 발화만 인정한다.
+  /// 긍정 오탐은 곧 의도하지 않은 물리 버튼 누름으로 이어지므로, 정해진 꼴
+  /// (그대로·반복·"요/용" 어미)만 인정한다.
   /// contains 매칭이면 "그런데 말이야"의 '네', "반응이 없어"의 '응'도 긍정으로
   /// 잡힌다.
   static bool isAffirmative(String text) {
@@ -54,10 +54,14 @@ class VoiceTextMatcher {
     // 부정어가 섞이면 긍정이 아니다. "네 취소"는 띄어쓰기를 빼면 "네취소"라
     // "네 + 두 글자" 규칙을 통과해 실행 승인으로 잡혔다(외부 평가 지적).
     if (isNegative(t)) return false;
+    // 허용하는 꼴만 정확히 나열한다: 토큰 그대로, 반복("네네", "응응응"), 그리고
+    // 끝에 "요"·"용"만 붙은 꼴("그래요", "맞아용"). 예전처럼 "토큰 + 아무 두 글자"를
+    // 받으면 "예열", "예약", "응급", "그래도"가 확인 대기 중에 실행 승인이 됐다(외부 평가).
     return _affirmativeTokens.any((token) {
-      if (t == token) return true;
-      // "네네", "맞아요", "좋아용" 등 짧은 변형만 허용. 긴 문장은 새 명령으로 취급.
-      return t.startsWith(token) && (t.length - token.length) <= 2;
+      for (final body in [token, token * 2, token * 3]) {
+        if (t == body || t == '$body요' || t == '$body용') return true;
+      }
+      return false;
     });
   }
 

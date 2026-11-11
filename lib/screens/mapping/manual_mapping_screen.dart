@@ -5,6 +5,8 @@ import '../../services/accessibility_settings.dart';
 import '../../services/ble_service.dart';
 import '../../services/device_mapping_service.dart';
 import '../../services/active_device_service.dart';
+import '../../services/appliance_command_router.dart';
+import '../../services/home_device_store.dart';
 import '../../services/tts_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
@@ -58,6 +60,17 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
   final Map<String, ({double xMm, double yMm})> _buttonPositions = {};
   final Map<String, String> _buttonLabels = {};
   String? _selectedButtonId;
+
+  /// 장치가 알려 준 실제 위치를 받았는지. 받기 전에는 [_currentXmm]/[_currentYmm]이
+  /// 추정값이라 버튼 위치로 저장하지 않는다. 예전에는 화면을 열 때 장치가 원점에
+  /// 있다고 가정하고 화살표 이동량만 더해, 직전에 누른 버튼 위에 있던 장치의 위치가
+  /// 엉뚱하게 저장됐다(외부 평가).
+  bool _positionKnown = false;
+  bool _syncingPosition = false;
+
+  /// 이 가전의 버튼 기능 목록(논리 ID → 이름). 음성 명령은 이 ID로 누를 버튼을
+  /// 고르므로, 버튼 추가도 여기서 기능을 골라야 이름과 실제 실행이 맞는다.
+  Map<String, String> _catalog = ApplianceCommandRouter.buttonCatalog();
 
   // dead-man 확인 상태 — 물리적 동작(홈, 테스트 터치, 원점 지정)을
   // 잘못 눌러 하드웨어가 움직이는 사고를 방지한다.
@@ -121,6 +134,11 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
     final deviceId = _deviceId;
     if (deviceId == null) return;
     final profile = await DeviceMappingService.instance.load(deviceId);
+    final record = await HomeDeviceStore.findById(deviceId);
+    _catalog = ApplianceCommandRouter.buttonCatalog(
+      deviceName: record?['name'] as String? ?? widget.deviceName,
+      deviceType: record?['deviceType'] as String?,
+    );
     if (!mounted) return;
     setState(() {
       _currentProfile = profile;
@@ -150,6 +168,46 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
       _currentXmm = profile.originX;
       _currentYmm = profile.originY;
     });
+    // 저장값은 표시용 초기값일 뿐이다. 장치에 실제 위치를 물어 덮어쓴다.
+    unawaited(_syncPosition());
+  }
+
+  /// 장치에 실제 위치를 묻고 화면 위치를 맞춘다. [waitIdle]이면 이동이 끝날 때까지
+  /// (대기열이 빌 때까지) 기다린다. 위치를 받으면 true.
+  Future<bool> _syncPosition({
+    bool waitIdle = false,
+    Duration maxWait = const Duration(seconds: 8),
+  }) async {
+    if (!BleService.instance.isConnected) {
+      if (mounted) setState(() => _positionKnown = false);
+      return false;
+    }
+    if (mounted) setState(() => _syncingPosition = true);
+    final deadline = DateTime.now().add(maxWait);
+    ({double x, double y, bool homed, int queue})? status;
+    try {
+      while (true) {
+        status = await BleService.instance.queryMotionStatus();
+        if (status == null || !waitIdle || status.queue == 0) break;
+        if (DateTime.now().isAfter(deadline)) {
+          status = null;
+          break;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+      }
+    } finally {
+      if (mounted) setState(() => _syncingPosition = false);
+    }
+    if (!mounted) return status != null;
+    final s = status;
+    setState(() {
+      _positionKnown = s != null;
+      if (s != null) {
+        _currentXmm = s.x;
+        _currentYmm = s.y;
+      }
+    });
+    return s != null;
   }
 
   Future<void> _saveAndUpload() async {
@@ -258,18 +316,6 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
     }
   }
 
-  Future<bool> _testPress(int x, int y) async {
-    final deviceId = _deviceId;
-    if (deviceId == null) return false;
-    final cols = int.tryParse(_colsCtrl.text) ?? 3;
-    return BleService.instance.sendPress(
-      x: x,
-      y: y,
-      cols: cols,
-      deviceId: deviceId,
-    );
-  }
-
   Future<void> _homeDevice() async {
     final deviceId = _deviceId;
     if (deviceId == null) {
@@ -282,14 +328,11 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
       _tts.speak('홈 이동 명령을 보내지 못했습니다. 연결을 확인해 주세요.', priority: TtsPriority.result);
       return;
     }
-    if (mounted) {
-      setState(() {
-        _currentXmm = 0;
-        _currentYmm = 0;
-      });
-    }
+    if (mounted) setState(() => _positionKnown = false);
     // 원점 복귀 완료 응답을 기다리지 않으므로 "이동했습니다"가 아니라 "보냈습니다".
     _tts.speak('홈 위치로 이동하도록 기기에 전달했습니다.', priority: TtsPriority.result);
+    // 복귀가 끝나면 장치가 아는 위치로 맞춘다(0으로 가정하지 않는다).
+    unawaited(_syncPosition(waitIdle: true, maxWait: const Duration(seconds: 25)));
     if (!mounted) return;
     ScaffoldMessenger.of(
       context,
@@ -311,6 +354,8 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
       }
       // 쓰기 성공만 확인했다. 기기 확인 응답은 보지 않으므로 "전달했습니다".
       _tts.speak('현재 위치를 원점으로 지정하도록 기기에 전달했습니다.', priority: TtsPriority.result);
+      // 원점 복귀로 기준이 잡힌 장치는 이 명령을 무시한다. 장치가 아는 위치로 다시 맞춘다.
+      unawaited(_syncPosition(waitIdle: true));
     } else {
       _tts.speak('원점 지정 명령 전송에 실패했습니다.', priority: TtsPriority.result);
     }
@@ -345,17 +390,28 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
     }
   }
 
+  /// 지금 있는 자리에서 한 번 누른다. 예전에는 선택한 버튼의 격자 칸 번호(BTN_n)를
+  /// 보내 장치가 다른 자리로 이동해 눌렀고, 격자가 없으면 장치가 거부했는데도
+  /// "전달했습니다"라고 말했다(외부 평가). 펌웨어는 Z 내림을 지금 자리 누름으로 받는다.
   Future<void> _testSwitchBotAtCurrentPosition() async {
-    final id = _selectedButtonId;
-    final grid = id == null ? null : _currentProfile?.buttonMap[id];
-    if (id == null || grid == null) {
-      await _tts.speak('먼저 테스트할 버튼을 선택해 주세요.');
+    final ble = BleService.instance;
+    if (!ble.isConnected) {
+      await _tts.speak(
+        'Touch Bridge가 연결되어 있지 않습니다.',
+        source: 'ManualMappingScreen',
+        priority: TtsPriority.result,
+      );
       return;
     }
-    final ok = await _testPress(grid.col, grid.row);
+    var ok = await ble.sendRaw('G91');
+    if (ok) ok = await ble.sendRaw('G1 Z-1.0 F150');
+    // 올림과 절대 좌표 복귀는 누름 성공 여부와 상관없이 보낸다.
+    final up = await ble.sendRaw('G1 Z1.0 F150');
+    final abs = await ble.sendRaw('G90');
+    ok = ok && up && abs;
     if (!mounted) return;
     await _tts.speak(
-      ok ? '현재 위치를 누르도록 기기에 전달했습니다.' : '눌러보기에 실패했습니다. 허브 연결을 확인하세요.',
+      ok ? '지금 위치를 누르도록 기기에 전달했습니다.' : '눌러보기 명령을 보내지 못했습니다. 연결을 확인하세요.',
       source: 'ManualMappingScreen',
       priority: TtsPriority.result,
     );
@@ -413,12 +469,23 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
     );
   }
 
-  void _registerSelectedButtonHere() {
+  /// 장치의 실제 위치를 받아야 등록한다. 못 받으면 막고 이유를 알린다.
+  Future<bool> _ensureRealPosition() async {
+    final ok = await _syncPosition(waitIdle: true);
+    if (ok || !mounted) return ok;
+    const msg = '장치 위치를 확인하지 못해 저장하지 않았습니다. Touch Bridge 연결을 확인해 주세요.';
+    _tts.speak(msg, source: 'ManualMappingScreen', priority: TtsPriority.result);
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(msg)));
+    return false;
+  }
+
+  Future<void> _registerSelectedButtonHere() async {
     final id = _selectedButtonId;
     if (id == null) {
       _tts.speak('먼저 버튼을 추가해 주세요.');
       return;
     }
+    if (!await _ensureRealPosition() || !mounted) return;
     setState(() {
       _buttonPositions[id] = (xMm: _currentXmm, yMm: _currentYmm);
       final profile = _currentProfile;
@@ -428,50 +495,52 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
     _tts.speak('$label 버튼을 현재 위치에 등록했습니다.');
   }
 
+  /// 버튼 추가: 이 가전의 버튼 기능 목록에서 고른다. 예전에는 이름을 자유롭게 쓰고
+  /// 순서대로 BT-01부터 붙여, "시작"이라고 등록해도 음성 명령은 BT-01을
+  /// "10초"로 알고 눌렀다(외부 평가).
   Future<void> _addButton() async {
-    if (_buttonPositions.length >= 9) {
-      await _tts.speak('현재 버전에서는 버튼을 최대 9개까지 등록할 수 있습니다.');
+    final used = _buttonPositions.keys.toSet();
+    final choices = [
+      for (final e in _catalog.entries)
+        if (!used.contains(e.key)) e,
+    ];
+    if (choices.isEmpty) {
+      await _tts.speak('이 가전의 버튼을 모두 등록했습니다.');
       return;
     }
-    final controller = TextEditingController();
-    final label = await showDialog<String>(
+    final id = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => SimpleDialog(
         backgroundColor: AppColors.surfaceElevated,
-        title: const Text('버튼 추가', style: TextStyle(color: Colors.white)),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            labelText: '버튼 이름',
-            hintText: '예: 시작, 1분, 취소',
-          ),
+        title: const Text(
+          '어떤 버튼인가요?',
+          style: TextStyle(color: AppColors.textPrimary),
         ),
-        actions: [
-          TextButton(
+        children: [
+          for (final e in choices)
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(dialogContext).pop(e.key),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+              child: Text(
+                e.value,
+                style: const TextStyle(color: AppColors.textPrimary, fontSize: 17),
+              ),
+            ),
+          SimpleDialogOption(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('취소'),
-          ),
-          ElevatedButton(
-            onPressed: () =>
-                Navigator.of(dialogContext).pop(controller.text.trim()),
-            child: const Text('추가'),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+            child: const Text(
+              '취소',
+              style: TextStyle(color: AppColors.textTertiary, fontSize: 17),
+            ),
           ),
         ],
       ),
     );
-    // showDialog의 Future는 닫힘 애니메이션이 완전히 끝나기 전에 완료될 수 있다.
-    // 이때 TextField가 아직 controller를 참조하는데 즉시 dispose하면
-    // InheritedElement의 dependents assertion으로 빨간 오류 화면이 나타난다.
-    await Future<void>.delayed(const Duration(milliseconds: 400));
-    controller.dispose();
-    if (!mounted || label == null || label.isEmpty) return;
-    final used = _buttonPositions.keys.toSet();
-    final id = [
-      for (var index = 1; index <= 9; index++)
-        'BT-${index.toString().padLeft(2, '0')}',
-    ].firstWhere((candidate) => !used.contains(candidate));
+    if (!mounted || id == null) return;
+    // 지금 장치가 있는 실제 위치로 등록한다. 위치를 모르면 추가하지 않는다.
+    if (!await _ensureRealPosition() || !mounted) return;
+    final label = _catalog[id] ?? id;
     setState(() {
       _selectedButtonId = id;
       _buttonLabels[id] = label;
@@ -479,7 +548,7 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
       final profile = _currentProfile;
       if (profile != null) _currentProfile = _withFreeButtonPositions(profile);
     });
-    _tts.speak('$label 버튼을 추가했습니다. 조이스틱으로 위치를 맞춰 주세요.');
+    _tts.speak('$label 버튼을 지금 위치에 추가했습니다. 화살표로 맞춘 뒤 선택한 버튼 위치 저장을 누르세요.');
   }
 
   void _removeSelectedButton() {
@@ -793,7 +862,9 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
     return Semantics(
       liveRegion: true,
       label:
-          '현재 위치, 가로 ${_currentXmm.toStringAsFixed(1)} 밀리미터, 세로 ${_currentYmm.toStringAsFixed(1)} 밀리미터. 앱이 전송 성공한 이동 명령 기준입니다.',
+          _positionKnown
+              ? '현재 위치, 가로 ${_currentXmm.toStringAsFixed(1)} 밀리미터, 세로 ${_currentYmm.toStringAsFixed(1)} 밀리미터. 장치가 알려 준 위치입니다.'
+              : '현재 위치를 장치에서 확인하지 못했습니다. Touch Bridge를 연결하면 확인합니다.',
       child: Container(
         width: double.infinity,
         padding: EdgeInsets.all(16 * rs),
@@ -822,7 +893,11 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '현재 위치 · 앱 기준',
+                    _syncingPosition
+                        ? '현재 위치 · 장치에 확인 중'
+                        : _positionKnown
+                        ? '현재 위치 · 장치 기준'
+                        : '현재 위치 · 확인 안 됨',
                     style: TextStyle(
                       color: AppColors.textSecondary,
                       fontSize: 13 * rs,
