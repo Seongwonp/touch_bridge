@@ -5,6 +5,7 @@ import 'services/accessibility_settings.dart';
 import 'services/accessibility_experiment_service.dart';
 import 'services/ble_service.dart';
 import 'services/active_device_service.dart';
+import 'services/app_lifecycle_service.dart';
 import 'services/demo_seed.dart';
 import 'screens/main_navigation_screen.dart';
 import 'theme/app_theme.dart';
@@ -22,6 +23,8 @@ void main() async {
   await ActiveDeviceService.instance.init();
   await DemoSeed.seed();
   BleService.instance.warmUp();
+  // 활성 기기를 읽은 뒤에 붙인다. 실행·복귀 재연결, 화면 켜짐, 백엔드 깨우기를 맡는다.
+  AppLifecycleService.instance.start();
   runApp(const TouchBridgeApp());
 }
 
