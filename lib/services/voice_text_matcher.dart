@@ -29,6 +29,10 @@ class VoiceTextMatcher {
     '안돼',
     '안해',
     '하지마',
+    // "네 말고", "아냐", "잠깐"처럼 긍정어 뒤에 붙거나 짧게 끊는 거절. 놓치면 승인으로 잡힐 수 있다.
+    '말고',
+    '아냐',
+    '잠깐',
   ];
 
   static String normalize(String text) {
@@ -47,6 +51,9 @@ class VoiceTextMatcher {
   static bool isAffirmative(String text) {
     final t = normalize(text);
     if (t.isEmpty) return false;
+    // 부정어가 섞이면 긍정이 아니다. "네 취소"는 띄어쓰기를 빼면 "네취소"라
+    // "네 + 두 글자" 규칙을 통과해 실행 승인으로 잡혔다(외부 평가 지적).
+    if (isNegative(t)) return false;
     return _affirmativeTokens.any((token) {
       if (t == token) return true;
       // "네네", "맞아요", "좋아용" 등 짧은 변형만 허용. 긴 문장은 새 명령으로 취급.

@@ -131,7 +131,12 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
         name: 'EmergencyStopScreen',
         onStatus: (status) {
           if (status == 'notListening' || status == 'done') {
-            if (mounted && _secondsLeft > 0) _startListening();
+            // 정지를 보내고 결과를 알리는 동안에는 다시 듣지 않는다. 듣기를 멈추면 이
+            // 콜백이 오는데, 예전에는 남은 시간이 있으면 곧바로 마이크를 다시 켜서
+            // 정지 안내 음성을 다시 알아들을 수 있었다(외부 평가).
+            if (mounted && _secondsLeft > 0 && !_stopInProgress) {
+              _startListening();
+            }
           }
         },
         onError: (_) {
@@ -148,6 +153,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
 
   void _startListening() async {
     if (!_speechEnabled ||
+        _stopInProgress ||
         _speechSession.isListening ||
         _isStartingListening) {
       return;
@@ -303,8 +309,10 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
       // 전송만 됐거나 실패한 경우: 완료 화면으로 넘기지 않고 재시도할 수 있게 둔다.
       _stopInProgress = false;
       setState(() => _stopFailureMessage = outcome.message);
-      // 정지 실패 시 음성 감지를 즉시 재시작해 "멈춰" 재시도를 받을 수 있게 한다.
-      if (mounted && _speechEnabled) _startListening();
+      // 정지 실패 시 "멈춰" 재시도를 받을 수 있게 다시 듣는다. 실패 안내가 다 끝난
+      // 뒤에 켜야 안내 음성을 명령으로 알아듣지 않는다.
+      await _tts.waitUntilIdle();
+      if (mounted && _speechEnabled && !_stopInProgress) _startListening();
     }
   }
 

@@ -1113,12 +1113,21 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   Future<bool> _sendBleSequenceInner(List<dynamic> commands) async {
     if (_stopRequestedBeforeSend()) return false;
 
-    // 이미 연결된 기기가 있으면 그대로 쓴다.
+    // 이미 연결된 기기가 이 가전에 등록된 Touch Bridge면 그대로 쓴다. 다른 장치에
+    // 붙어 있으면 그 장치로 보내지 않고 이 가전의 장치로 다시 연결한다. 예전에는
+    // 연결된 장치를 무조건 써서, 가전을 골라도 다른 장치가 움직일 수 있었다(외부 평가).
     String deviceId = BleService.instance.connectedDeviceId;
+    final targetBleId = ActiveDeviceService.instance.getActiveBleId();
+    final connectedToOther = deviceId.isNotEmpty &&
+        targetBleId != null &&
+        targetBleId.isNotEmpty &&
+        deviceId != targetBleId;
 
-    if (deviceId.isEmpty) {
-      // 연결된 게 없을 때만 자동 선택 및 재연결 시도
-      await ActiveDeviceService.instance.autoPickFirstDevice();
+    if (deviceId.isEmpty || connectedToOther) {
+      // 연결된 게 없을 때만 활성 가전을 자동으로 고른다.
+      if (deviceId.isEmpty) {
+        await ActiveDeviceService.instance.autoPickFirstDevice();
+      }
       if (_stopRequestedBeforeSend()) return false;
       final activeBleId = ActiveDeviceService.instance.getActiveBleId();
       if (activeBleId == null) {

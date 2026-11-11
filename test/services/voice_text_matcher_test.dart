@@ -25,6 +25,14 @@ void main() {
       expect(VoiceTextMatcher.isAffirmative('전자레인지 예열해줘'), isFalse);
     });
 
+    test('긍정어 뒤에 거절이 붙으면 긍정이 아니다 (외부 평가 반례)', () {
+      // "네 취소"는 띄어쓰기를 빼면 "네취소"라 "네 + 두 글자" 규칙을 통과했다.
+      for (final t in ['네 취소', '네 말고', '응 아니', '예 그만', '네 잠깐', '좋아 하지마']) {
+        expect(VoiceTextMatcher.isAffirmative(t), isFalse, reason: t);
+        expect(VoiceTextMatcher.isNegative(t), isTrue, reason: t);
+      }
+    });
+
     test('빈 문자열은 긍정이 아니다', () {
       expect(VoiceTextMatcher.isAffirmative(''), isFalse);
       expect(VoiceTextMatcher.isAffirmative('   '), isFalse);
