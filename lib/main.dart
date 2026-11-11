@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'services/accessibility_settings.dart';
 import 'services/accessibility_experiment_service.dart';
@@ -10,6 +11,9 @@ import 'theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // 세로 화면으로 고정한다. 화면을 볼 수 없는 사용자는 폰이 돌아간 것을 모르고,
+  // 가로가 되면 낭독 순서와 버튼 자리가 바뀐다. 가로 홈 화면은 말하기 버튼이 잘렸다(실기).
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   try {
     await dotenv.load(fileName: ".env");
   } catch (_) {}

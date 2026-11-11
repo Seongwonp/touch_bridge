@@ -142,8 +142,12 @@ class MicrowaveCommandService {
   /// AI 해석을 건너뛰게 된다.
   static final _pressOnlyRe =
       RegExp(r'^(\d{1,2})번(버튼)?(을|를)?(눌러줘|눌러|눌러주세요|누르기)?$');
-  static final _start30Re = RegExp(r'^(30초|삼십초)(으로|로)?시작(해|해줘|해주세요)?$');
-  static final _start60Re = RegExp(r'^(1분|일분)(으로|로)?시작(해|해줘|해주세요)?$');
+  // 시간 + 요청 동사만으로 된 문장 전체가 일치할 때만 실행한다(부분 일치 금지).
+  // "30초 돌려줘", "1분 데워 줘"처럼 가장 흔한 말을 서버 없이 바로 처리한다.
+  static const _timeVerb =
+      r'(만|으로|로)?(시작(해|해줘|해주세요)?|돌려(줘|주세요)?|데워(줘|주세요)?)$';
+  static final _start30Re = RegExp('^(30초|삼십초)$_timeVerb');
+  static final _start60Re = RegExp('^(1분|일분)$_timeVerb');
 
   static Map<String, dynamic>? checkSimpleRules(String text) {
     final t = text.replaceAll(' ', '');

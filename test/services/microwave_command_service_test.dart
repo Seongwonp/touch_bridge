@@ -10,6 +10,23 @@ void main() {
       expect(result['commands'], ['BT-02', 'BT-05']);
     });
 
+    test('"30초 돌려줘"·"1분 데워 줘"처럼 흔한 말은 서버 없이 처리한다', () {
+      for (final t in ['30초 돌려줘', '30초 돌려 줘', '30초만 돌려주세요', '삼십초 데워줘']) {
+        expect(MicrowaveCommandService.checkSimpleRules(t)?['commands'],
+            ['BT-02', 'BT-05'], reason: t);
+      }
+      expect(MicrowaveCommandService.checkSimpleRules('1분 데워 줘')?['commands'],
+          ['BT-03', 'BT-05']);
+    });
+
+    test('시간 규칙은 문장 전체가 맞을 때만 실행한다', () {
+      for (final t in ['11분 돌려줘', '30초 돌려줘 그리고 1분', '30초 돌리지 마', '만두 30초 돌려줘']) {
+        final r = MicrowaveCommandService.checkSimpleRules(t);
+        expect(r?['commands'], isNot(['BT-02', 'BT-05']), reason: t);
+        expect(r?['commands'], isNot(['BT-03', 'BT-05']), reason: t);
+      }
+    });
+
     test('취소 명령을 규칙으로 처리한다', () {
       final result = MicrowaveCommandService.checkSimpleRules('지금 취소해줘');
       expect(result, isNotNull);

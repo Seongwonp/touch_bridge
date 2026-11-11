@@ -47,6 +47,10 @@ class TtsService {
 
   Future<void> _initTts() async {
     try {
+      // 안드로이드에 음성 엔진이 여럿이면(삼성·구글) 기본값이 바뀌거나 한국어 음성이
+      // 없는 엔진이 잡혀, 외국인이 읽는 듯한 발음이 났다(실기). 삼성 엔진을 먼저 쓴다.
+      // 엔진을 바꾸면 속도·음량이 초기화되므로 그보다 먼저 고른다.
+      await _preferKoreanEngine();
       final settings = AccessibilitySettings.instance;
       await _tts.setSpeechRate((settings.ttsSpeed / 2.0).clamp(0.1, 1.0));
       await _tts.setVolume(settings.ttsVolume.clamp(0.0, 1.0));
@@ -324,6 +328,23 @@ class TtsService {
       return;
     }
     await speak(_lastSpokenText, force: true, interrupt: true);
+  }
+
+  static const _preferredEngines = ['com.samsung.SMT', 'com.google.android.tts'];
+
+  Future<void> _preferKoreanEngine() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    try {
+      final engines = (await _tts.getEngines as List?)?.cast<Object?>() ?? const [];
+      for (final engine in _preferredEngines) {
+        if (engines.contains(engine)) {
+          await _tts.setEngine(engine);
+          return;
+        }
+      }
+    } catch (e) {
+      debugPrint('[TTS] engine selection skipped: $e');
+    }
   }
 
   Future<void> setLanguage(String languageCode) async {

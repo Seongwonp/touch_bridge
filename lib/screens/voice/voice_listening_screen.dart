@@ -233,7 +233,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
         _speak(_statusMessage);
       }
     } else {
-      _initSpeech().then((_) {
+      _initSpeech().then((_) async {
         if (!mounted) return;
         final initial = widget.initialText;
         if (initial != null && initial.isNotEmpty) {
@@ -245,6 +245,14 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
           return;
         }
         if (widget.autoStart && _speechEnabled) {
+          // 낭독기는 화면에 들어오면 화면 이름과 포커스 항목을 읽는다. 그 사이 마이크를
+          // 열면 안드로이드가 다른 소리를 줄여 낭독이 뚝뚝 끊기고("쉉 명루ㅕㅇ"), 마이크는
+          // 낭독 소리만 듣다 "말씀이 들리지 않았습니다"로 끝났다(실기). 낭독이 끝날
+          // 여유를 두고 연다. 마이크가 열리면 띵 소리가 난다.
+          if (AccessibilitySettings.isScreenReaderActive) {
+            await Future<void>.delayed(const Duration(milliseconds: 3000));
+            if (!mounted || _isRecording || _isProcessing) return;
+          }
           _toggleRecording();
         }
       });
@@ -802,11 +810,22 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   /// 두 번 눌러야 한다. 확인·되묻기 경로는 발화 뒤 반드시 이 메서드를 부른다.
   /// TTS 큐가 빈 뒤에 마이크를 열어, 질문 소리가 STT에 섞이거나 질문을 듣는
   /// 중에 침묵 타이머가 돌지 않게 한다.
+  /// 낭독기가 [text]를 다 읽을 만한 시간. 낭독기를 쓰지 않으면 짧게 둔다.
+  static Duration _screenReaderAllowance(String text) {
+    if (!AccessibilitySettings.isScreenReaderActive) {
+      return const Duration(milliseconds: 300);
+    }
+    final ms = (text.length * 110).clamp(1500, 7000);
+    return Duration(milliseconds: ms);
+  }
+
   void _restartListeningAfterPrompt() {
     if (!_speechEnabled || !mounted) return;
     Future<void>(() async {
       await _tts.waitUntilIdle();
-      await Future<void>.delayed(const Duration(milliseconds: 300));
+      // 낭독기가 상태 문구(liveRegion)를 읽는 동안에는 열지 않는다. 앱 음성이 끝난 것만
+      // 기다리면 낭독 도중 마이크가 열려 낭독이 끊기고 낭독 소리가 녹음된다(실기).
+      await Future<void>.delayed(_screenReaderAllowance(_statusMessage));
       if (!mounted || _isRecording || _isProcessing) return;
       _toggleRecording();
     });
@@ -1073,15 +1092,25 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
         'error': e.toString(),
       });
       if (requestId != _analysisRequestId) return;
-      _consecutiveFailures++;
-      final failMsg = _consecutiveFailures >= 2
-          ? '명령을 이해하지 못했습니다. 도움말을 들으시려면 "도움말"이라고 말씀해 주세요.'
-          : '명령을 이해하지 못했습니다. 기기 이름과 동작을 함께 말해 주세요.';
-      _speak(failMsg);
+      // 여기로 오는 것은 대부분 서버에 닿지 못한 경우다(연결·시간 초과·주소 설정).
+      // 예전에는 모두 "명령을 이해하지 못했습니다"라고 해서, 사용자가 같은 말을
+      // 계속 되풀이했다(실기·외부 평가). 응답 형식이 틀린 경우만 "이해하지 못했다"고 한다.
+      final String failMsg;
+      if (e is FormatException) {
+        _consecutiveFailures++;
+        failMsg = _consecutiveFailures >= 2
+            ? '명령을 이해하지 못했습니다. 도움말을 들으시려면 "도움말"이라고 말씀해 주세요.'
+            : '명령을 이해하지 못했습니다. 기기 이름과 동작을 함께 말해 주세요.';
+      } else {
+        failMsg = '음성 해석 서버에 연결하지 못했습니다. "30초 돌려줘"처럼 간단한 시간 명령은 '
+            '서버 없이도 됩니다. 계속 안 되면 보호자에게 알려 주세요.';
+      }
       setState(() {
         _statusMessage = failMsg;
         _isProcessing = false;
       });
+      // 낭독기를 쓰면 상태 문구(liveRegion)를 낭독기가 읽으므로 앱 음성은 내지 않는다(겹침 방지).
+      if (!AccessibilitySettings.isScreenReaderActive) _speak(failMsg);
     }
   }
 
@@ -1356,7 +1385,11 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
         _confirmQuestion = question;
         _statusMessage = question;
       });
-      await _speak(question, interrupt: true);
+      // 낭독기를 쓰면 질문은 상태 문구(liveRegion)로 낭독기가 읽는다. 앱 음성까지 내면
+      // 두 목소리가 겹쳐 언제 답해야 할지 알 수 없다(외부 평가). 쓰지 않으면 앱이 말한다.
+      if (!AccessibilitySettings.isScreenReaderActive) {
+        await _speak(question, interrupt: true);
+      }
       _restartListeningAfterPrompt();
       return;
     }

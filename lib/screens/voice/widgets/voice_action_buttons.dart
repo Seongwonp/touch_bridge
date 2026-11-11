@@ -103,8 +103,11 @@ class VoiceActionButtons extends StatelessWidget {
 
     if (isIdle) {
       return Semantics(
-        label: '음성 명령 시작',
+        // 화면 글자와 같은 이름 하나만 읽힌다(예전엔 '음성 명령 시작'과 '녹음 준비'를 이어 읽었다).
+        label: '말하기 시작',
         button: true,
+        excludeSemantics: true,
+        onTap: onMicTap,
         child: GestureDetector(
           onTap: onMicTap,
           child: Container(
@@ -125,7 +128,7 @@ class VoiceActionButtons extends StatelessWidget {
                   Icon(Icons.mic, color: Colors.black, size: 30 * scale),
                   SizedBox(width: 10 * scale),
                   Text(
-                    micArmed ? '지금 누르면 녹음 시작' : '녹음 준비',
+                    '말하기 시작',
                     style: TextStyle(
                       color: Colors.black,
                       fontSize: 19 * scale,
