@@ -10,12 +10,26 @@ class EmergencyStopService {
   EmergencyStopService._();
   static final EmergencyStopService instance = EmergencyStopService._();
 
+  // 정지 경로가 직접 재연결·전송하는 중인지. 앱 복귀 자동 재연결이 같은 순간
+  // 연결을 겹쳐 시도하면 정지 전송이 엉킬 수 있어, 그쪽이 이 값을 보고 물러선다.
+  int _inFlight = 0;
+  bool get isStopping => _inFlight > 0;
+
   /// 현재 연결된 기기(우선) 또는 활성 기기로 중단 명령을 보낸다.
   ///
   /// 반환되는 [EmergencyStopOutcome]은 "확인됨/전송만 됨/실패"를 구분한다 —
   /// 호출부는 outcome.message를 반드시 emergency 우선순위 TTS로 안내하고,
   /// acknowledged일 때만 완료 화면으로 이동해야 한다(거짓 완료 금지).
   Future<EmergencyStopOutcome> stopActiveDevice() async {
+    _inFlight++;
+    try {
+      return await _stopActiveDevice();
+    } finally {
+      _inFlight--;
+    }
+  }
+
+  Future<EmergencyStopOutcome> _stopActiveDevice() async {
     final connectedId = BleService.instance.connectedDeviceId;
     final targetId = connectedId.isNotEmpty
         ? connectedId
