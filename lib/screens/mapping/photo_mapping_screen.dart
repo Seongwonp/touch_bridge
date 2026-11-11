@@ -156,6 +156,13 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
                 rs: rs,
               ),
               SizedBox(height: ResponsiveScale.v(context, 16)),
+              // 안내는 사진 밖에 둔다. 사진 위에 얹으면 찍어야 할 패널 모서리를 가린다.
+              if (!_viewModel.hasPanelCalibration)
+                CalibrationPrompt(
+                  scale: rs,
+                  selectedCount: _viewModel.calibrationCornerCount,
+                  needsDimensions: _viewModel.needsCalibrationDimensions,
+                ),
               Expanded(
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16 * rs),
@@ -181,14 +188,6 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
                               rect: imageRect,
                               child: MappingImageView(
                                 imagePath: widget.imagePath,
-                              ),
-                            ),
-                            Positioned.fromRect(
-                              rect: imageRect,
-                              child: IgnorePointer(
-                                child: Container(
-                                  color: Colors.black.withValues(alpha: 0.3),
-                                ),
                               ),
                             ),
                             MappingMarkersLayer(
@@ -224,14 +223,6 @@ class _PhotoMappingScreenState extends State<PhotoMappingScreen> {
                                     ),
                                   ],
                                 ),
-                              ),
-                            if (!_viewModel.hasPanelCalibration)
-                              CalibrationPrompt(
-                                scale: rs,
-                                selectedCount:
-                                    _viewModel.calibrationCornerCount,
-                                needsDimensions:
-                                    _viewModel.needsCalibrationDimensions,
                               ),
                           ],
                         ),
