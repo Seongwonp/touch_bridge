@@ -11,7 +11,7 @@ void main() {
     });
 
     test('"30초 돌려줘"·"1분 데워 줘"처럼 흔한 말은 서버 없이 처리한다', () {
-      for (final t in ['30초 돌려줘', '30초 돌려 줘', '30초만 돌려주세요', '삼십초 데워줘']) {
+      for (final t in ['30초 돌려줘', '30초 돌려 줘', '30초만 돌려주세요', '삼십초 데워줘', '30도 돌려 줘']) {
         expect(MicrowaveCommandService.checkSimpleRules(t)?['commands'],
             ['BT-02', 'BT-05'], reason: t);
       }

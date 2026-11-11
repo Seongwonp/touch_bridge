@@ -865,6 +865,8 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
   Widget _buildCurrentPositionCard(double rs) {
     return Semantics(
       liveRegion: true,
+      // 라벨이 화면 글자(제목·좌표)를 모두 담으므로 글자를 한 번 더 읽지 않게 한다.
+      excludeSemantics: true,
       label:
           _positionKnown
               ? '현재 위치, 가로 ${_currentXmm.toStringAsFixed(1)} 밀리미터, 세로 ${_currentYmm.toStringAsFixed(1)} 밀리미터. 장치가 알려 준 위치입니다.'

@@ -146,7 +146,9 @@ class MicrowaveCommandService {
   // "30초 돌려줘", "1분 데워 줘"처럼 가장 흔한 말을 서버 없이 바로 처리한다.
   static const _timeVerb =
       r'(만|으로|로)?(시작(해|해줘|해주세요)?|돌려(줘|주세요)?|데워(줘|주세요)?)$';
-  static final _start30Re = RegExp('^(30초|삼십초)$_timeVerb');
+  // 음성 인식이 '초'를 '도'로 받아 적는 일이 잦다(실기: "30도 돌려 줘"). 전자레인지에
+  // '30도'는 뜻이 없으므로 시간 명령으로 본다. 문장 전체가 맞을 때만이다.
+  static final _start30Re = RegExp('^(30초|삼십초|30도|삼십도)$_timeVerb');
   static final _start60Re = RegExp('^(1분|일분)$_timeVerb');
 
   static Map<String, dynamic>? checkSimpleRules(String text) {

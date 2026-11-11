@@ -450,7 +450,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
   /// 듣기 창이 끝났다. 들은 말이 있으면 처리하고, 없으면 한 번만 알린다.
   void _onListenWindowEnd() {
-    if (!mounted) return;
+    if (!mounted || _isProcessing || _isExecuting) return;
     _listenWindowStart = null; // 이후에는 조용히 다시 열지 않는다.
     _speechSession.micWindowActive = false;
     if (!_isRecording && !_quietRestart) return;
@@ -561,7 +561,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
       FeedbackService.instance.playDing();
       _speak('명령을 확인하고 있습니다.');
       _sendTextToGemini(_lastWords);
-    } else {
+    } else if (!_isProcessing) {
       _speak('말씀이 들리지 않았습니다. 다시 말하려면 말하기 시작을 누르세요.');
     }
   }
@@ -705,6 +705,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
           // 듣기 창 전체에 한 번만 건다(조용히 다시 열 때는 새로 걸지 않는다).
           if (!_quietRestart) {
+            _recordingTimeoutTimer?.cancel(); // 앞 듣기 창의 타이머가 늦게 울리지 않게.
             _recordingTimeoutTimer = Timer(_maxRecordingDuration, _onListenWindowEnd);
           }
         }
