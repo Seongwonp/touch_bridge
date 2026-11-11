@@ -149,6 +149,50 @@ void main() {
       await tester.pump(const Duration(seconds: 3));
     });
 
+    testWidgets('잘못 들었을 수 있으면 되묻고, 맞아요·아니에요 버튼으로도 답할 수 있다', (tester) async {
+      final state = await pumpScreen(tester);
+      // ignore: unawaited_futures
+      state.processSpeechForTest('30초 돌려줘', confidence: 0.2);
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+      expect(state.lowConfidenceQuestionForTest, contains('30초 돌려줘'));
+      expect(state.confirmQuestionForTest, isNull, reason: '되묻기 단계에서는 아직 실행 확인이 아니다');
+
+      final yes = find.byKey(VoiceListeningScreenState.lowConfidenceYesKey);
+      await tester.ensureVisible(yes);
+      await tester.tap(yes);
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+      // '맞아요' 뒤에는 되묻기를 닫고 원문을 다시 처리한다(이 테스트 환경에는 등록 가전이
+      // 없어 거기서 멈춘다). 되묻기 단계에서는 아무것도 보내지 않는다.
+      expect(state.lowConfidenceQuestionForTest, isNull);
+      expect(state.statusMessageForTest, isNot(contains('라고 들었어요')));
+      expect(rawSent, isEmpty);
+      await tester.pump(const Duration(seconds: 4));
+    });
+
+    testWidgets('되묻기에서 아니에요를 누르면 아무것도 하지 않고 다시 말하라고 한다', (tester) async {
+      final state = await pumpScreen(tester);
+      // ignore: unawaited_futures
+      state.processSpeechForTest('30초 돌려줘', confidence: 0.2);
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+      final no = find.byKey(VoiceListeningScreenState.lowConfidenceNoKey);
+      await tester.ensureVisible(no);
+      await tester.tap(no);
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+      expect(state.lowConfidenceQuestionForTest, isNull);
+      expect(state.confirmQuestionForTest, isNull);
+      expect(state.statusMessageForTest, '알겠습니다. 다시 말씀해 주세요.');
+      expect(rawSent, isEmpty);
+      await tester.pump(const Duration(seconds: 4));
+    });
+
     testWidgets('확인 질문은 실행·취소 위에 계속 보인다 (마이크가 켜져도 덮이지 않음)', (tester) async {
       final state = await pumpScreen(tester);
       // ignore: unawaited_futures

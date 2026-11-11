@@ -95,6 +95,11 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   double _lastConfidence = SpeechRecognitionWords.missingConfidence;
   String? _pendingLowConfidenceText;
 
+  /// 잘못 들었을 수 있어 되묻는 질문("…라고 들었어요. 맞나요?"). 화면에 질문과
+  /// '맞아요'·'아니에요' 버튼을 띄운다. 예전에는 이 확인만 버튼이 없어 말로만 답할
+  /// 수 있었다(외부 평가).
+  String? _lowConfidenceQuestion;
+
   /// 가전 실행 확인 질문. [_pendingCommandData]와 함께 있을 때 화면에
   /// '실행'·'취소' 버튼을 보인다(음성 '네'·'아니요'도 그대로 받는다).
   String? _confirmQuestion;
@@ -195,6 +200,19 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   @visibleForTesting
   Future<void> runConfirmedForTest(Map<String, dynamic> data) =>
       handleCommandForTest(data, confirmed: true);
+
+  /// 테스트용: 음성 인식 결과(문장·신뢰도)를 받은 것처럼 처리한다.
+  @visibleForTesting
+  Future<void> processSpeechForTest(String text, {required double confidence}) {
+    _lastConfidence = confidence;
+    _recognizedText = text;
+    return _sendTextToGemini(text);
+  }
+
+  /// 테스트용: 잘못 들었을 수 있어 되묻는 질문.
+  @visibleForTesting
+  String? get lowConfidenceQuestionForTest =>
+      _pendingLowConfidenceText == null ? null : _lowConfidenceQuestion;
 
   /// 테스트용: 화면에 떠 있는 실행 확인 질문.
   @visibleForTesting
@@ -546,8 +564,8 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   /// 실행 확인 중에는 질문을 '실행'·'취소' 바로 위에 계속 보여 준다. 예전에는 마이크가
   /// 켜지면 질문이 "듣고 있습니다"로 덮여, 무엇을 실행하는지 다시 읽을 수 없었다(외부
   /// 평가). 질문은 이미 음성과 상태 문구로 알렸으므로 liveRegion이 아니다(두 번 읽히지 않게).
-  Widget _buildConfirmQuestionCard(double rs) {
-    final question = _confirmQuestion ?? '';
+  Widget _buildConfirmQuestionCard(double rs, [String? text]) {
+    final question = text ?? _confirmQuestion ?? '';
     return Semantics(
       label: '실행 확인 질문. $question',
       excludeSemantics: true,
@@ -603,6 +621,88 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
       _statusMessage = '알겠습니다. 취소할게요.';
     });
     await _speak('알겠습니다. 취소할게요.');
+  }
+
+  /// 되묻기의 '맞아요'. 음성 "네"와 같다: 들은 문장을 믿을 만한 것으로 보고 다시 처리한다.
+  Future<void> _acceptLowConfidence() async {
+    final text = _pendingLowConfidenceText;
+    if (text == null) return;
+    _stopListeningForConfirm();
+    setState(() {
+      _pendingLowConfidenceText = null;
+      _lowConfidenceQuestion = null;
+      _isProcessing = true;
+    });
+    _lastConfidence = 1.0;
+    await _sendTextToGemini(text);
+  }
+
+  /// 되묻기의 '아니에요'. 음성 "아니요"와 같다: 다시 말하도록 마이크를 연다.
+  Future<void> _rejectLowConfidence() async {
+    if (_pendingLowConfidenceText == null) return;
+    _stopListeningForConfirm();
+    const msg = '알겠습니다. 다시 말씀해 주세요.';
+    setState(() {
+      _pendingLowConfidenceText = null;
+      _lowConfidenceQuestion = null;
+      _statusMessage = msg;
+    });
+    if (!AccessibilitySettings.isScreenReaderActive) await _speak(msg);
+    _restartListeningAfterPrompt();
+  }
+
+  static const lowConfidenceYesKey = Key('voice_low_confidence_yes');
+  static const lowConfidenceNoKey = Key('voice_low_confidence_no');
+
+  Widget _buildLowConfidenceButtons(double rs) {
+    Widget big(Key key, String label, VoidCallback onPressed, {bool primary = false}) {
+      return ConstrainedBox(
+        constraints: BoxConstraints(minHeight: (primary ? 120 : 88) * rs),
+        child: primary
+            ? FilledButton(
+                key: key,
+                onPressed: onPressed,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24 * rs),
+                  ),
+                ),
+                child: Text(
+                  label,
+                  style: TextStyle(fontSize: 30 * rs, fontWeight: FontWeight.w900),
+                ),
+              )
+            : OutlinedButton(
+                key: key,
+                onPressed: onPressed,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.textPrimary,
+                  side: const BorderSide(color: AppColors.textSecondary, width: 2),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24 * rs),
+                  ),
+                ),
+                child: Text(
+                  label,
+                  style: TextStyle(fontSize: 26 * rs, fontWeight: FontWeight.w900),
+                ),
+              ),
+      );
+    }
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: 16 * rs),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          big(lowConfidenceYesKey, '맞아요', _acceptLowConfidence, primary: true),
+          SizedBox(height: 14 * rs),
+          big(lowConfidenceNoKey, '아니에요', _rejectLowConfidence),
+        ],
+      ),
+    );
   }
 
   /// 확인 질문 뒤에 다시 열어 둔 마이크를 닫는다(버튼으로 답했으므로).
@@ -853,7 +953,10 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     // 비우기 전의 명령이 필요하므로 미리 잡아 둔다.
     final pendingCommand = _pendingCommandData;
     if (decision.clearPendingCommand) _pendingCommandData = null;
-    if (decision.clearPendingLowConfidence) _pendingLowConfidenceText = null;
+    if (decision.clearPendingLowConfidence) {
+      _pendingLowConfidenceText = null;
+      _lowConfidenceQuestion = null;
+    }
 
     switch (decision.kind) {
       case VoiceIntentKind.emptyText:
@@ -984,14 +1087,18 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
         });
         _pendingLowConfidenceText = decision.payload;
         final confirmQuestion =
-            '"$text"라고 들었어요. 맞으면 "예", 아니면 "아니오"라고 말씀해 주세요.';
+            '"$text"라고 들었어요. 맞으면 "네", 아니면 "아니요"라고 말씀해 주세요.';
         setState(() {
           // 확인 질문 전문을 liveRegion에 실어 스크린리더 사용자도 질문 내용을
           // 들을 수 있게 한다('다시 확인 중'만으로는 무엇을 확인하는지 알 수 없다).
           _statusMessage = confirmQuestion;
+          _lowConfidenceQuestion = confirmQuestion;
           _isProcessing = false;
         });
-        await _speak(confirmQuestion, interrupt: true);
+        // 낭독기를 쓰면 상태 문구를 낭독기가 읽으므로 앱 음성은 내지 않는다(겹침 방지).
+        if (!AccessibilitySettings.isScreenReaderActive) {
+          await _speak(confirmQuestion, interrupt: true);
+        }
         // 질문했으니 답을 들을 수 있게 마이크를 자동으로 다시 연다.
         _restartListeningAfterPrompt();
         return;
@@ -1725,6 +1832,11 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
                           _buildConfirmQuestionCard(rs),
                           SizedBox(height: ResponsiveScale.v(context, 16)),
                           _buildConfirmButtons(rs),
+                        ] else if (_pendingLowConfidenceText != null &&
+                            _lowConfidenceQuestion != null) ...[
+                          _buildConfirmQuestionCard(rs, _lowConfidenceQuestion),
+                          SizedBox(height: ResponsiveScale.v(context, 16)),
+                          _buildLowConfidenceButtons(rs),
                         ]
                         else if (isIdle)
                           VoiceExampleCommands(
