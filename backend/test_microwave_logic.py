@@ -172,3 +172,19 @@ class FoodDictionaryTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class KoreanParticleTest(unittest.TestCase):
+    """확인 문구의 조사가 자연스러워야 한다("2분로", "만두은" 같은 오류 방지)."""
+
+    def test_ro(self):
+        from microwave_logic import with_ro
+        self.assertEqual(with_ro("2분"), "2분으로")
+        self.assertEqual(with_ro("30초"), "30초로")
+        self.assertEqual(with_ro("1분 30초"), "1분 30초로")
+        self.assertEqual(with_ro("1일"), "1일로")  # ㄹ 받침은 '로'
+
+    def test_topic(self):
+        from microwave_logic import with_topic
+        self.assertEqual(with_topic("햇반"), "햇반은")
+        self.assertEqual(with_topic("만두"), "만두는")
