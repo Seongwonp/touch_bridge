@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'accessibility_settings.dart';
 
@@ -198,6 +199,20 @@ class TtsService {
       }
       // 큐에 같은 문구가 이미 대기 중이면 중복 제거
       if (_queue.any((q) => q.text == message)) return;
+
+      // ── 낭독기가 켜져 있으면 앱 음성 엔진을 쓰지 않고 낭독기에 넘긴다 ─────────
+      // 낭독기와 앱이 같은 음성 엔진을 동시에 쓰면 앱 쪽 발화가 품질 낮은 음성으로
+      // 바뀌어 "외국인이 억지로 읽는" 소리가 났고(실기: 낭독기를 끄면 정상),
+      // 두 목소리가 겹쳤다. 낭독기 공지로 보내면 사용자가 고른 낭독기 목소리로
+      // 차례대로 읽힌다.
+      if (_screenReaderActive && !kIsWeb && !disableEngineForTest) {
+        _lastSpokenText = message;
+        _lastSpokenAt = now;
+        _addLog('(ANNOUNCE) $message', source);
+        // ignore: deprecated_member_use
+        await SemanticsService.announce(message, TextDirection.ltr);
+        return;
+      }
 
       final utterance = _Utterance(message, pr, source);
       final preempt = interrupt || pr == TtsPriority.emergency;
