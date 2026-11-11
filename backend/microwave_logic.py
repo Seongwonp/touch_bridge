@@ -123,6 +123,28 @@ def format_duration(seconds: int) -> str:
     return " ".join(parts)
 
 
+def _has_batchim(word: str) -> bool:
+    """마지막 글자에 받침이 있는지. 한글이 아니면 받침 없음으로 본다."""
+    if not word:
+        return False
+    code = ord(word[-1]) - 0xAC00
+    return 0 <= code < 11172 and code % 28 != 0
+
+
+def with_ro(word: str) -> str:
+    """'(으)로' 조사. 받침이 있으면 '으로', 없거나 ㄹ 받침이면 '로'."""
+    if not word:
+        return word
+    code = ord(word[-1]) - 0xAC00
+    rieul = 0 <= code < 11172 and code % 28 == 8
+    return f"{word}{'으로' if _has_batchim(word) and not rieul else '로'}"
+
+
+def with_topic(word: str) -> str:
+    """'은/는' 조사."""
+    return f"{word}{'은' if _has_batchim(word) else '는'}"
+
+
 def parse_time_from_text(text: str):
     """문장에서 'X분 Y초' 패턴을 추출하여 초 단위로 반환"""
     text = normalize_text(text)
@@ -241,7 +263,7 @@ def infer_food_command(text: str):
                 "inferred_seconds": actual,
                 "confidence": 0.8,
                 "needs_confirmation": True,
-                "message": f"{format_duration(actual)}으로 시작할까요? 전자레인지 작동하면 될까요?",
+                "message": f"{with_ro(format_duration(actual))} 시작할까요?",
                 "confirmation_message": f"알겠습니다. {format_duration(actual)} 조리를 시작할게요.",
             }
         return {
@@ -275,7 +297,7 @@ def infer_food_command(text: str):
                     "inferred_seconds": 180,
                     "confidence": 0.95,
                     "needs_confirmation": True,
-                    "message": "해동 모드로 3분 조리를 시작할까요? 전자레인지 작동하면 될까요?",
+                    "message": "해동 모드로 3분 조리를 시작할까요?",
                     "confirmation_message": "알겠습니다. 해동 모드로 3분 조리를 시작할게요.",
                 }
                 
@@ -288,7 +310,7 @@ def infer_food_command(text: str):
                 "inferred_seconds": seconds,
                 "confidence": 0.85,
                 "needs_confirmation": True,
-                "message": f"{food}은 {format_duration(seconds)}로 데워도 될까요? 전자레인지 작동하면 될까요?",
+                "message": f"{with_topic(food)} {with_ro(format_duration(seconds))} 데울까요?",
                 "confirmation_message": f"알겠습니다. {food} 1개 {format_duration(seconds)} 조리를 시작할게요."
             }
 
@@ -370,7 +392,7 @@ def check_simple_rules(text: str):
             "inferred_seconds": 30,
             "confidence": 0.95,
             "needs_confirmation": True,
-            "message": "30초로 시작할까요? 전자레인지 작동하면 될까요?",
+            "message": "30초로 시작할까요?",
             "confirmation_message": "알겠습니다. 30초 조리를 시작할게요.",
         }
 
