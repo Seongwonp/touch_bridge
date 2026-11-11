@@ -1052,6 +1052,19 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
       _pressDoneLabel = '';
       _statusMessage = label;
     });
+    // 아직 연결 전이면 "누르는 중"을 먼저 말하지 않는다. 연결에 실패하면 누르지도 않았는데
+    // "누르는 중입니다" 뒤에 "연결하지 못했습니다"가 나와 혼란스러웠다(실기). 연결된 뒤에 말한다.
+    if (!BleService.instance.isConnected) {
+      _deferredPressLabel = label;
+      return;
+    }
+    await _announcePressing(label);
+  }
+
+  String? _deferredPressLabel;
+
+  Future<void> _announcePressing(String label) async {
+    _deferredPressLabel = null;
     await _speak(label, interrupt: true, priority: TtsPriority.result);
     // 누르는 동안에는 마이크가 닫혀 "멈춰"를 듣지 못한다. 멈추는 방법을 처음 한 번 알린다.
     if (!_stopHintSpoken) {
@@ -1593,10 +1606,16 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
         if (mounted) {
           setState(() => _statusMessage = 'Touch Bridge에 연결하지 못했습니다. 전원이 켜져 있는지 확인하거나 보호자에게 알려 주세요.');
         }
+        _deferredPressLabel = null;
         _speak('Touch Bridge에 연결하지 못했습니다. 전원이 켜져 있는지 확인하거나 보호자에게 알려 주세요.');
         return false;
       }
       deviceId = BleService.instance.connectedDeviceId;
+      final pending = _deferredPressLabel;
+      if (pending != null) {
+        await _announcePressing(pending);
+        if (_stopRequestedBeforeSend()) return false;
+      }
     }
 
     // 활성 기기 프로필 로드. 저장된 매핑이 있으면 목데이터보다 우선 사용한다.
