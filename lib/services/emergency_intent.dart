@@ -91,7 +91,9 @@ class EmergencyStopOutcome {
       return const EmergencyStopOutcome(
         acknowledged: true,
         sent: true,
-        message: '터치브릿지를 멈췄습니다. 가전이 이미 돌고 있으면 가전의 취소 버튼을 눌러 주세요.',
+        // 볼 수 없는 사용자에게 가전 버튼을 직접 누르라고 하지 않는다(외부 평가).
+        // "취소해 줘"라고 말하면 앱이 가전의 취소 버튼을 확인받고 눌러 준다.
+        message: '터치브릿지를 멈췄습니다. 가전도 끄려면 "취소해 줘"라고 말씀하세요.',
       );
     }
 

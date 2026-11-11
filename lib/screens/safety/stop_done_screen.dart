@@ -8,14 +8,22 @@ import '../../widgets/top_app_bar.dart';
 import '../../services/accessibility_settings.dart';
 import '../../services/accessibility_confirmation_policy.dart';
 import '../../services/app_logger.dart';
+import '../../services/power_status_service.dart';
 import '../../services/tts_service.dart';
 import '../../theme/app_colors.dart';
+import '../voice/voice_listening_screen.dart';
 
 /// 비상 정지 완료 화면
 /// - 이중 탭 확인 패턴
 /// - "홈으로 돌아가기" 버튼 하나만 둔다. 하단 탭을 두면 다른 탭으로 이동해도
 ///   화면이 바뀌지 않아 음성 안내와 동작이 어긋난다.
 /// - 시각장애인 접근성 최우선
+/// 끝난 화면의 전원 상태 문장(테스트에서도 같은 문장을 확인한다).
+class StopDoneScreenPowerText {
+  const StopDoneScreenPowerText._();
+  static String of(PowerState state) => _StopDoneScreenState.powerSentence(state);
+}
+
 class StopDoneScreen extends StatefulWidget {
   const StopDoneScreen({super.key, this.completed = false});
 
@@ -33,17 +41,57 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
   final TtsService _tts = TtsService();
   bool _armedHomeButton = false;
 
+  /// 전류 센서가 본 가전 전원 상태 문장. 참고 정보일 뿐 완료·안전 판단이 아니다.
+  /// 센서 보고가 없으면 앱이 모른다고 솔직히 말하고, 볼 수 없어도 할 수 있는 확인
+  /// 방법(종료음)을 알려 준다. 예전에는 "가전이 멈췄는지 확인해 주세요"뿐이라 화면을
+  /// 못 보는 사용자는 할 수 없는 일을 요구했다(외부 평가).
+  static String powerSentence(PowerState state) {
+    switch (state) {
+      case PowerState.on:
+        return '전류 센서로 보면 가전 전원이 아직 켜져 있습니다.';
+      case PowerState.off:
+        return '전류 센서로 보면 가전 전원이 꺼졌습니다.';
+      case PowerState.unknown:
+        return '가전이 멈췄는지는 앱이 확인할 수 없습니다. 가전의 종료음을 들어 보세요.';
+    }
+  }
+
+  PowerState _power = PowerStatusService.instance.state;
+
+  void _onPower() {
+    final now = PowerStatusService.instance.state;
+    if (!mounted || now == _power) return;
+    final before = _power;
+    setState(() => _power = now);
+    // 켜짐 → 꺼짐만 알린다(결과가 바뀐 순간). 모름으로 돌아가는 것은 조용히 반영한다.
+    if (before == PowerState.on && now == PowerState.off) {
+      _tts.speak(powerSentence(now), priority: TtsPriority.result);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    PowerStatusService.instance.status.addListener(_onPower);
+    final power = powerSentence(_power);
     // 이 안내는 화면 이름이 아니라 "무슨 일이 일어났는지"의 결과 보고이므로
     // 스크린리더 활성 시에도 들려야 한다 — result 우선순위 명시.
     _tts.speak(
       widget.completed
-          ? '설정한 시간이 지났습니다. 가전이 멈췄는지 확인해 주세요. 홈으로 돌아가려면 버튼을 누르세요.'
-          : '터치브릿지를 멈췄습니다. 가전이 이미 돌고 있으면 가전의 취소 버튼을 눌러 주세요. 홈으로 돌아가려면 버튼을 누르세요.',
+          ? '설정한 시간이 지났습니다. $power 홈으로 돌아가려면 버튼을 누르세요.'
+          : '터치브릿지를 멈췄습니다. 가전이 이미 돌고 있었다면 가전은 계속 돌 수 있습니다. $power '
+              '가전도 끄려면 가전 취소 버튼 누르기를 누르세요.',
       interrupt: true,
       priority: TtsPriority.result,
+    );
+  }
+
+  Future<void> _pressApplianceCancel() async {
+    HapticFeedback.selectionClick();
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const VoiceListeningScreen(initialText: '취소'),
+      ),
     );
   }
 
@@ -93,6 +141,7 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
 
   @override
   void dispose() {
+    PowerStatusService.instance.status.removeListener(_onPower);
     // TtsService는 앱 전역 싱글톤 큐라 여기서 stop()을 부르면 다음 화면(홈)이
     // 막 넣은 안내까지 지워진다.
     super.dispose();
@@ -104,9 +153,10 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
     final headline = widget.completed ? '설정한 시간이\n지났습니다' : '터치브릿지를\n멈췄습니다';
     final headlineLabel = widget.completed ? '설정한 시간이 지났습니다.' : '터치브릿지를 멈췄습니다.';
     final circleLabel = widget.completed ? '설정한 시간이 지났습니다.' : '터치브릿지 멈춤 확인.';
+    final power = powerSentence(_power);
     final descText = widget.completed
-        ? '가전이 멈췄는지 확인해 주세요.\n홈으로 돌아가려면 버튼을 탭하세요.'
-        : '가전이 이미 돌고 있으면\n가전의 취소 버튼을 눌러 주세요.';
+        ? power
+        : '가전이 이미 돌고 있었다면 계속 돌 수 있습니다. $power';
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -247,6 +297,34 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
                           ),
                         ),
                         SizedBox(height: ResponsiveScale.v(context, 20)),
+                        // 터치브릿지 정지는 가전 정지가 아니다. 볼 수 없는 사용자에게 가전 버튼을
+                        // 직접 누르라고 하는 대신, 앱이 가전의 취소 버튼을 눌러 준다(외부 평가).
+                        // 음성 화면에서 "취소"로 처리해 평소처럼 '실행'·'취소' 확인을 거친다.
+                        if (!widget.completed) ...[
+                          ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minWidth: double.infinity,
+                              minHeight: ResponsiveScale.v(context, 72),
+                            ),
+                            child: OutlinedButton.icon(
+                              key: const Key('stop_done_cancel_appliance'),
+                              onPressed: _pressApplianceCancel,
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.textPrimary,
+                                side: const BorderSide(color: AppColors.primary, width: 2),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(18),
+                                ),
+                              ),
+                              icon: const Icon(Icons.cancel_rounded, size: 28),
+                              label: const Text(
+                                '가전 취소 버튼 누르기',
+                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                              ),
+                            ),
+                          ),
+                          SizedBox(height: ResponsiveScale.v(context, 14)),
+                        ],
                         // 홈으로 돌아가기 버튼
                         ConstrainedBox(
                           constraints: BoxConstraints(

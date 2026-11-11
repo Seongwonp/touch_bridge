@@ -136,6 +136,7 @@ void main() {
       for (var i = 0; i < 5; i++) {
         await tester.pump(const Duration(milliseconds: 200));
       }
+      await tester.ensureVisible(find.byKey(VoiceListeningScreenState.confirmRunKey));
       await tester.tap(find.byKey(VoiceListeningScreenState.confirmRunKey));
       for (var i = 0; i < 10; i++) {
         await tester.pump(const Duration(milliseconds: 300));
@@ -148,6 +149,27 @@ void main() {
       await tester.pump(const Duration(seconds: 3));
     });
 
+    testWidgets('확인 질문은 실행·취소 위에 계속 보인다 (마이크가 켜져도 덮이지 않음)', (tester) async {
+      final state = await pumpScreen(tester);
+      // ignore: unawaited_futures
+      state.handleCommandForTest(cook());
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+      final question = state.confirmQuestionForTest!;
+      expect(
+        find.bySemanticsLabel('실행 확인 질문. $question'),
+        findsOneWidget,
+      );
+      await tester.ensureVisible(find.byKey(VoiceListeningScreenState.confirmCancelKey));
+      await tester.tap(find.byKey(VoiceListeningScreenState.confirmCancelKey));
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+      expect(find.bySemanticsLabel(RegExp('실행 확인 질문')), findsNothing);
+      await tester.pump(const Duration(seconds: 4));
+    });
+
     testWidgets("'취소'를 누르면 아무것도 보내지 않는다", (tester) async {
       final state = await pumpScreen(tester);
       // ignore: unawaited_futures
@@ -155,6 +177,7 @@ void main() {
       for (var i = 0; i < 5; i++) {
         await tester.pump(const Duration(milliseconds: 200));
       }
+      await tester.ensureVisible(find.byKey(VoiceListeningScreenState.confirmCancelKey));
       await tester.tap(find.byKey(VoiceListeningScreenState.confirmCancelKey));
       for (var i = 0; i < 5; i++) {
         await tester.pump(const Duration(milliseconds: 200));
@@ -216,7 +239,7 @@ void main() {
     expect(find.byType(EmergencyStopScreen), findsNothing);
     expect(state.isExecutingForTest, isFalse);
     // 정지 안내가 남아 있고, 늦게 돌아온 실행 결과 문구로 덮이지 않았다.
-    expect(state.statusMessageForTest, '터치브릿지를 멈췄습니다. 가전이 이미 돌고 있으면 가전의 취소 버튼을 눌러 주세요.');
+    expect(state.statusMessageForTest, '터치브릿지를 멈췄습니다. 가전도 끄려면 "취소해 줘"라고 말씀하세요.');
     expect(TtsService().getRecentLog().join('\n'), isNot(contains('취소했습니다')));
   });
 
@@ -353,7 +376,7 @@ void main() {
 
   testWidgets('정지 버튼이 뜬 뒤 전송 시작 전(연결 중)에 정지하면 버튼을 하나도 누르지 않는다', (tester) async {
     // 아직 시작 전인 시퀀스가 정지로 올라간 epoch를 새 기준으로 잡으면 안 된다.
-    // 그러면 "터치브릿지를 멈췄습니다. 가전이 이미 돌고 있으면 가전의 취소 버튼을 눌러 주세요." 안내 뒤에도 G-code(Z 하강 포함)가
+    // 그러면 "터치브릿지를 멈췄습니다. 가전도 끄려면 "취소해 줘"라고 말씀하세요." 안내 뒤에도 G-code(Z 하강 포함)가
     // 나가고 조리 타이머 화면까지 진입한다.
     slowFirstConnect();
     stubStopAck('STOPPED');
@@ -372,7 +395,7 @@ void main() {
     expect(find.byType(StopDoneScreen), findsOneWidget);
     expect(find.byType(EmergencyStopScreen, skipOffstage: false), findsNothing,
         reason: '정지했는데 조리 타이머로 들어가면 안 된다');
-    expect(state.statusMessageForTest, '터치브릿지를 멈췄습니다. 가전이 이미 돌고 있으면 가전의 취소 버튼을 눌러 주세요.');
+    expect(state.statusMessageForTest, '터치브릿지를 멈췄습니다. 가전도 끄려면 "취소해 줘"라고 말씀하세요.');
   });
 
   testWidgets('화면 밖(전역 비상 버튼 등)에서 온 정지도 전송 시작 전 구간에서 시퀀스를 막는다', (tester) async {

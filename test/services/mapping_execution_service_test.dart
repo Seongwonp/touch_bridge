@@ -201,6 +201,27 @@ void main() {
   });
 
   group('MappingExecutionResult.userMessage (사용자 문구 정직화)', () {
+    test('도중에 실패하면 이미 눌렸을 수 있는 버튼을 알린다', () {
+      const r = MappingExecutionResult(
+        ok: false,
+        message: 'fail',
+        explicitUserMessage: '명령을 보내지 못했습니다.',
+        pressedBefore: ['BT-02'],
+      );
+      expect(r.userMessage, contains('30초 버튼은 이미 눌렸을 수 있습니다'));
+      expect(r.userMessage, contains('취소해 줘'));
+    });
+
+    test('정지로 끊긴 경우는 정지 안내에 맡기고 덧붙이지 않는다', () {
+      const r = MappingExecutionResult(
+        ok: false,
+        message: 'stop',
+        stoppedByEmergency: true,
+        pressedBefore: ['BT-02'],
+      );
+      expect(r.userMessage, isNot(contains('이미 눌렸을')));
+    });
+
     test('매핑 미등록 실패는 버튼 등록 요청을 안내하고 내부 ID를 노출하지 않는다', () {
       const result = MappingExecutionResult(
         ok: false,

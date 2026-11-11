@@ -30,7 +30,7 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
   final bool showEmergency;
 
   @override
-  Size get preferredSize => const Size.fromHeight(86);
+  Size get preferredSize => const Size.fromHeight(92);
 
   @override
   Widget build(BuildContext context) {
@@ -76,15 +76,15 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
             // Status Header — 스크린리더용 통합 레이블으로 연결/기기 상태를 한 번에 읽는다.
             // 연결·기기 선택이 바뀌면 다시 그린다. 한 번만 읽으면 재연결 뒤에도
             // "허브 연결 필요"로 남아 낭독기 사용자에게 틀린 상태를 알린다.
-            // 앱바 높이는 86으로 고정이라, 시스템 글자를 크게 하면 이 줄이 넘친다.
-            // 보조 정보이므로 글자 확대를 1.2배까지만 따른다(낭독은 영향 없음).
+            // 앱바 높이가 고정이라 시스템 글자 확대는 1.4배까지 따른다(낭독은 영향 없음).
+            // 연결 상태를 더 크게 읽어야 하는 사용자를 위해 홈의 연결 배너는 제한 없이 커진다.
             StreamBuilder<bool>(
               stream: BleService.instance.isConnectedStream,
               builder: (context, _) => ValueListenableBuilder<String?>(
                 valueListenable:
                     ActiveDeviceService.instance.activeDeviceNameNotifier,
                 builder: (context, _, _) => MediaQuery.withClampedTextScaling(
-                  maxScaleFactor: 1.2,
+                  maxScaleFactor: 1.4,
                   child: _buildStatusHeader(rs),
                 ),
               ),
@@ -109,11 +109,11 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
   Widget _buildStatusHeader(double rs) {
     final connected = BleService.instance.isConnected;
     final hubText =
-        connected ? BleService.instance.connectedDeviceName : '허브 연결 필요';
+        connected ? BleService.instance.connectedDeviceName : '연결 안 됨';
     final deviceName = ActiveDeviceService.instance.getActiveDeviceName();
     return Semantics(
       label: [
-        connected ? '허브 연결됨: $hubText' : '허브 연결 필요',
+        connected ? 'Touch Bridge 연결됨: $hubText' : 'Touch Bridge 연결 안 됨',
         '선택 기기: ${deviceName ?? '없음'}',
       ].join(', '),
       child: ExcludeSemantics(
@@ -133,7 +133,7 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
                   hubText,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 11 * rs, color: Colors.white70),
+                  style: TextStyle(fontSize: 13 * rs, color: Colors.white),
                 ),
               ),
               SizedBox(width: 12 * rs),
@@ -144,7 +144,7 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
                   deviceName ?? '기기 선택 필요',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 11 * rs, color: Colors.white70),
+                  style: TextStyle(fontSize: 13 * rs, color: Colors.white),
                 ),
               ),
             ],

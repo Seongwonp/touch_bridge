@@ -6,7 +6,9 @@ import '../models/command_result.dart';
 import 'app_logger.dart';
 import 'ble_service.dart';
 import 'device_mapping_service.dart';
+import 'ac_command_service.dart';
 import 'microwave_command_service.dart';
+import 'washing_machine_command_service.dart';
 
 class MappingExecutionResult {
   const MappingExecutionResult({
@@ -23,7 +25,44 @@ class MappingExecutionResult {
     this.stoppedByEmergency = false,
     this.deviceFault = false,
     this.deviceUnconfirmed = false,
+    this.pressedBefore = const [],
   });
+
+  /// 시퀀스가 도중에 멈췄을 때, 그 전에 이미 보낸(눌렀을 수 있는) 버튼들.
+  /// 사용자에게 무엇이 이미 눌렸는지 알려 다시 시켰을 때 시간이 더해지지 않게 한다.
+  final List<String> pressedBefore;
+
+  /// [pressedBefore]를 채운 사본.
+  MappingExecutionResult withPressedBefore(List<String> ids) =>
+      MappingExecutionResult(
+        ok: ok,
+        message: message,
+        buttonId: buttonId,
+        row: row,
+        col: col,
+        x: x,
+        y: y,
+        gcode: gcode,
+        dryRun: dryRun,
+        explicitUserMessage: explicitUserMessage,
+        stoppedByEmergency: stoppedByEmergency,
+        deviceFault: deviceFault,
+        deviceUnconfirmed: deviceUnconfirmed,
+        pressedBefore: List.unmodifiable(ids),
+      );
+
+  static String _labelOf(String id) =>
+      MicrowaveCommandService.buttonLabel[id] ??
+      WashingMachineCommandService.buttonLabel[id] ??
+      AcCommandService.buttonLabel[id] ??
+      id;
+
+  /// 이미 눌렸을 수 있는 버튼 안내. 정지로 끊긴 경우는 정지 안내가 맡으므로 비운다.
+  String get _pressedNote {
+    if (ok || pressedBefore.isEmpty || stoppedByEmergency) return '';
+    final names = pressedBefore.map(_labelOf).join(', ');
+    return ' 앞의 $names 버튼은 이미 눌렸을 수 있습니다. 다시 시키기 전에 "취소해 줘"로 가전을 먼저 끄세요.';
+  }
 
   final bool ok;
   final String message;
@@ -58,7 +97,9 @@ class MappingExecutionResult {
   /// 시각장애인 사용자에게 읽어줄 정직한 문구.
   /// 기술용어(G-code/XYZ/BT-xx)나 내부 좌표를 노출하지 않는다.
   /// (개발자 로그용 상세 문구는 [message]를 그대로 쓴다.)
-  String get userMessage {
+  String get userMessage => '${_baseUserMessage()}$_pressedNote';
+
+  String _baseUserMessage() {
     if (explicitUserMessage != null) return explicitUserMessage!;
     if (stoppedByEmergency) return '비상 정지로 남은 동작을 취소했습니다.';
     if (deviceFault) {
@@ -465,6 +506,7 @@ class MappingExecutionService {
     // [sendGcodeSequenceWithIndex]가 한다.)
     final epoch = BleService.instance.motionEpoch;
     final faultMark = BleService.instance.deviceFaultCount;
+    final pressed = <String>[];
     for (final buttonId in buttonIds) {
       if (!dryRun && BleService.instance.motionEpoch != epoch) {
         AppLogger.warn('mapping.sequence.cancelled_by_stop', {
@@ -490,6 +532,7 @@ class MappingExecutionService {
           buttonId: buttonId,
           gcode: dryRunGcode,
           deviceFault: true,
+          pressedBefore: List.unmodifiable(pressed),
         );
       }
       final result = await pressButton(
@@ -500,7 +543,8 @@ class MappingExecutionService {
         epoch: epoch,
         faultMark: faultMark,
       );
-      if (!result.ok) return result;
+      if (!result.ok) return result.withPressedBefore(pressed);
+      pressed.add(buttonId);
       dryRunGcode.addAll(result.gcode);
       await Future<void>.delayed(betweenPressDelay);
     }

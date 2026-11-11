@@ -57,7 +57,9 @@ class _BleStatusBannerState extends State<BleStatusBanner> {
           case BleReconnectState.failed:
             _status = _BleStatus.failed;
             _tts.speak(
-              '블루투스 재연결에 실패했습니다. 설정에서 기기를 다시 연결해 주세요.',
+              // 연결 설정은 보호자 기능이라 사용자에게 시키지 않는다(외부 평가).
+              // 다음 명령 때 앱이 자동으로 다시 연결을 시도한다.
+              '기기와 연결이 끊겼습니다. 다시 말씀하시면 자동으로 연결을 시도합니다. 계속 안 되면 보호자에게 알려 주세요.',
               source: 'BleStatusBanner',
               priority: TtsPriority.result,
               interrupt: true,
@@ -104,7 +106,7 @@ class _BleStatusBannerState extends State<BleStatusBanner> {
           Icons.hub_outlined,
         ),
       _BleStatus.disconnected => (
-          '허브 연결 필요',
+          'Touch Bridge 연결 안 됨',
           AppColors.textTertiary,
           Icons.hub_outlined,
         ),
@@ -134,11 +136,12 @@ class _BleStatusBannerState extends State<BleStatusBanner> {
               Flexible(
                 child: Text(
                   label,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
+                  // 저시력 사용자가 연결 상태를 읽을 수 있게 키우고, 시스템 글자 확대를 따른다.
                   style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
                     color: color,
                   ),
                 ),
