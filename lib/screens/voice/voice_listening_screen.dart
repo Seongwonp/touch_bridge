@@ -378,15 +378,23 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     );
   }
 
-  void _resetSilenceTimer() {
+  /// 말을 시작한 뒤 마지막 말이 들린 다음 이만큼 조용하면 끝낸다. 예전에는 말이 끝나도
+  /// 침묵 설정(기본 8초)만큼 기다려, 말한 뒤 한참 있다가 처리됐다(실기 사용자 의견).
+  /// 말을 시작하기 전의 기다림은 듣기 창(명령 20초·확인 30초)이 맡는다.
+  static const _endOfSpeechSilence = Duration(milliseconds: 1500);
+
+  void _resetSilenceTimer({Duration? after}) {
     _silenceTimer?.cancel();
     final setting = AccessibilitySettings.instance.sttSilenceTimeoutSeconds;
     _silenceTimer = Timer(
-      Duration(
-        seconds: _awaitingConfirm && _lastWords.isEmpty
-            ? math.max(setting, _confirmWaitSeconds)
-            : setting,
-      ),
+      after ??
+          (_lastWords.isNotEmpty
+              ? _endOfSpeechSilence
+              : Duration(
+                  seconds: _awaitingConfirm
+                      ? math.max(setting, _confirmWaitSeconds)
+                      : setting,
+                )),
       () {
       if (!mounted || !_isRecording || _isProcessing) return;
 
@@ -657,7 +665,14 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
               if (result.finalResult) {
                 _lastConfidence = result.confidence;
               }
-              if (_lastWords.isNotEmpty) _resetSilenceTimer();
+              if (_lastWords.isNotEmpty) {
+                // 엔진이 문장이 끝났다고 알리면(최종 결과) 거의 바로 끝낸다.
+                _resetSilenceTimer(
+                  after: result.finalResult
+                      ? const Duration(milliseconds: 400)
+                      : null,
+                );
+              }
             }
           },
           listenOptions: SpeechListenOptions(
