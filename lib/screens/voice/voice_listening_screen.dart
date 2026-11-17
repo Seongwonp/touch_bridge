@@ -1172,10 +1172,21 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   /// 버튼을 연달아 누르는 구간의 안내 문구.
   /// 전송에 버튼당 약 1.9초가 걸려(로그 기준) 4개면 8초에 가까운데, 그동안
   /// 아무 안내가 없으면 화면을 못 보는 사용자는 멈춘 것과 구분할 수 없다.
-  static String _pressingLabelForSequence(List<dynamic> commands) =>
-      commands.length > 1
-      ? '버튼 ${commands.length}개를 누르는 중입니다.'
-      : '버튼을 누르는 중입니다.';
+  ///
+  /// 전자레인지 버튼이면 무엇을 누르는지 이름으로 알린다("10분, 시작 버튼을 누르는
+  /// 중입니다"). 개수만 말하면 사용자가 무엇이 눌리는지 알 수 없다.
+  @visibleForTesting
+  static String pressingLabelForSequence(List<dynamic> commands) {
+    final names = [
+      for (final c in commands) MicrowaveCommandService.buttonLabel['$c'],
+    ];
+    if (commands.isNotEmpty && commands.length <= 4 && !names.contains(null)) {
+      return '${names.join(', ')} 버튼을 누르는 중입니다.';
+    }
+    return commands.length > 1
+        ? '버튼 ${commands.length}개를 누르는 중입니다.'
+        : '버튼을 누르는 중입니다.';
+  }
 
   /// 안내·질문 발화가 끝난 뒤 자동으로 청취를 재개한다.
   ///
@@ -1857,7 +1868,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
             MicrowaveCommandService.calculateSeconds(commands);
         // 버튼을 여러 개 연달아 누르는 경로라 실행 구간이 가장 길다(로그 기준
         // 4개에 약 7.7초). 진행 화면 없이는 그동안 멈춘 것처럼 보인다.
-        await _beginPress(_pressingLabelForSequence(commands));
+        await _beginPress(pressingLabelForSequence(commands));
         final microwaveSent = await _sendBleSequence(commands);
         if (!microwaveSent) {
           _afterSequenceNotSent(); // 실패 안내는 _sendBleSequence가, 정지 안내는 정지 경로가 함
@@ -1908,7 +1919,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
           _restartListeningAfterPrompt();
           return;
         }
-        await _beginPress(_pressingLabelForSequence(commands));
+        await _beginPress(pressingLabelForSequence(commands));
         final washerSent = await _sendBleSequence(commands);
         if (!washerSent) {
           _afterSequenceNotSent(); // 실패 안내는 _sendBleSequence가, 정지 안내는 정지 경로가 함
@@ -1931,7 +1942,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
           _restartListeningAfterPrompt();
           return;
         }
-        await _beginPress(_pressingLabelForSequence(commands));
+        await _beginPress(pressingLabelForSequence(commands));
         final acSent = await _sendBleSequence(commands);
         if (!acSent) {
           _afterSequenceNotSent(); // 실패 안내는 _sendBleSequence가, 정지 안내는 정지 경로가 함
