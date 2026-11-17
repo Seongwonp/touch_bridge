@@ -399,8 +399,27 @@ class BleService {
     if (isConnected && _connectedDevice?.remoteId.str == deviceId) {
       return true;
     }
-    return await connect(deviceId);
+    // 같은 장치로 이미 연결을 시도 중이면 그 결과를 함께 기다린다. 앱 시작 때 여러 곳
+    // (자동 재연결, 활성 기기 선택, 음성 화면)이 동시에 부르면 시도가 줄줄이 쌓여 하나에
+    // 5초씩 20초 넘게 연결 상태가 바뀌었고, 그때마다 낭독기가 상태를 읽어 마이크에
+    // 섞였다(실기 2026-11-17).
+    final pending = _pendingEnsure;
+    if (pending != null && _pendingEnsureId == deviceId) return pending;
+    final attempt = connect(deviceId);
+    _pendingEnsure = attempt;
+    _pendingEnsureId = deviceId;
+    try {
+      return await attempt;
+    } finally {
+      if (identical(_pendingEnsure, attempt)) {
+        _pendingEnsure = null;
+        _pendingEnsureId = null;
+      }
+    }
   }
+
+  Future<bool>? _pendingEnsure;
+  String? _pendingEnsureId;
 
   Future<void> disconnect() async {
     _motionEpoch++;

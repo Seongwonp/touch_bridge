@@ -47,9 +47,11 @@ class SpeechSessionService {
   bool get shouldStayQuiet => micWindowActive || _speech.isListening;
   bool get isAvailable => _available;
 
-  /// 패키지 초기화 — 몇 번을 불러도 실제 초기화(콜백 등록)는 한 번만 한다.
+  /// 패키지 초기화 — 성공한 뒤에는 다시 하지 않는다. 실패는 기억하지 않고 다음 호출에서
+  /// 다시 시도한다. 예전에는 한 번 실패하면 앱을 다시 켤 때까지 음성을 못 썼다(실기
+  /// 2026-11-17: 음성 엔진이 잠깐 바쁠 때 실패 → "음성 인식 기능을 사용할 수 없습니다" 고정).
   Future<bool> initialize() async {
-    if (_initAttempted) return _available;
+    if (_initAttempted && _available) return true;
     _initAttempted = true;
 
     // macOS 26 beta TCC 버그 가드.

@@ -354,9 +354,9 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
         }
       }
     } else {
-      _speak('음성 인식 기능을 사용할 수 없습니다.');
+      _speak('음성 인식을 시작하지 못했습니다. 잠시 뒤 말하기를 다시 눌러 주세요.');
       setState(() {
-        _statusMessage = '음성 인식 기능을 사용할 수 없습니다.';
+        _statusMessage = '음성 인식을 시작하지 못했습니다. 잠시 뒤 말하기를 다시 눌러 주세요.';
       });
     }
   }
@@ -519,6 +519,8 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
         '터치',
         '터치 브릿지',
         '터치 브리지',
+        // 삼성 낭독기가 상태를 바꿀 때 스스로 읽는 말(실기: 이 문장이 명령으로 서버에 감).
+        '음성 안내 지원 사용',
         '재연결 중',
         _statusMessage,
         ?_confirmQuestion,
@@ -636,7 +638,13 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   Future<void> _toggleRecording() async {
     if (_isStartingRecording) return;
     if (!_speechEnabled) {
-      _speak('음성 인식 기능을 사용할 수 없습니다.');
+      // 화면을 열 때 초기화가 잠깐 실패했을 수 있다. 누를 때 한 번 더 시도한다.
+      _speechEnabled = await _speechSession.initialize();
+      if (!mounted) return;
+    }
+    if (!_speechEnabled) {
+      _speak('음성 인식을 시작하지 못했습니다. 잠시 뒤 말하기를 다시 눌러 주세요.');
+      setState(() => _statusMessage = '음성 인식을 시작하지 못했습니다. 잠시 뒤 말하기를 다시 눌러 주세요.');
       return;
     }
 
