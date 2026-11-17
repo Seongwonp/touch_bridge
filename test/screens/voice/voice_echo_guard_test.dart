@@ -38,4 +38,12 @@ void main() {
     expect(VoiceListeningScreenState.echoMatches('30초 돌려줘', prompts), isFalse);
     expect(VoiceListeningScreenState.stripEchoPhrases('터치 브릿지 30초 돌려줘'), '30초 돌려줘');
   });
+
+  test('실행 안내문을 확인 질문으로 바꾼다', () {
+    expect(VoiceListeningScreenState.confirmQuestionFor('30초 조리를 시작합니다.'), '30초 조리를 시작할까요?');
+    expect(VoiceListeningScreenState.confirmQuestionFor('버튼 2개를 누릅니다.'), '버튼 2개를 누를까요?');
+    expect(VoiceListeningScreenState.confirmQuestionFor('만두를 2분 데웁니다.'), '만두를 2분 데울까요?');
+    expect(VoiceListeningScreenState.confirmQuestionFor('햇반은 2분으로 데울까요?'), '햇반은 2분으로 데울까요?');
+    expect(VoiceListeningScreenState.confirmQuestionFor('세탁 코스'), '세탁 코스 실행할까요?');
+  });
 }

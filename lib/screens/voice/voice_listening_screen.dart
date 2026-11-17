@@ -541,6 +541,28 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
         ?_lowConfidenceQuestion,
       ]);
 
+  /// 실행 안내문을 확인 질문으로 바꾼다. "30초 조리를 시작합니다." → "30초 조리를
+  /// 시작할까요?". 예전에는 "시작합니다. 실행할까요?"라고 해 이미 시작한 것처럼 들렸다.
+  /// 모르는 어미면 원문 뒤에 "실행할까요?"를 붙인다.
+  @visibleForTesting
+  static String confirmQuestionFor(String message) {
+    final m = message.trim();
+    const endings = {
+      '시작합니다.': '시작할까요?',
+      '누릅니다.': '누를까요?',
+      '데웁니다.': '데울까요?',
+      '돌립니다.': '돌릴까요?',
+      '합니다.': '할까요?',
+    };
+    for (final e in endings.entries) {
+      if (m.endsWith(e.key)) {
+        return m.substring(0, m.length - e.key.length) + e.value;
+      }
+    }
+    if (m.endsWith('?')) return m;
+    return '$m 실행할까요?';
+  }
+
   /// 사용자 말 앞뒤에 섞여 녹음된 앱·낭독기 고정 문구를 지운다(예: "듣고 있습니다 30초
   /// 돌려줘" → "30초 돌려줘"). 문구만 남는 경우는 [echoMatches]가 걸러낸다.
   @visibleForTesting
@@ -1761,7 +1783,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
       _pendingCommandData = Map<String, dynamic>.from(data);
       final what = message.isNotEmpty ? message : '버튼 ${commands.length}개를 누릅니다.';
       // 버튼을 찾지 않고 말로 답하면 된다는 것을 질문에 함께 알린다.
-      final question = '$what 실행할까요? "네" 또는 "아니요"로 답해 주세요.';
+      final question = '${confirmQuestionFor(what)} "네" 또는 "아니요"로 답해 주세요.';
       setState(() {
         _confirmQuestion = question;
         _statusMessage = question;
