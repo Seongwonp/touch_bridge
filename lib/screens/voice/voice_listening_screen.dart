@@ -475,24 +475,38 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   /// 말 없이 끝난 듣기를 띵 소리 없이 다시 연다(같은 듣기 창 안에서).
   void _quietRelisten() {
     if (_isProcessing || _listenWindowStart == null) return;
+    // 엔진의 '끝남' 상태와 '말 없음' 오류가 거의 동시에 와서 두 번 예약되면, 먼저 연
+    // 마이크를 뒤의 예약이 닫아 몇 초씩 듣지 않는 구간이 생겼다(실기 2026-11-17).
+    if (_relistenPending) return;
+    _relistenPending = true;
     _silenceTimer?.cancel();
     setState(() => _isRecording = false);
     _quietRestart = true;
     Future<void>(() async {
-      await Future<void>.delayed(const Duration(milliseconds: 250));
-      // 기다리는 사이 듣기 창이 끝났으면(끝 안내를 이미 했으면) 다시 열지 않는다.
-      if (!mounted ||
-          _listenWindowStart == null ||
-          _isRecording ||
-          _isProcessing ||
-          _isExecuting) {
+      try {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+        // 기다리는 사이 듣기 창이 끝났으면(끝 안내를 이미 했으면) 다시 열지 않는다.
+        // 엔진이 이미 다시 듣고 있으면 그대로 둔다(토글하면 닫힌다).
+        if (!mounted ||
+            _listenWindowStart == null ||
+            _isRecording ||
+            _isProcessing ||
+            _isExecuting) {
+          return;
+        }
+        if (_speechSession.isListening) {
+          setState(() => _isRecording = true);
+          return;
+        }
+        await _toggleRecording();
+      } finally {
         _quietRestart = false;
-        return;
+        _relistenPending = false;
       }
-      await _toggleRecording();
-      _quietRestart = false;
     });
   }
+
+  bool _relistenPending = false;
 
   /// 앱이나 낭독기가 방금 읽은 문구를 마이크가 다시 받은 것인지. 그런 소리를 명령으로
   /// 보내지 않는다(실기: 낭독기의 '말씀해 주세요'가 녹음돼 서버로 갔다).
