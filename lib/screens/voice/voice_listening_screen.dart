@@ -514,6 +514,11 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
         // 화면의 영어 'Touch Bridge'를 엔진이 한글로 받아 적는 경우.
         '터치 브릿지 연결 안 됨',
         '터치 브리지 연결 안 됨',
+        // 낭독기가 화면 위쪽 'Touch Bridge'만 읽고 끊긴 경우(실기: "터치"만 녹음돼 서버로 감).
+        // 짧은 낱말이라 문장 일부가 아니라 전체가 같을 때만 걸린다.
+        '터치',
+        '터치 브릿지',
+        '터치 브리지',
         '재연결 중',
         _statusMessage,
         ?_confirmQuestion,
@@ -533,6 +538,8 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
       '녹음 취소',
       '듣는 중',
       '누르면 멈춤',
+      '터치 브릿지',
+      '터치 브리지',
     ]) {
       // 띄어쓰기가 달라도 지운다.
       final pattern = phrase.split('').where((c) => c != ' ').map(RegExp.escape).join(r'\s*');

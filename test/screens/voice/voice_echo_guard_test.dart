@@ -30,4 +30,12 @@ void main() {
     expect(VoiceListeningScreenState.stripEchoPhrases('30초 돌려줘'), '30초 돌려줘');
     expect(VoiceListeningScreenState.stripEchoPhrases('취소'), '취소');
   });
+
+  test('낭독기가 읽은 Touch Bridge(터치)는 단독일 때만 메아리로 본다', () {
+    const prompts = ['터치', '터치 브릿지'];
+    expect(VoiceListeningScreenState.echoMatches('터치', prompts), isTrue);
+    expect(VoiceListeningScreenState.echoMatches('터치 브릿지', prompts), isTrue);
+    expect(VoiceListeningScreenState.echoMatches('30초 돌려줘', prompts), isFalse);
+    expect(VoiceListeningScreenState.stripEchoPhrases('터치 브릿지 30초 돌려줘'), '30초 돌려줘');
+  });
 }
