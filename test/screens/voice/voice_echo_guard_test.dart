@@ -46,4 +46,15 @@ void main() {
     expect(VoiceListeningScreenState.confirmQuestionFor('햇반은 2분으로 데울까요?'), '햇반은 2분으로 데울까요?');
     expect(VoiceListeningScreenState.confirmQuestionFor('세탁 코스'), '세탁 코스 실행할까요?');
   });
+
+  test('확인 질문 끝 안내가 녹음돼도 네·아니요로 처리하지 않는다', () {
+    String s(String w) => VoiceListeningScreenState.stripEchoPhrases(w);
+    expect(s('네 또는 아니요로 답해 주세요'), '');
+    expect(s('네또는 아니요로 답해주세요'), '');
+    expect(s('또는 아니요로 답해 주세요'), '');
+    expect(s('네 또는'), '');
+    expect(s('네'), '네');
+    expect(s('아니요'), '아니요');
+    expect(s('네 또는 아니요로 답해 주세요 네'), '네');
+  });
 }

@@ -569,6 +569,16 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   static String stripEchoPhrases(String words) {
     var out = words;
     for (final phrase in const [
+      // 확인 질문 끝의 안내. 낭독기가 읽은 소리가 녹음되면 '네'·'아니요'로 오인된다.
+      // 긴 것부터 지운다.
+      '네 또는 아니요로 답해 주세요',
+      '또는 아니요로 답해 주세요',
+      '아니요로 답해 주세요',
+      '로 답해 주세요',
+      '답해 주세요',
+      '네 또는 아니요',
+      '네 또는',
+      '또는 아니요',
       '듣고 있습니다',
       '듣고 있어요',
       '말씀해 주세요',
@@ -1199,7 +1209,10 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     if (!AccessibilitySettings.isScreenReaderActive) {
       return const Duration(milliseconds: 300);
     }
-    final ms = (text.length * 110).clamp(1500, 7000);
+    // 낭독기는 상태 문구를 바로 읽지 않고(앞 낭독이 끝나야 함) 한국어를 초당 6~7자로
+    // 읽는다. 글자당 0.11초로는 확인 질문 끝("'네' 또는 '아니요'로 답해 주세요")이
+    // 다 읽히기 전에 마이크가 열려 그 소리가 '아니요'로 처리됐다(실기 2026-11-17).
+    final ms = (text.length * 180 + 1000).clamp(2000, 10000);
     return Duration(milliseconds: ms);
   }
 
