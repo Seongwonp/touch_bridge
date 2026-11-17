@@ -16,7 +16,6 @@ import '../../theme/app_colors.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../home/appliance_selection_screen.dart';
-import 'qr_scan_screen.dart';
 
 int _iconCodePointForType(String type) {
   return switch (type.toLowerCase()) {
@@ -48,9 +47,9 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
   void initState() {
     super.initState();
     _tts.speak(
-      '기기 연결 화면입니다. 네 가지 연결 방법이 있습니다. 화면 위쪽의 블루투스 허브 연결이 '
-      '음성 안내로 가장 쉽게 진행할 수 있는 방법입니다. QR 스캔과 기기 코드 입력은 화면이나 '
-      '기기에 적힌 글자를 확인해야 할 수 있습니다.',
+      '기기 연결 화면입니다. 세 가지 연결 방법이 있습니다. 화면 위쪽의 블루투스 허브 연결이 '
+      '음성 안내로 가장 쉽게 진행할 수 있는 방법입니다. 기기 코드 입력은 기기에 적힌 글자를 '
+      '확인해야 할 수 있습니다.',
       source: 'DeviceConnectScreen',
       interrupt: true,
     );
@@ -172,20 +171,6 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
           _tts.speak('연결에 실패했습니다. 다시 시도해 주세요.', source: 'DeviceConnectScreen', priority: TtsPriority.result);
         }
       }
-    }
-  }
-
-  Future<void> _onQrScanTap() async {
-    final result = await Navigator.of(
-      context,
-    ).push<String>(MaterialPageRoute(builder: (_) => const QrScanScreen()));
-
-    if (result != null && result.isNotEmpty) {
-      if (result.startsWith('http')) {
-        _tts.speak('지원되지 않는 QR 형식입니다.');
-        return;
-      }
-      await _processCloudDeviceId(result);
     }
   }
 
@@ -539,14 +524,6 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
                   onTap: _onBluetoothConnectTap,
                   rs: rs,
                   isPrimary: true,
-                ),
-                SizedBox(height: ResponsiveScale.v(context, 12)),
-                _buildConnectOption(
-                  icon: Icons.qr_code_scanner_rounded,
-                  title: '기기 QR 스캔',
-                  desc: '가전제품에 부착된 QR 코드를 인식합니다.',
-                  onTap: _onQrScanTap,
-                  rs: rs,
                 ),
                 SizedBox(height: ResponsiveScale.v(context, 12)),
                 _buildConnectOption(

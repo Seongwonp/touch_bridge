@@ -8,6 +8,7 @@ import '../../control/remote_control_screen.dart';
 import '../../control/image_control_screen.dart';
 import '../../control/course_control_screen.dart';
 import '../../../services/device_mapping_service.dart';
+import '../../../services/booth_mode.dart';
 import '../../../services/ble_service.dart';
 import '../../../services/accessibility_settings.dart';
 import '../../../services/accessibility_confirmation_policy.dart';
@@ -53,9 +54,11 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
     // 여는 즉시 "무엇을 선택했고 어떤 제어가 있는지" 안내한다.
     // 버튼 위치 수정 같은 보호자 기능은 설정의 보호자 설정에만 있다.
     // 이 메뉴의 항목은 모두 화면을 여는 이동이라 한 번 누르면 바로 열린다.
+    final modes = BoothMode.enabled
+        ? '음성으로 제어, 이미지로 제어가 있습니다.'
+        : '음성으로 제어, 이미지로 제어, 간편 코스, 숫자 패드가 있습니다.';
     _tts.speak(
-      '${widget.deviceName}를 선택했습니다. 제어 방식을 선택하세요. '
-      '음성으로 제어, 이미지로 제어, 간편 코스, 숫자 패드가 있습니다.',
+      '${widget.deviceName}를 선택했습니다. 제어 방식을 선택하세요. $modes',
       source: 'ControlModeSheet',
       interrupt: true,
     );
@@ -299,6 +302,7 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
                 },
               ),
             ),
+            if (!BoothMode.enabled) ...[
             SizedBox(height: ResponsiveScale.v(context, 12)),
             _buildActionButton(
               rs: rs,
@@ -345,6 +349,7 @@ class _ControlModeSheetState extends State<ControlModeSheet> {
                 },
               ),
             ),
+            ],
           ],
         ),
       ),

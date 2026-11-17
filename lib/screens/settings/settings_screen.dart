@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/accessibility_settings.dart';
+import '../../services/booth_mode.dart';
 import '../../services/tts_service.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
@@ -260,6 +261,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
             ),
+            if (!BoothMode.enabled) ...[
             SizedBox(height: ResponsiveScale.v(context, 24)),
             SectionLabel(icon: Icons.school_rounded, label: '연습'),
             SizedBox(height: ResponsiveScale.v(context, 10)),
@@ -276,6 +278,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
             ),
+            ],
             // 개발자 설정: 디버그 빌드에서만 노출 — 릴리스 APK에는 raw 명령
             // 인터페이스가 보이지 않도록 컴파일 타임에 제거한다.
             if (kDebugMode) ...[
