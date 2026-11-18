@@ -3,6 +3,8 @@ import 'package:flutter/semantics.dart';
 import '../../../widgets/responsive_scale.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_icons.dart';
+import '../../../services/active_device_service.dart';
+import '../../../services/power_status_service.dart';
 
 class HomeDeviceCard extends StatelessWidget {
   // 스크린리더 커스텀 액션은 재빌드마다 새로 만들지 않도록 한 번만 생성한다.
@@ -25,13 +27,31 @@ class HomeDeviceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 전류 센서(CT)가 보고하는 동안은 선택된 가전의 상태를 실제 작동 여부로 보인다.
+    return ValueListenableBuilder<PowerStatus>(
+      valueListenable: PowerStatusService.instance.status,
+      builder: (context, power, _) => _build(context, power.state),
+    );
+  }
+
+  /// 선택된 가전이고 전류 센서가 켜짐을 보고하면 '작동 중'. 그 밖에는 저장된 상태.
+  String _statusText(PowerState power) {
+    final isActive =
+        device['id'] == ActiveDeviceService.instance.getActiveDeviceId();
+    if (isActive && power == PowerState.on) return '작동 중 (전류 센서)';
+    return device['status'] as String? ?? '작동 대기 중';
+  }
+
+  Widget _build(BuildContext context, PowerState power) {
     final rs = ResponsiveScale.factor(context);
+    final status = _statusText(power);
+    final running = status.startsWith('작동 중');
 
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 6 * rs),
       child: Semantics(
         // 낭독기가 "두 번 탭하여 활성화"를 스스로 붙이므로 조작법은 반복하지 않는다.
-        label: '${device['name']}, ${device['status']}',
+        label: '${device['name']}, $status',
         hint: '조작 방법을 엽니다',
         button: true,
         // onTap을 Semantics에 직접 등록 — ExcludeSemantics가 하위 Tree를
@@ -117,15 +137,15 @@ class HomeDeviceCard extends StatelessWidget {
                           Container(
                             width: 8 * rs,
                             height: 8 * rs,
-                            decoration: const BoxDecoration(
-                              color: AppColors.success,
+                            decoration: BoxDecoration(
+                              color: running ? AppColors.warning : AppColors.success,
                               shape: BoxShape.circle,
                             ),
                           ),
                           SizedBox(width: 8 * rs),
                           Flexible(
                             child: Text(
-                            device['status'] as String,
+                            status,
                             style: TextStyle(
                               fontSize: 15 * rs,
                               fontWeight: FontWeight.w600,

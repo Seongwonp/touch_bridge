@@ -13,6 +13,8 @@ import '../services/accessibility_settings.dart';
 import '../services/feedback_service.dart';
 import '../services/accessibility_confirmation_policy.dart';
 import '../services/app_logger.dart';
+import '../services/active_device_service.dart';
+import '../services/power_status_service.dart';
 import '../widgets/responsive_scale.dart';
 import '../../theme/app_colors.dart';
 
@@ -65,7 +67,36 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   void initState() {
     super.initState();
     MainNavigationScreen.tabRequest.addListener(_onTabRequest);
+    _lastPower = PowerStatusService.instance.state;
+    PowerStatusService.instance.status.addListener(_onPowerStatus);
     _announceQuickStart();
+  }
+
+  PowerState _lastPower = PowerState.unknown;
+
+  /// 전류 센서(CT)가 가전 작동 시작·끝을 판정하면 홈·비상·설정 어디서든 한 번 알린다.
+  /// 보호자가 가전을 손으로 눌러 돌렸어도 끝났는지 알 수 있게 한다. 남은 시간·정지 완료
+  /// 화면은 스스로 알리므로, 이 화면이 맨 위일 때만 말한다(겹쳐 말하지 않게).
+  /// 전류 판정은 참고 정보라 "…것으로 보입니다"로 말하고, 안전 판단에는 쓰지 않는다.
+  void _onPowerStatus() {
+    final now = PowerStatusService.instance.state;
+    final before = _lastPower;
+    _lastPower = now;
+    if (!mounted || now == before) return;
+    if (ModalRoute.of(context)?.isCurrent != true) return;
+    final name = ActiveDeviceService.instance.getActiveDeviceName() ?? '가전';
+    final String? msg = switch ((before, now)) {
+      (PowerState.on, PowerState.off) =>
+        '전류 센서 기준으로 $name 작동이 끝난 것으로 보입니다.',
+      (_, PowerState.on) => '전류 센서 기준으로 $name가 작동 중입니다.',
+      _ => null,
+    };
+    if (msg == null) return;
+    AppLogger.info('power.announce', {'state': now.name});
+    _tts.speak(msg, priority: TtsPriority.result);
+    ScaffoldMessenger.maybeOf(context)
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(msg), duration: const Duration(seconds: 6)));
   }
 
   void _onTabRequest() {
@@ -338,6 +369,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   @override
   void dispose() {
     MainNavigationScreen.tabRequest.removeListener(_onTabRequest);
+    PowerStatusService.instance.status.removeListener(_onPowerStatus);
     _navResetTimer?.cancel();
     // TtsService는 앱 전역 싱글톤 큐다. 여기서 stop()을 부르면 이 화면이
     // dispose되는 순간(보통 다음 화면 initState 직후) 다음 화면이 막 넣은

@@ -161,7 +161,9 @@ class BleService {
       _demoMode ? _demoDeviceId : (_connectedDevice?.remoteId.str ?? '');
   String get connectedDeviceName {
     final name = _connectedDevice?.platformName.trim() ?? '';
-    return name.isEmpty ? connectedDeviceId : name;
+    // 저장된 주소로 바로 다시 연결하면(스캔 없이) 이름을 못 받아 주소(MAC)가 화면과
+    // 낭독기로 나갔다(부스 실기 2026-11-18). 사용자에게는 장치 이름만 보인다.
+    return name.isEmpty ? 'Touch Bridge' : name;
   }
 
   void _addLog(String msg) {
