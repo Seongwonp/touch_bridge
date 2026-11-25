@@ -25,7 +25,7 @@ void main() {
       expect(VoiceTextMatcher.isAffirmative('전자레인지 예열해줘'), isFalse);
     });
 
-    test('긍정어로 시작할 뿐인 다른 낱말은 긍정이 아니다 (외부 평가 반례)', () {
+    test('긍정어로 시작할 뿐인 다른 낱말은 긍정이 아니다', () {
       for (final t in ['예열', '예약', '응급', '그래도', '그래도 돼', '네모', '좋아해']) {
         expect(VoiceTextMatcher.isAffirmative(t), isFalse, reason: t);
       }
@@ -34,8 +34,8 @@ void main() {
       }
     });
 
-    test('긍정어 뒤에 거절이 붙으면 긍정이 아니다 (외부 평가 반례)', () {
-      // "네 취소"는 띄어쓰기를 빼면 "네취소"라 "네 + 두 글자" 규칙을 통과했다.
+    test('긍정어 뒤에 거절이 붙으면 긍정이 아니다', () {
+      // "네 취소"는 띄어쓰기를 빼면 "네취소"라 "네 + 두 글자" 같은 규칙을 통과한다.
       for (final t in ['네 취소', '네 말고', '응 아니', '예 그만', '네 잠깐', '좋아 하지마']) {
         expect(VoiceTextMatcher.isAffirmative(t), isFalse, reason: t);
         expect(VoiceTextMatcher.isNegative(t), isTrue, reason: t);

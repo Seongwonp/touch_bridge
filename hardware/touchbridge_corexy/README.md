@@ -1,6 +1,6 @@
 # Touch Bridge CoreXY 펌웨어 v4
 
-**상태: 이 폴더의 v4 코드와 CT 수신 코드는 실제 하드웨어에서 실행한 적 없다.**
+**상태:** ESP32 보드에서 부팅, 앱 BLE 연결, SwitchBot Bot 누름, CT 노드 수신을 확인했다. 엔코더 배선 문제로 좌표 이동부터 누름까지 이어지는 전체 흐름은 반복 시험하지 못했다.
 
 ESP32 + JMOD-MOTOR-1(TB6612FNG) + DFRobot FIT0482 x2, 엔코더 폐루프 CoreXY.
 누름부는 SwitchBot Bot이며 ESP32가 BLE로 직접 제어한다(허브 불필요, `SwitchBotBLE.h`).

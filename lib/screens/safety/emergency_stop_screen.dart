@@ -80,8 +80,8 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     // 안내를 먼저 큐에 넣고 마이크를 연다. _initSpeech가 안내가 끝나길 기다리므로
     // 안내 속 "중단"이 STT에 들어가 스스로 정지되는 일이 없다.
     // 멈추는 방법은 낭독기를 써도 들려야 하는 안전 정보라 result로 낸다(navigation이면
-    // 낭독기 사용 중 억제됐다). "작동 중"이라 단정하지 않는다: 앱은 명령을 전달하고
-    // 시간을 셀 뿐, 가전이 실제로 돌았는지는 모른다(외부 평가).
+    // 낭독기 사용 중 억제된다). "작동 중"이라 단정하지 않는다: 앱은 명령을 전달하고
+    // 시간을 셀 뿐, 가전이 실제로 돌았는지는 모른다.
     _speak(
       '${widget.deviceName}에 명령을 전달했고, 설정한 시간을 세고 있습니다. ${_stopInstruction()}.',
       priority: TtsPriority.result,
@@ -102,7 +102,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     if (!mounted) return;
     setState(() {});
     // 의미가 바뀌는 순간만 한 번씩 알린다(전력 수치의 매초 변화는 읽지 않는다).
-    // 예전에는 켜짐→꺼짐만 말해, 나중에 켜짐이 확인되거나 센서가 끊겨도 몰랐다(외부 평가).
+    // 켜짐→꺼짐뿐 아니라 나중에 켜짐이 확인되거나 센서가 끊긴 경우도 알린다.
     final String? msg = switch ((before, now)) {
       (PowerState.on, PowerState.off) =>
         '전류 센서 기준으로 ${widget.deviceName} 전원이 꺼진 것으로 보입니다.',
@@ -144,8 +144,8 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
         onStatus: (status) {
           if (status == 'notListening' || status == 'done') {
             // 정지를 보내고 결과를 알리는 동안에는 다시 듣지 않는다. 듣기를 멈추면 이
-            // 콜백이 오는데, 예전에는 남은 시간이 있으면 곧바로 마이크를 다시 켜서
-            // 정지 안내 음성을 다시 알아들을 수 있었다(외부 평가).
+            // 콜백이 오는데, 여기서 곧바로 마이크를 다시 켜면 정지 안내 음성을 다시
+            // 알아들을 수 있다.
             if (mounted && _secondsLeft > 0 && !_stopInProgress) {
               _startListening();
             }
@@ -467,8 +467,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                       label: '즉시 중단',
                       hint: '두 번 탭하면 터치브릿지를 바로 멈춥니다',
                       excludeSemantics: true,
-                      // 한 번 누르면 바로 멈춘다. 예전에는 일반 터치는 3초를 눌러야 해서,
-                      // 탭해도 반응이 없었다(외부 평가). 길게 눌러도 3초가 차면 멈춘다.
+                      // 한 번 누르면 바로 멈춘다. 길게 눌러도 3초가 차면 멈춘다.
                       onTap: _onHoldCompleted,
                       onLongPress: _onHoldCompleted,
                       child: GestureDetector(

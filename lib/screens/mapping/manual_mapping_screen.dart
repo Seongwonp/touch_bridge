@@ -62,9 +62,8 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
   String? _selectedButtonId;
 
   /// 장치가 알려 준 실제 위치를 받았는지. 받기 전에는 [_currentXmm]/[_currentYmm]이
-  /// 추정값이라 버튼 위치로 저장하지 않는다. 예전에는 화면을 열 때 장치가 원점에
-  /// 있다고 가정하고 화살표 이동량만 더해, 직전에 누른 버튼 위에 있던 장치의 위치가
-  /// 엉뚱하게 저장됐다(외부 평가).
+  /// 추정값이라 버튼 위치로 저장하지 않는다. 화면을 열 때 장치가 원점에 있다고 가정하고
+  /// 화살표 이동량만 더하면, 직전에 누른 버튼 위에 있던 장치의 위치가 엉뚱하게 저장된다.
   bool _positionKnown = false;
   bool _syncingPosition = false;
 
@@ -382,7 +381,7 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
         if (axis.toUpperCase() == 'X') _currentXmm += value;
         if (axis.toUpperCase() == 'Y') _currentYmm += value;
         // 지금 값은 요청한 이동량을 더한 추정이다. '장치 기준'이라 표시하지 않고,
-        // 이동이 끝나면 장치에 다시 물어 맞춘다(외부 평가).
+        // 이동이 끝나면 장치에 다시 물어 맞춘다.
         _positionKnown = false;
       }
     });
@@ -394,9 +393,8 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
     }
   }
 
-  /// 지금 있는 자리에서 한 번 누른다. 예전에는 선택한 버튼의 격자 칸 번호(BTN_n)를
-  /// 보내 장치가 다른 자리로 이동해 눌렀고, 격자가 없으면 장치가 거부했는데도
-  /// "전달했습니다"라고 말했다(외부 평가). 펌웨어는 Z 내림을 지금 자리 누름으로 받는다.
+  /// 지금 있는 자리에서 한 번 누른다. 격자 칸 번호(BTN_n)를 보내면 장치가 다른 자리로
+  /// 이동해 누르고, 격자가 없으면 장치가 거부한다. 펌웨어는 Z 내림을 지금 자리 누름으로 받는다.
   Future<void> _testSwitchBotAtCurrentPosition() async {
     final ble = BleService.instance;
     if (!ble.isConnected) {
@@ -499,9 +497,8 @@ class _ManualMappingScreenState extends State<ManualMappingScreen> {
     _tts.speak('$label 버튼을 현재 위치에 등록했습니다.');
   }
 
-  /// 버튼 추가: 이 가전의 버튼 기능 목록에서 고른다. 예전에는 이름을 자유롭게 쓰고
-  /// 순서대로 BT-01부터 붙여, "시작"이라고 등록해도 음성 명령은 BT-01을
-  /// "10초"로 알고 눌렀다(외부 평가).
+  /// 버튼 추가: 이 가전의 버튼 기능 목록에서 고른다. 이름을 자유롭게 쓰고 순서대로
+  /// BT-01부터 붙이면, "시작"으로 등록한 버튼을 음성 명령은 BT-01("10초")로 알고 누른다.
   Future<void> _addButton() async {
     final used = _buttonPositions.keys.toSet();
     final choices = [

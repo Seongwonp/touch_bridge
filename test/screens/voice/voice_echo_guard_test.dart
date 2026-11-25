@@ -1,8 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:touch_bridge/screens/voice/voice_listening_screen.dart';
 
-/// 마이크가 앱·낭독기 안내를 다시 받으면 명령으로 보내지 않는다(실기: 낭독기의
-/// '말씀해 주세요'가 녹음돼 서버로 갔다).
+/// 마이크가 앱·낭독기 안내(예: '말씀해 주세요')를 다시 받으면 명령으로 보내지 않는다.
 void main() {
   const prompts = ['말씀해 주세요', '듣고 있습니다', '30초 조리를 시작합니다. 실행할까요?'];
 

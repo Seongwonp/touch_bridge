@@ -57,7 +57,7 @@ class MappingHeader extends StatelessWidget {
                   side: const BorderSide(color: Color(0xFFFFEB00)),
                   padding: EdgeInsets.symmetric(horizontal: 12 * rs),
                   // 앱 테마의 버튼 최소 폭이 화면 전체라, 글자와 한 줄에 두면 레이아웃 오류로
-                  // release에서 줄 전체가 사라졌다(부스 실기 2026-11-18). 폭을 내용에 맞춘다.
+                  // release에서 줄 전체가 사라진다. 폭을 내용에 맞춘다.
                   minimumSize: Size(0, 44 * rs),
                 ),
                 child: isAiAnalyzing

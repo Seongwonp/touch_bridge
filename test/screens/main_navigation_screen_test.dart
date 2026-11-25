@@ -36,7 +36,7 @@ void main() {
   });
 
   testWidgets('예전 보호자 모드 값이 켜져 있어도 하단 바는 홈/비상/설정뿐이다', (tester) async {
-    // 보호자 기능은 설정의 보호자 설정 한곳으로 옮겼다. 저장된 옛 설정이 남아 있어도
+    // 보호자 기능은 설정의 보호자 설정 한곳에만 있다. 저장된 옛 설정이 남아 있어도
     // 사용자 화면에 "기기 관리" 탭이 다시 나타나면 안 된다.
     await _pumpWithGuardianMode(tester, enabled: true);
 

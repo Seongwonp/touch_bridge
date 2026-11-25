@@ -14,7 +14,7 @@ import 'theme/app_theme.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // 세로 화면으로 고정한다. 화면을 볼 수 없는 사용자는 폰이 돌아간 것을 모르고,
-  // 가로가 되면 낭독 순서와 버튼 자리가 바뀐다. 가로 홈 화면은 말하기 버튼이 잘렸다(실기).
+  // 가로가 되면 낭독 순서와 버튼 자리가 바뀌고, 가로 홈 화면은 말하기 버튼이 잘린다.
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   try {
     await dotenv.load(fileName: ".env");
@@ -46,8 +46,8 @@ class TouchBridgeApp extends StatelessWidget {
           title: 'Touch Bridge',
           debugShowCheckedModeBanner: false,
           // 앱 언어를 한국어로 선언한다. 선언이 없으면 Flutter가 화면 내용을 영어(en-US)로
-          // 표시해, 낭독기가 한국어 문장을 영어 음성으로 읽었다("외국인 말투", 실기 로그:
-          // eng-USA-f00). 버튼의 기본 낭독 문구(뒤로 가기 등)도 한국어가 된다.
+          // 표시해, 낭독기가 한국어 문장을 영어 음성(eng-USA)으로 읽는다. 버튼의 기본
+          // 낭독 문구(뒤로 가기 등)도 한국어가 된다.
           locale: const Locale('ko', 'KR'),
           supportedLocales: const [Locale('ko', 'KR')],
           localizationsDelegates: const [

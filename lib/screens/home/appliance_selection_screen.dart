@@ -68,8 +68,8 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
   /// 시각 확인 없이(화살표+테스트 눌러보기만으로) 최초 등록을 끝낼 수 있는 경로.
   ///
   /// 설정 화면이 이 기기를 활성 기기로 쓰므로 먼저 등록하지만, 저장까지 마치지
-  /// 않고 돌아오면 등록을 되돌린다. 예전에는 되돌리지 않아 뒤로 가기만 해도
-  /// 매핑 없는 "일반 전자레인지"가 홈에 남았다(실기 확인).
+  /// 않고 돌아오면 등록을 되돌린다. 그러지 않으면 뒤로 가기만 해도 매핑 없는
+  /// 가전이 홈에 남는다.
   Future<void> _registerAndStartCoordinateSetup(
     BuildContext context,
     ApplianceConfig appliance,
@@ -325,8 +325,8 @@ class _ApplianceCard extends StatelessWidget {
               ],
             ),
             SizedBox(height: ResponsiveScale.v(context, 24)),
-            // 예전 "필요한 부품·부착 가이드"는 랙&피니언·키캡 같은 옛 하드웨어 기준이라 뺐다.
-            // 지금 하드웨어(CoreXY 프레임 + SwitchBot Bot)는 가전 종류와 무관하게 같다.
+            // 가전별 부품·부착 가이드는 두지 않는다. 하드웨어(CoreXY 프레임 + SwitchBot Bot)는
+            // 가전 종류와 무관하게 같다.
             Text(
               '설치 순서',
               style: TextStyle(

@@ -3,8 +3,7 @@ import '../../../theme/app_colors.dart';
 
 /// 매핑 화면에서 패널 4점 보정이 끝나기 전에 사진 바로 위에 보여주는 안내.
 ///
-/// 예전에는 사진 한가운데에 반투명 검은 상자로 얹혀 찍어야 할 패널을 가렸다.
-/// 지금은 사진 밖(위쪽)에 두므로 사진을 가리지 않는다.
+/// 찍어야 할 패널을 가리지 않도록 사진 위에 겹치지 않고 사진 밖(위쪽)에 둔다.
 class CalibrationPrompt extends StatelessWidget {
   const CalibrationPrompt({
     super.key,

@@ -39,7 +39,7 @@ void main() {
     expect(find.byType(StopDoneScreen), findsNothing);
   });
 
-  // 끝난 화면은 볼 수 없어도 할 수 있는 일만 안내한다(외부 평가).
+  // 끝난 화면은 볼 수 없어도 할 수 있는 일만 안내한다.
   test('전류 센서 보고가 없으면 앱이 모른다고 말하고 종료음을 들어 보라고 한다', () {
     final text = StopDoneScreenPowerText.of(PowerState.unknown);
     expect(text, contains('확인할 수 없습니다'));

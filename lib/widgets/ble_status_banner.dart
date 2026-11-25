@@ -62,7 +62,7 @@ class _BleStatusBannerState extends State<BleStatusBanner> {
             // 마이크가 말을 기다리는 중이면 말하지 않는다(녹음에 섞인다). 배너 글자는 바뀐다.
             if (SpeechSessionService.instance.shouldStayQuiet) break;
             _tts.speak(
-              // 연결 설정은 보호자 기능이라 사용자에게 시키지 않는다(외부 평가).
+              // 연결 설정은 보호자 기능이라 사용자에게 시키지 않는다.
               // 다음 명령 때 앱이 자동으로 다시 연결을 시도한다.
               '기기와 연결이 끊겼습니다. 다시 말씀하시면 자동으로 연결을 시도합니다. 계속 안 되면 보호자에게 알려 주세요.',
               source: 'BleStatusBanner',
@@ -121,7 +121,7 @@ class _BleStatusBannerState extends State<BleStatusBanner> {
       // 다른 글자와 한 덩어리로 합쳐 읽히지 않게 따로 둔다.
       container: true,
       // 상태가 바뀔 때마다 낭독기가 읽는다. 단, 마이크가 사용자의 말을 기다리는 동안에는
-      // 읽지 않는다(그 소리가 녹음돼 명령으로 들어갔다 — 실기).
+      // 읽지 않는다(그 소리가 녹음돼 명령으로 들어간다).
       liveRegion: !SpeechSessionService.instance.shouldStayQuiet,
       label: label,
       child: ExcludeSemantics(

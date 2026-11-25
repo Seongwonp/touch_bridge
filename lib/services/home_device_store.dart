@@ -24,8 +24,8 @@ class HomeDeviceStore {
 
   /// 기기 목록 전체를 저장한다.
   ///
-  /// 화면이 들고 있던 목록을 통째로 저장하면 다른 화면(홈·기기 관리 탭은 함께
-  /// 살아 있다)이 그사이 바꾼 내용을 덮어쓴다. 한 기기만 바꿀 때는 아래
+  /// 화면이 들고 있던 목록을 통째로 저장하면 함께 살아 있는 다른 화면이 그사이
+  /// 바꾼 내용을 덮어쓴다. 한 기기만 바꿀 때는 아래
   /// [findById]·[removeById]·[updateById]처럼 저장소를 다시 읽어 고치는 함수를 쓴다.
   static Future<void> saveDevices(List<Map<String, dynamic>> devices) async {
     final prefs = await SharedPreferences.getInstance();

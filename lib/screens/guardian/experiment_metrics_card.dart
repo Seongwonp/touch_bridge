@@ -9,8 +9,8 @@ import '../settings/widgets/settings_form_widgets.dart';
 /// 접근성 실험 지표(누적 작업·완료율·CSV 내보내기·초기화).
 ///
 /// 당사자 검증 계획(USER_VALIDATION_PLAN)의 실측용이라 사용자 설정이 아니라 보호자
-/// 설정에 둔다. 예전에는 사용자 설정 화면에 'CSV 복사', '지표 초기화'가 그대로 보여
-/// 낭독기 사용자가 지나가야 했다(외부 평가).
+/// 설정에 둔다. 사용자 설정에 두면 낭독기 사용자가 'CSV 복사', '지표 초기화'를
+/// 지나가야 한다.
 class ExperimentMetricsCard extends StatelessWidget {
   const ExperimentMetricsCard({super.key});
 

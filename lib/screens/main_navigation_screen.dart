@@ -39,7 +39,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int? _armedNavIndex;
 
   /// 하단 탭은 모드와 상관없이 홈·비상·설정 세 개다. 가전 등록·버튼 위치 같은 보호자 기능은
-  /// 설정의 "보호자 설정" 한곳에만 둔다(예전 보호자 모드의 "기기 관리" 탭은 없앴다).
+  /// 설정의 "보호자 설정" 한곳에만 둔다.
   List<_NavDestination> _destinations() {
     return const [
       _NavDestination(
@@ -275,7 +275,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     List<_NavDestination> destinations,
   ) {
     // 높이를 고정하지 않고 최소 높이만 둔다. 시스템 글자를 키우면 탭 글자도 커지고
-    // 바가 따라 높아진다(예전엔 80 고정에 11 크기 글자였다 — 외부 평가).
+    // 바가 따라 높아진다.
     return Container(
       constraints: BoxConstraints(minHeight: ResponsiveScale.v(context, 80)),
       decoration: const BoxDecoration(
@@ -401,9 +401,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       customSemanticsActions: {
         const CustomSemanticsAction(label: '음성 명령 시작'): openVoice,
       },
-      // 화면 전체 길게 누르기로 음성을 여는 단축은 없앴다. 앱 전체를 감싼 길게 누르기가
-      // 비상 정지 버튼의 탭을 이겨서, 정지 버튼을 꾹 누르면 멈추지 않고 음성 화면이
-      // 열렸다(외부 평가). 낭독기 사용자는 위의 '음성 명령 시작' 동작을 그대로 쓴다.
+      // 화면 전체 길게 누르기로 음성을 여는 단축은 두지 않는다. 앱 전체를 감싼 길게
+      // 누르기는 비상 정지 버튼의 탭을 이겨, 정지 버튼을 꾹 누르면 멈추지 않고 음성 화면이
+      // 열린다. 낭독기 사용자는 위의 '음성 명령 시작' 동작을 쓴다.
       child: Scaffold(
         backgroundColor: AppColors.background,
         body: IndexedStack(

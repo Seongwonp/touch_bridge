@@ -61,8 +61,7 @@ class _GuardianHandoffScreenState extends State<GuardianHandoffScreen> {
     );
   }
 
-  // 보호자 모드는 없앴다. 보호자 기능은 설정의 보호자 설정에만 있으므로 홈으로 돌아가면
-  // 그대로 사용자 화면이다.
+  // 보호자 기능은 설정의 보호자 설정에만 있으므로 홈으로 돌아가면 그대로 사용자 화면이다.
   Future<void> _finishHandoff() async {
     await _tts.speak(
       '설정을 마쳤습니다. 홈에서 말하기로 쓸 수 있습니다.',

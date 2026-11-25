@@ -52,11 +52,11 @@ class VoiceTextMatcher {
     final t = normalize(text);
     if (t.isEmpty) return false;
     // 부정어가 섞이면 긍정이 아니다. "네 취소"는 띄어쓰기를 빼면 "네취소"라
-    // "네 + 두 글자" 규칙을 통과해 실행 승인으로 잡혔다(외부 평가 지적).
+    // "네 + 두 글자" 같은 느슨한 규칙에서는 실행 승인으로 잡힌다.
     if (isNegative(t)) return false;
     // 허용하는 꼴만 정확히 나열한다: 토큰 그대로, 반복("네네", "응응응"), 그리고
-    // 끝에 "요"·"용"만 붙은 꼴("그래요", "맞아용"). 예전처럼 "토큰 + 아무 두 글자"를
-    // 받으면 "예열", "예약", "응급", "그래도"가 확인 대기 중에 실행 승인이 됐다(외부 평가).
+    // 끝에 "요"·"용"만 붙은 꼴("그래요", "맞아용"). "토큰 + 아무 두 글자"를 받으면
+    // "예열", "예약", "응급", "그래도"가 확인 대기 중에 실행 승인이 된다.
     return _affirmativeTokens.any((token) {
       for (final body in [token, token * 2, token * 3]) {
         if (t == body || t == '$body요' || t == '$body용') return true;

@@ -49,7 +49,7 @@ class TtsService {
   Future<void> _initTts() async {
     try {
       // 안드로이드에 음성 엔진이 여럿이면(삼성·구글) 기본값이 바뀌거나 한국어 음성이
-      // 없는 엔진이 잡혀, 외국인이 읽는 듯한 발음이 났다(실기). 삼성 엔진을 먼저 쓴다.
+      // 없는 엔진이 잡혀 외국인이 읽는 듯한 발음이 난다. 삼성 엔진을 먼저 쓴다.
       // 엔진을 바꾸면 속도·음량이 초기화되므로 그보다 먼저 고른다.
       await _preferKoreanEngine();
       final settings = AccessibilitySettings.instance;
@@ -214,9 +214,8 @@ class TtsService {
 
       // ── 낭독기가 켜져 있으면 앱 음성 엔진을 쓰지 않고 낭독기에 넘긴다 ─────────
       // 낭독기와 앱이 같은 음성 엔진을 동시에 쓰면 앱 쪽 발화가 품질 낮은 음성으로
-      // 바뀌어 "외국인이 억지로 읽는" 소리가 났고(실기: 낭독기를 끄면 정상),
-      // 두 목소리가 겹쳤다. 낭독기 공지로 보내면 사용자가 고른 낭독기 목소리로
-      // 차례대로 읽힌다.
+      // 바뀌어 "외국인이 억지로 읽는" 소리가 나고, 두 목소리가 겹친다. 낭독기
+      // 공지로 보내면 사용자가 고른 낭독기 목소리로 차례대로 읽힌다.
       if (_screenReaderActive && !kIsWeb && !disableEngineForTest) {
         _lastSpokenText = message;
         _lastSpokenAt = now;

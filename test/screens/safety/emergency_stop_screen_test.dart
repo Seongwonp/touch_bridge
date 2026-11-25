@@ -177,7 +177,7 @@ void main() {
 
   group('비상 정지 화면 — 3초 홀드', () {
     testWidgets('가운데 버튼을 한 번 탭하면 바로 정지 명령을 보낸다', (tester) async {
-      // 예전에는 일반 터치가 3초 홀드만 받아, 탭해도 반응이 없었다(외부 평가).
+      // 일반 터치도 3초 홀드 없이 한 번 탭으로 정지해야 한다.
       await registerActiveDevice();
       stubStopAck('STOPPED');
       await tester.pumpWidget(

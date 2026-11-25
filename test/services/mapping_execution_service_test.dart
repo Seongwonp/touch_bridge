@@ -619,7 +619,7 @@ void main() {
       expect(result.userMessage, isNot(contains('연결을 확인')));
     });
 
-    test('전송 전 대기 중 정지가 오면 한 줄도 보내지 않는다 (재리뷰 P1)', () async {
+    test('전송 전 대기 중 정지가 오면 한 줄도 보내지 않는다', () async {
       final sent = <String>[];
       BleService.instance.setSendRawOverride((cmd) async {
         sent.add(cmd);

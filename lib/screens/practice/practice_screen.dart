@@ -289,7 +289,7 @@ class _PracticeScreenState extends State<PracticeScreen>
           children: [
             _noticeCard(rs),
             SizedBox(height: 20 * rs),
-            // 화면 이동은 한 번에 되고, 가전을 누르는 버튼만 두 번 확인한다(2026-11-10).
+            // 화면 이동은 한 번에 되고, 가전을 누르는 버튼만 두 번 확인한다.
             _lessonHeader(rs, '1. 가전 버튼 확인 연습', '가전을 누르는 버튼은 첫 탭이 안내, 둘째 탭이 실행이에요.'),
             SizedBox(height: 10 * rs),
             _practiceTapButton(rs),

@@ -43,8 +43,8 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
 
   /// 전류 센서가 본 가전 전원 상태 문장. 참고 정보일 뿐 완료·안전 판단이 아니다.
   /// 센서 보고가 없으면 앱이 모른다고 솔직히 말하고, 볼 수 없어도 할 수 있는 확인
-  /// 방법(종료음)을 알려 준다. 예전에는 "가전이 멈췄는지 확인해 주세요"뿐이라 화면을
-  /// 못 보는 사용자는 할 수 없는 일을 요구했다(외부 평가).
+  /// 방법(종료음)을 알려 준다. "가전이 멈췄는지 확인해 주세요"만으로는 화면을 못 보는
+  /// 사용자에게 할 수 없는 일을 요구하게 된다.
   static String powerSentence(PowerState state) {
     switch (state) {
       case PowerState.on:
@@ -64,7 +64,7 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
     final before = _power;
     setState(() => _power = now);
     // 의미가 바뀌는 순간만 한 번씩 알린다. 센서가 끊기면 앞의 판단을 더는 쓸 수 없다고
-    // 알린다(외부 평가: 예전엔 켜짐→꺼짐만 말했다).
+    // 알린다.
     if (now == PowerState.unknown && before != PowerState.unknown) {
       _tts.speak('전류 센서 정보가 끊겨 가전 전원 상태를 알 수 없습니다.',
           priority: TtsPriority.result);
@@ -302,7 +302,7 @@ class _StopDoneScreenState extends State<StopDoneScreen> {
                         ),
                         SizedBox(height: ResponsiveScale.v(context, 20)),
                         // 터치브릿지 정지는 가전 정지가 아니다. 볼 수 없는 사용자에게 가전 버튼을
-                        // 직접 누르라고 하는 대신, 앱이 가전의 취소 버튼을 눌러 준다(외부 평가).
+                        // 직접 누르라고 하는 대신, 앱이 가전의 취소 버튼을 눌러 준다.
                         // 음성 화면에서 "취소"로 처리해 평소처럼 '실행'·'취소' 확인을 거친다.
                         if (!widget.completed) ...[
                           ConstrainedBox(

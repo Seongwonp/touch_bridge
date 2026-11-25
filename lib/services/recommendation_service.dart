@@ -4,8 +4,8 @@ import '../models/appliance_config.dart';
 class RecommendationService {
   RecommendationService._();
 
-  // 추천 킷·부품·부착 가이드는 옛 하드웨어(랙&피니언·키캡) 기준이라 비웠다.
-  // 지금 하드웨어(CoreXY 프레임 + SwitchBot Bot)는 가전 종류와 무관하게 같다.
+  // 추천 킷·부품·부착 가이드는 비워 둔다. 하드웨어(CoreXY 프레임 + SwitchBot Bot)는
+  // 가전 종류와 무관하게 같다.
   static final List<ApplianceConfig> presets = [
     ApplianceConfig(
       id: 'microwave_basic',

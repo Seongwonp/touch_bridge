@@ -96,8 +96,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   String? _pendingLowConfidenceText;
 
   /// 잘못 들었을 수 있어 되묻는 질문("…라고 들었어요. 맞나요?"). 화면에 질문과
-  /// '맞아요'·'아니에요' 버튼을 띄운다. 예전에는 이 확인만 버튼이 없어 말로만 답할
-  /// 수 있었다(외부 평가).
+  /// '맞아요'·'아니에요' 버튼을 띄워, 말로도 화면으로도 답할 수 있게 한다.
   String? _lowConfidenceQuestion;
 
   /// 가전 실행 확인 질문. [_pendingCommandData]와 함께 있을 때 화면에
@@ -127,8 +126,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   bool _isStartingRecording = false;
   int _analysisRequestId = 0;
   /// 실행 확인("네"/"아니요")을 기다리는 중인지. 질문을 듣고 생각할 시간이 필요하므로
-  /// 듣는 시간을 길게 둔다. 예전에는 녹음 상한이 10초뿐이라 침묵 설정을 늘려도
-  /// 먼저 끊겼다(외부 평가).
+  /// 듣는 시간을 길게 둔다. 녹음 상한이 짧으면 침묵 설정을 늘려도 먼저 끊긴다.
   bool get _awaitingConfirm =>
       _pendingCommandData != null || _pendingLowConfidenceText != null;
 
@@ -238,8 +236,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     });
     if (!AiBackendService.instance.isConfigured) {
       // 서버가 없어도 마이크는 연다. "30초 돌려줘" 같은 앱 안 규칙은 서버 없이 처리되고,
-      // 서버가 필요한 명령만 실패를 알린다. 예전에는 마이크 자체를 막아 간단한 명령도
-      // 못 했다(외부 평가). 키 이름은 사용자에게 말하지 않고 로그로 남긴다.
+      // 서버가 필요한 명령만 실패를 알린다. 키 이름은 사용자에게 말하지 않고 로그로 남긴다.
       AppLogger.warn('voice.backend_not_configured', {'key': 'AI_BACKEND_URL'});
       _statusMessage = '음성 해석 서버가 설정되지 않아 "30초 돌려줘" 같은 간단한 명령만 쓸 수 있습니다.';
     }
@@ -256,9 +253,9 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
         }
         if (widget.autoStart && _speechEnabled) {
           // 낭독기는 화면에 들어오면 화면 이름과 포커스 항목을 읽는다. 그 사이 마이크를
-          // 열면 안드로이드가 다른 소리를 줄여 낭독이 뚝뚝 끊기고("쉉 명루ㅕㅇ"), 마이크는
-          // 낭독 소리만 듣다 "말씀이 들리지 않았습니다"로 끝났다(실기). 낭독이 끝날
-          // 여유를 두고 연다. 마이크가 열리면 띵 소리가 난다.
+          // 열면 안드로이드가 다른 소리를 줄여 낭독이 뚝뚝 끊기고, 마이크는 낭독 소리만
+          // 듣다 "말씀이 들리지 않았습니다"로 끝난다. 낭독이 끝날 여유를 두고 연다.
+          // 마이크가 열리면 띵 소리가 난다.
           if (AccessibilitySettings.isScreenReaderActive) {
             await Future<void>.delayed(const Duration(milliseconds: 3000));
             if (!mounted || _isRecording || _isProcessing) return;
@@ -299,8 +296,8 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
         onStatus: (status) {
           if (!mounted) return;
           if (status == 'listening') {
-            // 듣기 창이 이미 끝났는데 늦게 열린 엔진이면 바로 닫는다(끝 안내 뒤 마이크가
-            // 몇 초 더 열려 있던 문제 — 실기).
+            // 듣기 창이 이미 끝났는데 늦게 열린 엔진이면 바로 닫는다. 그대로 두면 끝 안내
+            // 뒤에도 마이크가 몇 초 더 열려 있다.
             if ((_listenWindowStart == null && !_isRecording) || _isProcessing) {
               _speechSession.stop();
               return;
@@ -316,8 +313,8 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
           }
         },
         onError: (_) {
-          // 조용히 다시 여는 중이거나 이미 끝난 듣기에서 늦게 온 오류는 무시한다. 예전에는
-          // 다시 여는 사이에 "음성 인식에 실패했습니다"를 알렸다(실기).
+          // 조용히 다시 여는 중이거나 이미 끝난 듣기에서 늦게 온 오류는 무시한다. 그러지
+          // 않으면 다시 여는 사이에 "음성 인식에 실패했습니다"를 알린다.
           if (_quietRestart || !_isRecording) return;
           // "말 없음"·"인식 결과 없음"으로 일찍 끝난 것이면 듣기 창 안에서 조용히 다시 연다.
           if (mounted && _lastWords.isEmpty && _canQuietRelisten) {
@@ -378,8 +375,8 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     );
   }
 
-  /// 말을 시작한 뒤 마지막 말이 들린 다음 이만큼 조용하면 끝낸다. 예전에는 말이 끝나도
-  /// 침묵 설정(기본 8초)만큼 기다려, 말한 뒤 한참 있다가 처리됐다(실기 사용자 의견).
+  /// 말을 시작한 뒤 마지막 말이 들린 다음 이만큼 조용하면 끝낸다. 침묵 설정(기본 8초)만큼
+  /// 기다리면 말한 뒤 한참 있다가 처리된다.
   /// 말을 시작하기 전의 기다림은 듣기 창(명령 20초·확인 30초)이 맡는다.
   static const _endOfSpeechSilence = Duration(milliseconds: 1500);
 
@@ -415,7 +412,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
       }
 
       // 듣기 창이 열려 있는 동안은 끝내지 않는다. 끝은 창 타이머가 한 번만 알린다.
-      // (실기: 말을 막 시작했는데 "말씀이 들리지 않았습니다"가 먼저 나왔다.)
+      // 그래야 말을 막 시작했을 때 "말씀이 들리지 않았습니다"가 먼저 나오지 않는다.
       if (_listenWindowStart != null) {
         _resetSilenceTimer();
         return;
@@ -437,7 +434,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
 
   /// 한 번의 "듣기"가 시작된 시각. 안드로이드 음성 엔진은 말이 시작되기 전 몇 초만
   /// 기다리고 "말 없음"으로 끝내 버려(설정한 대기 시간을 무시), 생각하는 사이 마이크가
-  /// 닫혔다(실기). 이 시각부터 [_maxRecordingDuration] 안이면 조용히 다시 연다.
+  /// 닫힌다. 이 시각부터 [_maxRecordingDuration] 안이면 조용히 다시 연다.
   DateTime? _listenWindowStart;
   bool _quietRestart = false;
 
@@ -476,7 +473,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   void _quietRelisten() {
     if (_isProcessing || _listenWindowStart == null) return;
     // 엔진의 '끝남' 상태와 '말 없음' 오류가 거의 동시에 와서 두 번 예약되면, 먼저 연
-    // 마이크를 뒤의 예약이 닫아 몇 초씩 듣지 않는 구간이 생겼다(실기 2026-11-17).
+    // 마이크를 뒤의 예약이 닫아 몇 초씩 듣지 않는 구간이 생긴다.
     if (_relistenPending) return;
     _relistenPending = true;
     _silenceTimer?.cancel();
@@ -509,7 +506,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
   bool _relistenPending = false;
 
   /// 앱이나 낭독기가 방금 읽은 문구를 마이크가 다시 받은 것인지. 그런 소리를 명령으로
-  /// 보내지 않는다(실기: 낭독기의 '말씀해 주세요'가 녹음돼 서버로 갔다).
+  /// 보내지 않는다(예: 낭독기가 읽은 '말씀해 주세요').
   bool _isEcho(String words) => echoMatches(words, [
         '말씀해 주세요',
         '듣고 있습니다',
@@ -528,12 +525,12 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
         // 화면의 영어 'Touch Bridge'를 엔진이 한글로 받아 적는 경우.
         '터치 브릿지 연결 안 됨',
         '터치 브리지 연결 안 됨',
-        // 낭독기가 화면 위쪽 'Touch Bridge'만 읽고 끊긴 경우(실기: "터치"만 녹음돼 서버로 감).
+        // 낭독기가 화면 위쪽 'Touch Bridge'만 읽고 끊긴 경우("터치"만 녹음된다).
         // 짧은 낱말이라 문장 일부가 아니라 전체가 같을 때만 걸린다.
         '터치',
         '터치 브릿지',
         '터치 브리지',
-        // 삼성 낭독기가 상태를 바꿀 때 스스로 읽는 말(실기: 이 문장이 명령으로 서버에 감).
+        // 삼성 낭독기가 상태를 바꿀 때 스스로 읽는 말.
         '음성 안내 지원 사용',
         '재연결 중',
         _statusMessage,
@@ -542,7 +539,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
       ]);
 
   /// 실행 안내문을 확인 질문으로 바꾼다. "30초 조리를 시작합니다." → "30초 조리를
-  /// 시작할까요?". 예전에는 "시작합니다. 실행할까요?"라고 해 이미 시작한 것처럼 들렸다.
+  /// 시작할까요?". "시작합니다. 실행할까요?"처럼 붙이면 이미 시작한 것처럼 들린다.
   /// 모르는 어미면 원문 뒤에 "실행할까요?"를 붙인다.
   @visibleForTesting
   static String confirmQuestionFor(String message) {
@@ -784,7 +781,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
             FeedbackService.instance.vibrateSuccess();
           }
           // "녹음을 시작합니다"는 말하지 않는다. 마이크가 이미 열린 뒤라 낭독기를
-          // 쓰지 않는 사용자는 앱 자신의 안내가 녹음됐다(외부 평가). 띵 소리와
+          // 쓰지 않는 사용자는 앱 자신의 안내가 녹음된다. 띵 소리와
           // 진동, 낭독기의 "듣고 있습니다"(liveRegion)로 알린다.
 
           // 멘트가 끝날 때까지 기다린 후(약 1.5초) 침묵 감지 시작
@@ -809,9 +806,9 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     }
   }
 
-  /// 실행 확인 중에는 질문을 '실행'·'취소' 바로 위에 계속 보여 준다. 예전에는 마이크가
-  /// 켜지면 질문이 "듣고 있습니다"로 덮여, 무엇을 실행하는지 다시 읽을 수 없었다(외부
-  /// 평가). 질문은 이미 음성과 상태 문구로 알렸으므로 liveRegion이 아니다(두 번 읽히지 않게).
+  /// 실행 확인 중에는 질문을 '실행'·'취소' 바로 위에 계속 보여 준다. 마이크가 켜져 상태
+  /// 문구가 "듣고 있습니다"로 바뀌어도 무엇을 실행하는지 다시 읽을 수 있어야 한다.
+  /// 질문은 이미 음성과 상태 문구로 알렸으므로 liveRegion이 아니다(두 번 읽히지 않게).
   Widget _buildConfirmQuestionCard(double rs, [String? text]) {
     final question = text ?? _confirmQuestion ?? '';
     return Semantics(
@@ -1061,7 +1058,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     _resolvedDeviceName = device.name;
 
     // 이미 이 가전이 활성이면 다시 고르지 않는다. 다시 고르면 연결을 기다리느라(장치가
-    // 꺼져 있으면 약 5초) 확인 질문이 늦게 나왔다(실기). 연결은 보낼 때 따로 한다.
+    // 꺼져 있으면 약 5초) 확인 질문이 늦게 나온다. 연결은 보낼 때 따로 한다.
     final active = ActiveDeviceService.instance;
     if (active.getActiveDeviceId() == device.id &&
         active.getActiveBleId() == preservedBleId) {
@@ -1114,7 +1111,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
       _statusMessage = label;
     });
     // 아직 연결 전이면 "누르는 중"을 먼저 말하지 않는다. 연결에 실패하면 누르지도 않았는데
-    // "누르는 중입니다" 뒤에 "연결하지 못했습니다"가 나와 혼란스러웠다(실기). 연결된 뒤에 말한다.
+    // "누르는 중입니다" 뒤에 "연결하지 못했습니다"가 나와 혼란스럽다. 연결된 뒤에 말한다.
     if (!BleService.instance.isConnected) {
       _deferredPressLabel = label;
       return;
@@ -1211,14 +1208,14 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     }
     // 낭독기는 상태 문구를 바로 읽지 않고(앞 낭독이 끝나야 함) 한국어를 초당 6~7자로
     // 읽는다. 글자당 0.11초로는 확인 질문 끝("'네' 또는 '아니요'로 답해 주세요")이
-    // 다 읽히기 전에 마이크가 열려 그 소리가 '아니요'로 처리됐다(실기 2026-11-17).
+    // 다 읽히기 전에 마이크가 열려 그 소리가 '아니요'로 처리된다.
     final ms = (text.length * 180 + 1000).clamp(2000, 10000);
     return Duration(milliseconds: ms);
   }
 
   /// 예약해 둔 "다시 듣기"의 세대. 실행·취소·버튼 답·정지가 오면 올려서, 기다리던
-  /// 예약이 뒤늦게 마이크를 열지 못하게 한다. 예전에는 '실행'을 누른 뒤에도 예약이
-  /// 살아 있어 실행 중이나 취소 뒤에 다시 듣기 시작했다(외부 평가).
+  /// 예약이 뒤늦게 마이크를 열지 못하게 한다. 그러지 않으면 '실행'을 누른 뒤에도 예약이
+  /// 살아 있어 실행 중이나 취소 뒤에 다시 듣기 시작한다.
   int _relistenGen = 0;
 
   void _cancelPendingRelisten() => _relistenGen++;
@@ -1229,7 +1226,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     Future<void>(() async {
       await _tts.waitUntilIdle();
       // 낭독기가 상태 문구(liveRegion)를 읽는 동안에는 열지 않는다. 앱 음성이 끝난 것만
-      // 기다리면 낭독 도중 마이크가 열려 낭독이 끊기고 낭독 소리가 녹음된다(실기).
+      // 기다리면 낭독 도중 마이크가 열려 낭독이 끊기고 낭독 소리가 녹음된다.
       await Future<void>.delayed(_screenReaderAllowance(_statusMessage));
       if (!mounted || gen != _relistenGen) return;
       if (_isRecording || _isProcessing || _isExecuting) return;
@@ -1310,7 +1307,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
         AppLogger.info('voice.replay_intercept', {'requestId': requestId});
         setState(() => _isProcessing = false);
         // 답을 기다리는 중이면 지금 질문을 다시 들려주고 계속 듣는다. 낭독기를 써도
-        // 들리게 result로 낸다(예전엔 navigation이라 낭독기 사용 중 무음이었다).
+        // 들리게 result로 낸다(navigation이면 낭독기 사용 중 억제된다).
         final question = _lowConfidenceQuestion ?? _confirmQuestion;
         if (_awaitingConfirm && question != null) {
           await _speak(question, interrupt: true, priority: TtsPriority.result);
@@ -1361,7 +1358,6 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
             '다시 실행할까요? "네" 또는 "아니요"로 답해 주세요.';
         setState(() {
           // 다른 실행 확인과 같이 질문을 계속 보여 주고 '실행'·'취소' 버튼을 띄운다.
-          // 예전에는 이 확인만 버튼이 없어 말로만 답할 수 있었다(외부 평가).
           _confirmQuestion = question;
           _statusMessage = question;
           _isProcessing = false;
@@ -1514,8 +1510,8 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
       });
       if (requestId != _analysisRequestId) return;
       // 여기로 오는 것은 대부분 서버에 닿지 못한 경우다(연결·시간 초과·주소 설정).
-      // 예전에는 모두 "명령을 이해하지 못했습니다"라고 해서, 사용자가 같은 말을
-      // 계속 되풀이했다(실기·외부 평가). 응답 형식이 틀린 경우만 "이해하지 못했다"고 한다.
+      // 이를 "명령을 이해하지 못했습니다"로 알리면 사용자가 같은 말을 계속 되풀이한다.
+      // 응답 형식이 틀린 경우만 "이해하지 못했다"고 한다.
       final String failMsg;
       if (e is FormatException) {
         _consecutiveFailures++;
@@ -1633,7 +1629,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
       _lastSequenceStopped = true;
       return false;
     }
-    // "기기 상태를 확인해 주세요"는 볼 수 없는 사용자가 할 수 없다(외부 평가).
+    // "기기 상태를 확인해 주세요"는 볼 수 없는 사용자가 할 수 없다.
     // 무엇을 할 수 있는지 알린다.
     const msg = '기기 연결이 끊겨 동작을 끝까지 전달하지 못했습니다. 일부 버튼은 이미 눌렸을 수 있습니다. '
         '다시 연결되면 "취소해 줘"로 가전을 끌 수 있습니다.';
@@ -1647,8 +1643,8 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
     if (_stopRequestedBeforeSend()) return false;
 
     // 이미 연결된 기기가 이 가전에 등록된 Touch Bridge면 그대로 쓴다. 다른 장치에
-    // 붙어 있으면 그 장치로 보내지 않고 이 가전의 장치로 다시 연결한다. 예전에는
-    // 연결된 장치를 무조건 써서, 가전을 골라도 다른 장치가 움직일 수 있었다(외부 평가).
+    // 붙어 있으면 그 장치로 보내지 않고 이 가전의 장치로 다시 연결한다. 연결된 장치를
+    // 무조건 쓰면 가전을 골라도 다른 장치가 움직일 수 있다.
     String deviceId = BleService.instance.connectedDeviceId;
     final targetBleId = ActiveDeviceService.instance.getActiveBleId();
     final connectedToOther = deviceId.isNotEmpty &&
@@ -1813,7 +1809,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
         _statusMessage = question;
       });
       // 낭독기를 쓰면 질문은 상태 문구(liveRegion)로 낭독기가 읽는다. 앱 음성까지 내면
-      // 두 목소리가 겹쳐 언제 답해야 할지 알 수 없다(외부 평가). 쓰지 않으면 앱이 말한다.
+      // 두 목소리가 겹쳐 언제 답해야 할지 알 수 없다. 쓰지 않으면 앱이 말한다.
       if (!AccessibilitySettings.isScreenReaderActive) {
         await _speak(question, interrupt: true);
       }
@@ -2040,7 +2036,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
       return Scaffold(
         backgroundColor: AppColors.background,
         // 오른쪽 위 정지도 남긴다. 첫 실행 안내가 "어느 화면에서든 오른쪽 위"라고 가르치므로
-        // 실행 중에 그 버튼이 사라지면 안 된다(외부 평가). 이 화면의 한 번 탭 정지와 같은 절차를 부른다.
+        // 실행 중에 그 버튼이 사라지면 안 된다. 이 화면의 한 번 탭 정지와 같은 절차를 부른다.
         appBar: TopAppBar(title: 'Touch Bridge', onEmergency: _onSingleTapStop),
         body: SafeArea(child: Center(child: _buildPressStatusView(rs))),
       );
@@ -2066,13 +2062,10 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
                           child: BleStatusBanner(),
                         ),
                         SizedBox(height: 28 * rs),
-                        // liveRegion: true — 스크린리더 활성 시 억제되는
-                        // navigation 우선순위 TTS 대신 스크린리더 채널로
-                        // 상태 변화를 알린다.
                         // 큰 제목은 낭독기가 자동으로 읽지 않는다(liveRegion 아님). 상태는 아래
-                        // 상태 문구 하나가 알린다. 예전에는 조용히 다시 여는 짧은 틈에 제목이
-                        // '말씀해 주세요.'로 바뀌며 낭독기가 읽었고, 다시 열린 마이크가 그 소리를
-                        // 명령으로 받아 서버로 보냈다(실기).
+                        // 상태 문구 하나가 알린다. 제목을 읽게 하면 조용히 다시 여는 짧은 틈에
+                        // 제목이 '말씀해 주세요.'로 바뀌며 낭독되고, 다시 열린 마이크가 그 소리를
+                        // 명령으로 받는다.
                         Semantics(
                           header: true,
                           child: Text(
@@ -2098,7 +2091,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
                         // 저장하면 TTS 억제(navigation 우선순위)와 관계없이
                         // 스크린리더 채널로 전달된다.
                         // 마이크가 듣는 동안에는 바뀌어도 낭독기가 읽지 않는다. 듣기 시작에
-                        // "듣고 있습니다"를 읽으면 그 소리가 녹음됐다(실기). 시작은 띵 소리로 알린다.
+                        // "듣고 있습니다"를 읽으면 그 소리가 녹음된다. 시작은 띵 소리로 알린다.
                         Semantics(
                           liveRegion: !(_isRecording ||
                               _quietRestart ||
@@ -2158,7 +2151,7 @@ class VoiceListeningScreenState extends State<VoiceListeningScreen> {
                         SizedBox(height: ResponsiveScale.v(context, 24)),
                         // 실행 확인 중에는 '실행'·'취소'를 보이고 예시 명령은 숨긴다.
                         // 실행 확인에 답한 "네"를 잘못 들었을 수 있어 되물으면 두 질문이 함께
-                        // 걸린다. 더 최근인 되묻기를 먼저 보여 준다(외부 평가).
+                        // 걸린다. 더 최근인 되묻기를 먼저 보여 준다.
                         if (_pendingLowConfidenceText != null &&
                             _lowConfidenceQuestion != null) ...[
                           _buildConfirmQuestionCard(rs, _lowConfidenceQuestion),

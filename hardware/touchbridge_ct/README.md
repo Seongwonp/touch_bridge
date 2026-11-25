@@ -3,7 +3,7 @@
 DFRobot SEN0211로 가전 전류를 재서 모터 ESP32(`hardware/touchbridge_corexy/`)로 1초마다 보고한다.
 보드는 FireBeetle ESP32, 빌드 환경은 `firebeetle32_adc`뿐이다.
 
-2026-11-10에 4MB ESP32 두 대(이 노드와 모터 ESP32)에서 ESP-NOW로 보고가 오가는 것을 확인했다(부하 0 W 상태).
+ESP32 두 대(이 노드와 모터 ESP32) 사이에서 ESP-NOW 보고가 오가고, 앱에 작동 상태가 표시되는 것을 확인했다.
 `src/ct.cpp`, `src/ct.h`는 검증된 콘센트 펌웨어에서 수정 없이 가져왔다. 릴레이와 비상정지 입력은 뺐다.
 
 ## 활선 안전 경고

@@ -1,7 +1,7 @@
 // 화면 크기·글자 확대·키보드 조합별 레이아웃 overflow 탐지.
 //
-// 실기기(Galaxy A31, 약 411x914dp)에서 홈 "기기 추가하기" 라벨이 잘린 사례를
-// 계기로, lib/screens 아래 최상위 화면을 여러 설정으로 띄워 RenderFlex 등
+// 작은 실기기(Galaxy A31, 약 411x914dp)에서도 라벨이 잘리지 않도록,
+// lib/screens 아래 최상위 화면을 여러 설정으로 띄워 RenderFlex 등
 // overflow 오류를 모두 수집한다. 첫 오류에서 멈추지 않도록 펌프 중에는
 // FlutterError.onError를 가로채고, 마지막에 화면 × 설정 요약을 출력한다.
 //

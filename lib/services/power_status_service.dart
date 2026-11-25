@@ -78,8 +78,8 @@ class PowerStatusService {
     if (state == PowerState.unknown) return PowerStatus.unknown;
     if (w is! num || !w.isFinite || w < 0) return null;
     // 가전 한 대가 낼 수 없는 값은 센서 이상(신호선 풀림·떠 있는 입력)으로 보고
-    // 상태를 모른다고 둔다. 부스 실기에서 대기 중인 전자레인지가 17.6 A(약 3.9 kW)로
-    // 찍혀 '작동 중'이 떴다(2026-11-18). SEN0211 최대 20 A의 끝값 근처다.
+    // 상태를 모른다고 둔다. 입력이 떠 있으면 대기 중에도 SEN0211 최대 20 A의 끝값
+    // 근처(약 17 A, 4 kW 가까이)가 찍힐 수 있다.
     if (w > maxPlausibleWatts) return PowerStatus.unknown;
     return PowerStatus(state, w.toDouble());
   }

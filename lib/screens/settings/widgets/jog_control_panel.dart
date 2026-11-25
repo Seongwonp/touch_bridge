@@ -24,7 +24,7 @@ class JogControlPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final rs = scale;
     final width = MediaQuery.sizeOf(context).width;
-    // 이동 단위·속도 줄은 Galaxy A31(411dp)에서도 넘쳤다. 폭이 좁거나 글자를
+    // 이동 단위·속도 줄은 411dp 폭(Galaxy A31)에서도 넘친다. 폭이 좁거나 글자를
     // 키웠으면 세로로 쌓는다.
     final compact = width < 440 || MediaQuery.textScalerOf(context).scale(1) > 1.1;
     // 시각 요소가 축소되더라도 실제 터치 영역은 WCAG 최소 44dp를 유지한다.

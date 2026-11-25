@@ -161,8 +161,8 @@ class BleService {
       _demoMode ? _demoDeviceId : (_connectedDevice?.remoteId.str ?? '');
   String get connectedDeviceName {
     final name = _connectedDevice?.platformName.trim() ?? '';
-    // 저장된 주소로 바로 다시 연결하면(스캔 없이) 이름을 못 받아 주소(MAC)가 화면과
-    // 낭독기로 나갔다(부스 실기 2026-11-18). 사용자에게는 장치 이름만 보인다.
+    // 저장된 주소로 바로 다시 연결하면(스캔 없이) 이름을 못 받아, 그대로 두면 주소(MAC)가
+    // 화면과 낭독기로 나간다. 사용자에게는 장치 이름만 보인다.
     return name.isEmpty ? 'Touch Bridge' : name;
   }
 
@@ -317,7 +317,7 @@ class BleService {
         if (!identical(sub, _connectionSub)) return; // 교체된 옛 구독이면 무시
         // 플랫폼의 connected는 명령 특성을 찾기 전에 온다. 그대로 알리면 구독자는
         // "연결됨"을 받는데 isConnected·이름은 아직 비어 있고, 준비 뒤의 명시 emit은
-        // distinct에 걸려 다시 오지 않는다(실기: 배너 "연결됨:", 앱바 "허브 연결 필요").
+        // distinct에 걸려 다시 오지 않는다.
         // 연결 완료는 connect() 끝의 명시 emit만 알린다.
         if (state != BluetoothConnectionState.connected) {
           _connectionStateController.add(state);
@@ -403,8 +403,7 @@ class BleService {
     }
     // 같은 장치로 이미 연결을 시도 중이면 그 결과를 함께 기다린다. 앱 시작 때 여러 곳
     // (자동 재연결, 활성 기기 선택, 음성 화면)이 동시에 부르면 시도가 줄줄이 쌓여 하나에
-    // 5초씩 20초 넘게 연결 상태가 바뀌었고, 그때마다 낭독기가 상태를 읽어 마이크에
-    // 섞였다(실기 2026-11-17).
+    // 5초씩 20초 넘게 연결 상태가 바뀌고, 그때마다 낭독기가 상태를 읽어 마이크에 섞인다.
     final pending = _pendingEnsure;
     if (pending != null && _pendingEnsureId == deviceId) return pending;
     final attempt = connect(deviceId);
@@ -598,7 +597,7 @@ class BleService {
 
   /// [epoch]를 주면 그 실행 토큰이 바뀌었을 때(정지·끊김) 보내지 않는다. 여러 줄로 된
   /// 한 동작(상대 이동, 눌러보기)은 시작할 때 토큰을 잡아 모든 줄에 넘겨야 한다.
-  /// 줄마다 새로 잡으면 줄 사이에 들어온 정지 뒤에도 남은 줄이 나간다(외부 평가).
+  /// 줄마다 새로 잡으면 줄 사이에 들어온 정지 뒤에도 남은 줄이 나간다.
   Future<bool> sendRaw(String command, {int? epoch}) async {
     if (epoch != null && epoch != _motionEpoch) {
       _addLog('CANCELLED_RAW: stop before send ($command)');
