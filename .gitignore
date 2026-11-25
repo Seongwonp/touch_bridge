@@ -89,3 +89,7 @@ docs/submission/
 # 기기별 값 (SwitchBot Bot MAC)
 hardware/touchbridge_corexy/config_local.h
 hardware/touchbridge_ct/.pio/
+
+# 로컬 전용 AI 작업 지침
+CLAUDE.md
+AGENTS.md
