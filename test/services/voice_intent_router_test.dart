@@ -167,6 +167,13 @@ void main() {
       expect(d.clearPendingCommand, isTrue);
     });
 
+    test('"네 취소"처럼 승인과 거절이 섞이면 실행하지 않는다', () {
+      for (final t in ['네 취소', '네 말고', '응 아니']) {
+        final d = route(t, hasPendingCommand: true);
+        expect(d.kind, isNot(VoiceIntentKind.pendingAccepted), reason: t);
+      }
+    });
+
     test('예/아니오가 아니면 대기 명령을 버리고 새 명령으로 처리한다', () {
       final d = route('1분 시작', hasPendingCommand: true);
       expect(d.kind, VoiceIntentKind.parseAsNewCommand);

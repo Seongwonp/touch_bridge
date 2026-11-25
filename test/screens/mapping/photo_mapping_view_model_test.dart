@@ -160,7 +160,7 @@ void main() {
       expect(profile.buttonMachinePositions['BT-01']?.yMm, closeTo(30, 0.001));
     });
 
-    test('사진 지문이 바뀌면 저장된 실제 mm 좌표와 보정을 폐기한다', () async {
+    test('사진 지문이 바뀌면 화면에서는 예전 보정을 쓰지 않지만, 저장 전에는 저장된 설정을 지우지 않는다', () async {
       const oldCalibration = PanelCalibration(
         imageFingerprint: 'old-photo',
         corners: [
@@ -216,8 +216,9 @@ void main() {
       );
 
       expect(vm.hasPanelCalibration, isFalse);
-      expect(profile.panelCalibration, isNull);
-      expect(profile.buttonMachinePositions, isEmpty);
+      // 새 사진으로 열기만 하고 저장하지 않으면 쓰던 기기는 예전 설정으로 계속 누를 수 있어야 한다.
+      expect(profile.panelCalibration, isNotNull);
+      expect(profile.buttonMachinePositions['BT-01']?.xMm, 45);
     });
   });
 

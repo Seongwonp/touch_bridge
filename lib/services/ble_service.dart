@@ -161,7 +161,9 @@ class BleService {
       _demoMode ? _demoDeviceId : (_connectedDevice?.remoteId.str ?? '');
   String get connectedDeviceName {
     final name = _connectedDevice?.platformName.trim() ?? '';
-    return name.isEmpty ? connectedDeviceId : name;
+    // 저장된 주소로 바로 다시 연결하면(스캔 없이) 이름을 못 받아, 그대로 두면 주소(MAC)가
+    // 화면과 낭독기로 나간다. 사용자에게는 장치 이름만 보인다.
+    return name.isEmpty ? 'Touch Bridge' : name;
   }
 
   void _addLog(String msg) {
@@ -313,7 +315,13 @@ class BleService {
       late final StreamSubscription<BluetoothConnectionState> sub;
       sub = target.connectionState.listen((state) {
         if (!identical(sub, _connectionSub)) return; // 교체된 옛 구독이면 무시
-        _connectionStateController.add(state);
+        // 플랫폼의 connected는 명령 특성을 찾기 전에 온다. 그대로 알리면 구독자는
+        // "연결됨"을 받는데 isConnected·이름은 아직 비어 있고, 준비 뒤의 명시 emit은
+        // distinct에 걸려 다시 오지 않는다.
+        // 연결 완료는 connect() 끝의 명시 emit만 알린다.
+        if (state != BluetoothConnectionState.connected) {
+          _connectionStateController.add(state);
+        }
         if (state == BluetoothConnectionState.disconnected) _motionEpoch++;
         _addLog('연결 상태 변경: ${state.name}');
         if (state == BluetoothConnectionState.disconnected) {
@@ -393,8 +401,26 @@ class BleService {
     if (isConnected && _connectedDevice?.remoteId.str == deviceId) {
       return true;
     }
-    return await connect(deviceId);
+    // 같은 장치로 이미 연결을 시도 중이면 그 결과를 함께 기다린다. 앱 시작 때 여러 곳
+    // (자동 재연결, 활성 기기 선택, 음성 화면)이 동시에 부르면 시도가 줄줄이 쌓여 하나에
+    // 5초씩 20초 넘게 연결 상태가 바뀌고, 그때마다 낭독기가 상태를 읽어 마이크에 섞인다.
+    final pending = _pendingEnsure;
+    if (pending != null && _pendingEnsureId == deviceId) return pending;
+    final attempt = connect(deviceId);
+    _pendingEnsure = attempt;
+    _pendingEnsureId = deviceId;
+    try {
+      return await attempt;
+    } finally {
+      if (identical(_pendingEnsure, attempt)) {
+        _pendingEnsure = null;
+        _pendingEnsureId = null;
+      }
+    }
   }
+
+  Future<bool>? _pendingEnsure;
+  String? _pendingEnsureId;
 
   Future<void> disconnect() async {
     _motionEpoch++;
@@ -569,7 +595,14 @@ class BleService {
     });
   }
 
-  Future<bool> sendRaw(String command) async {
+  /// [epoch]를 주면 그 실행 토큰이 바뀌었을 때(정지·끊김) 보내지 않는다. 여러 줄로 된
+  /// 한 동작(상대 이동, 눌러보기)은 시작할 때 토큰을 잡아 모든 줄에 넘겨야 한다.
+  /// 줄마다 새로 잡으면 줄 사이에 들어온 정지 뒤에도 남은 줄이 나간다.
+  Future<bool> sendRaw(String command, {int? epoch}) async {
+    if (epoch != null && epoch != _motionEpoch) {
+      _addLog('CANCELLED_RAW: stop before send ($command)');
+      return false;
+    }
     if (_sendRawOverride != null) return _sendRawOverride!(command);
     if (_demoMode) {
       _addLog('DEMO SEND_RAW: $command');
@@ -578,8 +611,8 @@ class BleService {
     final c = _commandCharacteristic;
     if (c == null) return false;
     // 인증 핸드셰이크와 큐 대기 사이에 비상 정지/끊김이 끼어들 수 있다.
-    // 이 시점의 epoch를 기억해 두고 실제 write 직전에 다시 비교한다.
-    final epoch = _motionEpoch;
+    // 이 시점의(또는 호출자가 준) epoch를 기억해 두고 실제 write 직전에 다시 비교한다.
+    final startEpoch = epoch ?? _motionEpoch;
 
     // 물리 동작 인증 게이트: 페어링 키가 프로비저닝된 기기는 유효한 HMAC
     // 세션 없이는 raw 명령(G-code/BTN_n/SET_GRID)을 보내지 않는다.
@@ -598,7 +631,7 @@ class BleService {
       // 비상 정지는 큐를 우회해 먼저 나간다. 그 뒤에 큐에서 차례가 온 이동·누름
       // 명령은 정지 이전에 준비된 것이므로 버린다 — 정지를 눌렀는데 갠트리가
       // 다음 버튼으로 이동하는 사고를 막는다. (sendProtocolPayload와 같은 계약)
-      if (epoch != _motionEpoch || !identical(c, _commandCharacteristic)) {
+      if (startEpoch != _motionEpoch || !identical(c, _commandCharacteristic)) {
         _addLog('CANCELLED_RAW: connection/stop changed ($command)');
         return false;
       }
@@ -667,12 +700,16 @@ class BleService {
       return false;
     }
 
-    final okMode = await sendRaw('G91');
+    // 세 줄을 한 동작으로 묶는다: 시작할 때 토큰을 잡아 모든 줄에 넘긴다.
+    final epoch = _motionEpoch;
+    final okMode = await sendRaw('G91', epoch: epoch);
+    if (!okMode) return false;
     await Future<void>.delayed(const Duration(milliseconds: 120));
-    final okMove = await sendRaw('G1 $normalizedAxis$value F$feedRate');
+    final okMove = await sendRaw('G1 $normalizedAxis$value F$feedRate', epoch: epoch);
+    if (!okMove) return false;
     await Future<void>.delayed(const Duration(milliseconds: 350));
-    final okReset = await sendRaw('G90');
-    return okMode && okMove && okReset;
+    final okReset = await sendRaw('G90', epoch: epoch);
+    return okReset;
   }
 
   Future<bool> sendPress({
@@ -749,6 +786,45 @@ class BleService {
     return sendRawWithResponse(cmd, timeout: timeout);
   }
 
+  static final RegExp _statusLine = RegExp(
+    r'homed=(\d).*?pos=\(\s*(-?[\d.]+),\s*(-?[\d.]+)\).*?q=(\d+)',
+  );
+
+  /// 펌웨어 상태 줄(`STATE … homed=1 pos=(12.30, 4.00) … q=0 …`)에서 실제 위치를 읽는다.
+  /// 상태 줄이 아니면 null.
+  static ({double x, double y, bool homed, int queue})? parseMotionStatus(
+    String line,
+  ) {
+    final m = _statusLine.firstMatch(line);
+    if (m == null) return null;
+    final x = double.tryParse(m.group(2)!);
+    final y = double.tryParse(m.group(3)!);
+    final q = int.tryParse(m.group(4)!);
+    if (x == null || y == null || q == null) return null;
+    return (x: x, y: y, homed: m.group(1) == '1', queue: q);
+  }
+
+  /// 장치에 실제 위치를 묻는다. 위치 맞추기 화면이 앱의 추정이 아니라 장치가 아는
+  /// 좌표로 버튼 위치를 저장하게 한다. 응답 대기자 대신 응답 스트림을 보는 이유:
+  /// 1초마다 오는 전력 보고 등 다른 줄이 먼저 와도 상태 줄을 놓치지 않게.
+  Future<({double x, double y, bool homed, int queue})?> queryMotionStatus({
+    Duration timeout = const Duration(seconds: 2),
+  }) async {
+    if (!isConnected) return null;
+    final completer = Completer<({double x, double y, bool homed, int queue})?>();
+    final sub = responseStream.listen((line) {
+      final status = parseMotionStatus(line);
+      if (status != null && !completer.isCompleted) completer.complete(status);
+    });
+    try {
+      final sent = await sendRaw('\$\$');
+      if (!sent) return null;
+      return await completer.future.timeout(timeout, onTimeout: () => null);
+    } finally {
+      await sub.cancel();
+    }
+  }
+
   Future<String?> sendGetStatus() async {
     // 하드웨어 상태를 요청하는 텍스트 명령 '$$'. waiter를 먼저 등록하므로
     // write 직후 도착한 응답도 유실되지 않는다.
@@ -773,11 +849,14 @@ class BleService {
     return await _sendAndWaitAck({'action': HardwareProtocol.actionGetServo});
   }
 
-  Future<void> sendHoming(String deviceId) async {
-    await _sendAndWaitAck({
+  /// 원점 복귀 명령을 보낸다. 보내지 못했거나(연결 없음·인증·쓰기 실패) 기기가 거부하면 false.
+  /// 응답을 기다리다 시간이 지난 것은 전송은 된 것으로 보고 true다.
+  Future<bool> sendHoming(String deviceId) async {
+    final ack = await _sendAndWaitAck({
       'action': 'home',
       'deviceId': deviceId,
     }, timeout: const Duration(seconds: 5));
+    return !ack.startsWith('ERROR:') || ack == 'ERROR:TIMEOUT';
   }
 
   /// 비상 정지 명령을 전송하고 controller ACK 결과 문자열을 그대로 반환한다.

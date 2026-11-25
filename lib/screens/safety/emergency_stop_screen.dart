@@ -9,8 +9,10 @@ import '../../services/status_intent.dart';
 import '../../services/feedback_service.dart';
 import '../../services/speech_session_service.dart';
 import '../../services/timer_service.dart';
+import '../../services/power_status_service.dart';
 import '../../services/tts_service.dart';
 import '../../services/accessibility_experiment_service.dart';
+import '../../services/accessibility_settings.dart';
 
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
@@ -46,6 +48,10 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
   bool _isStartingListening = false;
   bool _stopInProgress = false;
 
+  /// 마지막 정지가 확인되지 않았을 때의 안내. 음성은 한 번 지나가므로 화면에 남겨
+  /// 낭독기로 다시 훑어도 지금 상태를 알 수 있게 한다.
+  String? _stopFailureMessage;
+
   // 구간 TTS: 동일 구간이 두 번 울리지 않도록 한 번 발화한 초를 기록한다.
   final Set<int> _announcedMilestones = {};
 
@@ -71,9 +77,64 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
           });
 
     _startCountdown();
+    // 안내를 먼저 큐에 넣고 마이크를 연다. _initSpeech가 안내가 끝나길 기다리므로
+    // 안내 속 "중단"이 STT에 들어가 스스로 정지되는 일이 없다.
+    // 멈추는 방법은 낭독기를 써도 들려야 하는 안전 정보라 result로 낸다(navigation이면
+    // 낭독기 사용 중 억제된다). "작동 중"이라 단정하지 않는다: 앱은 명령을 전달하고
+    // 시간을 셀 뿐, 가전이 실제로 돌았는지는 모른다.
+    _speak(
+      '${widget.deviceName}에 명령을 전달했고, 설정한 시간을 세고 있습니다. ${_stopInstruction()}.',
+      priority: TtsPriority.result,
+    );
     _initSpeech();
-    _speak('${widget.deviceName} 작동 중입니다. 중단하려면 아래 버튼을 3초간 누르세요.');
+    _lastPowerState = PowerStatusService.instance.state;
+    PowerStatusService.instance.status.addListener(_onPowerStatus);
   }
+
+  PowerState _lastPowerState = PowerState.unknown;
+
+  /// 전류 센서가 가전이 꺼졌다고 판정하면 한 번 알린다. 관찰 정보일 뿐이라
+  /// 정지·완료 판단에는 쓰지 않는다(전력 값은 안전 판단에 쓰지 않는다는 계약).
+  void _onPowerStatus() {
+    final now = PowerStatusService.instance.state;
+    final before = _lastPowerState;
+    _lastPowerState = now;
+    if (!mounted) return;
+    setState(() {});
+    // 의미가 바뀌는 순간만 한 번씩 알린다(전력 수치의 매초 변화는 읽지 않는다).
+    // 켜짐→꺼짐뿐 아니라 나중에 켜짐이 확인되거나 센서가 끊긴 경우도 알린다.
+    final String? msg = switch ((before, now)) {
+      (PowerState.on, PowerState.off) =>
+        '전류 센서 기준으로 ${widget.deviceName} 전원이 꺼진 것으로 보입니다.',
+      (PowerState.unknown, PowerState.on) || (PowerState.off, PowerState.on) =>
+        '전류 센서 기준으로 ${widget.deviceName} 전원이 켜져 있습니다.',
+      (PowerState.on, PowerState.unknown) || (PowerState.off, PowerState.unknown) =>
+        '전류 센서 정보가 끊겨 가전 전원 상태를 알 수 없습니다.',
+      _ => null,
+    };
+    if (msg != null) _speak(msg, priority: TtsPriority.result);
+  }
+
+  /// 전류 센서가 연결되어 있을 때만 보이는 가전 작동 상태 문구.
+  String? _powerLabel() {
+    final s = PowerStatusService.instance.status.value;
+    switch (s.state) {
+      case PowerState.on:
+        final w = s.watts;
+        return w == null
+            ? '${widget.deviceName} 작동 중 (전류 센서)'
+            : '${widget.deviceName} 작동 중 · 약 ${w.round()} W';
+      case PowerState.off:
+        return '${widget.deviceName} 전원 꺼짐 (전류 센서)';
+      case PowerState.unknown:
+        return null;
+    }
+  }
+
+  /// 화면 낭독기 사용자는 두 번 탭으로 바로 멈춘다(길게 누르기는 낭독기 제스처와 다르다).
+  String _stopInstruction() => AccessibilitySettings.isScreenReaderActive
+      ? '멈추려면 아래 버튼을 두 번 탭하세요'
+      : '중단하려면 아래 빨간 버튼을 한 번 누르세요';
 
   Future<void> _initSpeech() async {
     // 이 화면이 스택 최상단인 동안만 이벤트를 받는다(공용 세션의 스택 구조).
@@ -82,7 +143,12 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
         name: 'EmergencyStopScreen',
         onStatus: (status) {
           if (status == 'notListening' || status == 'done') {
-            if (mounted && _secondsLeft > 0) _startListening();
+            // 정지를 보내고 결과를 알리는 동안에는 다시 듣지 않는다. 듣기를 멈추면 이
+            // 콜백이 오는데, 여기서 곧바로 마이크를 다시 켜면 정지 안내 음성을 다시
+            // 알아들을 수 있다.
+            if (mounted && _secondsLeft > 0 && !_stopInProgress) {
+              _startListening();
+            }
           }
         },
         onError: (_) {
@@ -92,12 +158,14 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     );
     try {
       _speechEnabled = await _speechSession.initialize();
-      if (_speechEnabled) _startListening();
+      await _tts.waitUntilIdle();
+      if (_speechEnabled && mounted) _startListening();
     } catch (_) {}
   }
 
   void _startListening() async {
     if (!_speechEnabled ||
+        _stopInProgress ||
         _speechSession.isListening ||
         _isStartingListening) {
       return;
@@ -167,6 +235,15 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
+  /// 낭독용 남은 시간. "02:30"은 시각("2시 30분")으로 읽힐 수 있어 단위를 붙인다.
+  String _spokenTime(int totalSeconds) {
+    final m = totalSeconds ~/ 60;
+    final s = totalSeconds % 60;
+    if (m == 0) return '$s초';
+    if (s == 0) return '$m분';
+    return '$m분 $s초';
+  }
+
   Future<void> _speak(
     String message, {
     String source = 'EmergencyStopScreen',
@@ -209,6 +286,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     _holdHapticTimer?.cancel();
     setState(() {
       _isHolding = false;
+      _stopFailureMessage = null;
     });
     _speechSession.stop();
     _timerService.stop();
@@ -242,8 +320,11 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     } else {
       // 전송만 됐거나 실패한 경우: 완료 화면으로 넘기지 않고 재시도할 수 있게 둔다.
       _stopInProgress = false;
-      // 정지 실패 시 음성 감지를 즉시 재시작해 "멈춰" 재시도를 받을 수 있게 한다.
-      if (mounted && _speechEnabled) _startListening();
+      setState(() => _stopFailureMessage = outcome.message);
+      // 정지 실패 시 "멈춰" 재시도를 받을 수 있게 다시 듣는다. 실패 안내가 다 끝난
+      // 뒤에 켜야 안내 음성을 명령으로 알아듣지 않는다.
+      await _tts.waitUntilIdle();
+      if (mounted && _speechEnabled && !_stopInProgress) _startListening();
     }
   }
 
@@ -253,6 +334,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
 
   @override
   void dispose() {
+    PowerStatusService.instance.status.removeListener(_onPowerStatus);
     _timerService.stop();
     // 화면 이탈 후에는 남은 시간을 추적하지 못한다 — 상태 질의가 옛 값으로
     // "작동 중"이라 답하지 않게 정리한다.
@@ -275,10 +357,10 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
     return Scaffold(
       backgroundColor: const Color(0xFF041329),
       appBar: TopAppBar(
-        title: '${widget.deviceName} 작동 중',
+        title: '${widget.deviceName} 남은 시간',
         showBack: true,
-        // 화면 중앙에 전용 비상 정지 버튼이 있으므로 앱바 중복 노출은 끈다.
-        showEmergency: false,
+        // 오른쪽 위 정지도 남긴다("어느 화면에서든 오른쪽 위"). 가운데 버튼과 같은 절차를 부른다.
+        onEmergency: _onHoldCompleted,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -299,7 +381,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                 SizedBox(height: ResponsiveScale.v(context, 8)),
                 Semantics(
                   label: '남은 시간',
-                  value: _formatMMSS(_secondsLeft),
+                  value: _spokenTime(_secondsLeft),
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
                     child: ExcludeSemantics(
@@ -315,6 +397,19 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                     ),
                   ),
                 ),
+                if (_powerLabel() case final power?) ...[
+                  SizedBox(height: 8 * rs),
+                  Text(
+                    power,
+                    key: const Key('countdown_power_status'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: const Color(0xFFD6E3FF),
+                      fontSize: 16 * rs,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
                 SizedBox(height: 24 * rs),
                 Container(
                   width: double.infinity,
@@ -328,7 +423,9 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                     border: Border.all(color: const Color(0xFF27354C)),
                   ),
                   child: Text(
-                    '중단하려면 아래 버튼을 3초간 누르세요',
+                    _stopFailureMessage == null
+                        ? _stopInstruction()
+                        : '$_stopFailureMessage 다시 ${_stopInstruction()}.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: const Color(0xFFD6E3FF),
@@ -366,19 +463,22 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                     SizedBox(height: ResponsiveScale.v(context, 16)),
                     Semantics(
                       button: true,
-                      label: '비상 정지',
-                      hint: '길게 눌러 기기를 즉시 중단합니다',
+                      // 오른쪽 위 '비상 정지'와 이름을 구분한다. 둘 다 같은 정지 절차를 부른다.
+                      label: '즉시 중단',
+                      hint: '두 번 탭하면 터치브릿지를 바로 멈춥니다',
+                      excludeSemantics: true,
+                      // 한 번 누르면 바로 멈춘다. 길게 눌러도 3초가 차면 멈춘다.
+                      onTap: _onHoldCompleted,
                       onLongPress: _onHoldCompleted,
                       child: GestureDetector(
+                        onTap: _onHoldCompleted,
                         onLongPressStart: (_) => _onHoldStart(),
                         onLongPressEnd: (_) => _onHoldEnd(),
                         onLongPressCancel: _onHoldEnd,
                         child: Container(
                           width: double.infinity,
-                          constraints: BoxConstraints(
-                            minHeight: 160 * rs,
-                            maxHeight: 220 * rs,
-                          ),
+                          // 최대 높이를 두면 큰 글씨에서 "길게 눌러 중단"이 잘린다.
+                          constraints: BoxConstraints(minHeight: 160 * rs),
                           decoration: BoxDecoration(
                             gradient: const LinearGradient(
                               colors: [Color(0xFFFF5252), Color(0xFF93000A)],
@@ -403,7 +503,7 @@ class _EmergencyStopScreenState extends State<EmergencyStopScreen>
                               ),
                               SizedBox(height: 8 * rs),
                               Text(
-                                '길게 눌러 중단',
+                                '눌러서 중단',
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 28 * rs,

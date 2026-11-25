@@ -10,6 +10,8 @@ class MicrowaveCommandService {
     'BT-02': 30,
     'BT-03': 60,
     'BT-04': 300,
+    // 시연 전자레인지(willz)에 있는 10분 버튼. 보호자가 위치를 등록해야 눌린다.
+    'BT-10': 600,
   };
 
   static const buttonLabel = <String, String>{
@@ -22,6 +24,7 @@ class MicrowaveCommandService {
     'BT-07': '해동',
     'BT-08': '우유',
     'BT-09': '자동조리',
+    'BT-10': '10분',
   };
 
   static int calculateSeconds(List<dynamic> commands) {
@@ -142,8 +145,15 @@ class MicrowaveCommandService {
   /// AI 해석을 건너뛰게 된다.
   static final _pressOnlyRe =
       RegExp(r'^(\d{1,2})번(버튼)?(을|를)?(눌러줘|눌러|눌러주세요|누르기)?$');
-  static final _start30Re = RegExp(r'^(30초|삼십초)(으로|로)?시작(해|해줘|해주세요)?$');
-  static final _start60Re = RegExp(r'^(1분|일분)(으로|로)?시작(해|해줘|해주세요)?$');
+  // 시간 + 요청 동사만으로 된 문장 전체가 일치할 때만 실행한다(부분 일치 금지).
+  // "30초 돌려줘", "1분 데워 줘"처럼 가장 흔한 말을 서버 없이 바로 처리한다.
+  static const _timeVerb =
+      r'(만|으로|로)?(시작(해|해줘|해주세요)?|돌려(줘|주세요)?|데워(줘|주세요)?)$';
+  // 음성 인식이 '초'를 '도'로 받아 적는 일이 잦다(예: "30도 돌려 줘"). 전자레인지에
+  // '30도'는 뜻이 없으므로 시간 명령으로 본다. 문장 전체가 맞을 때만이다.
+  static final _start30Re = RegExp('^(30초|삼십초|30도|삼십도)$_timeVerb');
+  static final _start60Re = RegExp('^(1분|일분)$_timeVerb');
+  static final _start600Re = RegExp('^(10분|십분)$_timeVerb');
 
   static Map<String, dynamic>? checkSimpleRules(String text) {
     final t = text.replaceAll(' ', '');
@@ -189,6 +199,13 @@ class MicrowaveCommandService {
         'action': 'MICROWAVE_CONTROL',
         'commands': ['BT-03', 'BT-05'],
         'message': '1분 조리를 시작합니다.',
+      };
+    }
+    if (_start600Re.hasMatch(t)) {
+      return {
+        'action': 'MICROWAVE_CONTROL',
+        'commands': ['BT-10', 'BT-05'],
+        'message': '10분 조리를 시작합니다.',
       };
     }
     return null;

@@ -1,12 +1,3 @@
 # Touch Bridge — AI Agent Context
 
-**프로젝트 컨텍스트는 [CLAUDE.md](CLAUDE.md) 하나만 유지합니다. 이 파일을 읽는
-AI 도구는 CLAUDE.md를 따르세요.**
-
-과거 이 파일은 CLAUDE.md의 사본이었지만 갱신이 누락되면서 구버전 정보
-(3인 팀 표기, 이중 탭 4초 타임아웃, 구세대 하드웨어 3단계 전략)가 남아
-문서 간 모순을 만들었습니다 (2026-08 전면 리뷰에서 발견). 같은 내용을 두 곳에서
-관리하지 않기 위해 사본을 제거하고 포인터만 남깁니다.
-
-- 팀: 3팀 멜론머스크 (박성원 · 서예솔) — 2026 한이음 드림업
-- 작업 로그: [docs/WORK_LOG.md](docs/WORK_LOG.md)
+프로젝트 컨텍스트는 [CLAUDE.md](CLAUDE.md)에 있습니다. 코드 수정 규칙은 [CONTRIBUTING.md](CONTRIBUTING.md)를 따르세요.

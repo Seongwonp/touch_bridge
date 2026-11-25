@@ -208,6 +208,15 @@ class ServerCallbacks : public BLEServerCallbacks {
   }
 };
 
+// Bot 링크를 닫으면 BLE 라이브러리가 GATT client 앱을 등록 해제하고, Bluedroid는 그때
+// 어떤 앱도 붙잡지 않은 링크를 모두 바로 끊는다. 앱(폰)이 접속한 링크가 바로 그런 링크라
+// 그대로 두면 Bot을 누를 때마다 폰 연결이 끊기고 비상 정지가 걸린다(reason 0x16).
+// 서버 앱이 폰 링크를 붙잡도록 표시한다. 이미 연결된 링크라 새 연결은 만들지 않는다.
+static void gattsHoldLink(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t* param) {
+  if (event != ESP_GATTS_CONNECT_EVT || isBotAddr(param->connect.remote_bda)) return;
+  esp_ble_gatts_open(gatts_if, param->connect.remote_bda, true);
+}
+
 class RxCallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic* c) override {
     String v = c->getValue().c_str();
@@ -253,6 +262,7 @@ class RxCallbacks : public BLECharacteristicCallbacks {
 void bleBegin() {
   bleLines = xQueueCreate(8, sizeof(LineMsg));
   BLEDevice::init(BLE_DEVICE_NAME);
+  BLEDevice::setCustomGattsHandler(gattsHoldLink);
   BLEDevice::setMTU(517);          // 앱 JSON(최대 ~200B)을 한 패킷으로 주고받기 위함
   bleServer = BLEDevice::createServer();
   bleServer->setCallbacks(new ServerCallbacks());
@@ -365,6 +375,25 @@ static void sanitizeId(const char* in, char* outId) {
 
 void emitState(const char* id, const char* state, const char* extra = "") {
   out("{\"version\":2,\"commandId\":\"%s\",\"state\":\"%s\"%s}\n", id, state, extra);
+}
+
+// 위치 오차 진단: 시리얼에는 목표·실제 위치와 오차를 자세히, BLE에는 짧은 상태만 보낸다.
+void emitStateSerialDetail(const char* id, const char* state, const char* extra) {
+  char line[256];
+  int n = snprintf(line, sizeof(line),
+                   "{\"version\":2,\"commandId\":\"%s\",\"state\":\"%s\"%s}\n",
+                   id, state, extra);
+  if (n <= 0 || n >= (int)sizeof(line)) { emitState(id, state); return; }
+  Serial.print(line);
+  if (bleConnected) {
+    char brief[128];
+    int m = snprintf(brief, sizeof(brief),
+                     "{\"version\":2,\"commandId\":\"%s\",\"state\":\"%s\"}\n", id, state);
+    if (m > 0 && m < (int)sizeof(brief)) {
+      bleNotify(bleIo, brief, m);
+      bleNotify(bleTx, brief, m);
+    }
+  }
 }
 
 // ---------------- 실행 ----------------
@@ -555,7 +584,26 @@ void handleEvent(MotionEvent e) {
       out("STOPPED\n");
       break;
     case MotionEvent::FAULT_FOLLOW: failActive("ERROR_STALL", "FOLLOW_ERROR"); break;
-    case MotionEvent::FAULT_SETTLE: failActive("ERROR_POSITION", "SETTLE"); break;
+    case MotionEvent::FAULT_SETTLE: {
+      if (active && cur.org == ORG_JSON && cur.type == StepType::MOVE) {
+        auto fault = motion.faultSnapshot();
+        if (!fault.valid) { failActive("ERROR_POSITION", "SETTLE"); break; }
+        float err = hypotf(fault.x - cur.x, fault.y - cur.y);
+        char extra[160];
+        snprintf(extra, sizeof(extra),
+                 ",\"reason\":\"SETTLE\",\"target\":{\"xMm\":%.2f,\"yMm\":%.2f},"
+                 "\"position\":{\"xMm\":%.2f,\"yMm\":%.2f},\"errorMm\":%.3f,\"settleMs\":%lu",
+                 cur.x, cur.y, fault.x, fault.y, err, (unsigned long)fault.settleMs);
+        emitStateSerialDetail(cur.id, "ERROR_POSITION", extra);
+        qClear();
+        active = false;
+        planValid = false;
+        invalidateToken();
+      } else {
+        failActive("ERROR_POSITION", "SETTLE");
+      }
+      break;
+    }
     case MotionEvent::FAULT_HOME:   failActive("ERROR_TIMEOUT", "HOME_NOT_FOUND"); break;
   }
 }

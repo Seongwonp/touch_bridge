@@ -21,7 +21,7 @@ import 'package:touch_bridge/services/tts_service.dart';
 /// 결과가 정지 안내를 덮거나 타이머 화면으로 이동시키지 않는지를 본다.
 ///
 /// AI_BACKEND_URL이 없어 STT 초기화는 건너뛰지만(화면은 "미설정" 안내만 하고 뜬다),
-/// 명령 처리 경로는 handleCommandForTest로 직접 넣는다.
+/// 명령 처리 경로는 runConfirmedForTest(실행 확인을 마친 명령)로 직접 넣는다.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -29,6 +29,9 @@ void main() {
   late List<String> rawSent;
 
   setUp(() async {
+    // 이 테스트는 매핑 프로필 없이 데모 좌표 경로로 누름 시퀀스를 만든다.
+    // 앱은 데모 빌드에서만 이 경로를 허용하므로 테스트에서 명시적으로 켠다.
+    VoiceListeningScreenState.allowMockMappingFallback = true;
     SharedPreferences.setMockInitialValues({});
     TtsService().disableEngineForTest = true;
     TtsService().resetForTest();
@@ -53,6 +56,7 @@ void main() {
   });
 
   tearDown(() {
+    VoiceListeningScreenState.allowMockMappingFallback = false;
     TtsService().disableEngineForTest = false;
     BleService.instance.clearTestOverrides();
     BleService.instance.setSendRawOverride(null);
@@ -85,7 +89,7 @@ void main() {
   /// 실행 화면이 뜰 때까지 진행한다.
   Future<void> startExecution(WidgetTester tester, VoiceListeningScreenState state) async {
     // ignore: unawaited_futures
-    state.handleCommandForTest({
+    state.runConfirmedForTest({
       'action': 'MICROWAVE_CONTROL',
       'commands': ['BT-02', 'BT-05'],
       'inferred_seconds': 30,
@@ -99,6 +103,157 @@ void main() {
     expect(find.byKey(PressProgressView.stopButtonKey), findsOneWidget,
         reason: '실행 중 화면에 단일 탭 정지 버튼이 있어야 한다');
   }
+
+  group('가전 실행 확인 (실행·취소)', () {
+    Map<String, dynamic> cook() => {
+          'action': 'MICROWAVE_CONTROL',
+          'commands': ['BT-02', 'BT-05'],
+          'inferred_seconds': 30,
+          'confidence': 0.99,
+          'needs_confirmation': false,
+          'message': '30초 조리를 시작합니다.',
+        };
+
+    testWidgets('명확한 명령도 바로 누르지 않고 실행할지 묻는다', (tester) async {
+      final state = await pumpScreen(tester);
+      // ignore: unawaited_futures
+      state.handleCommandForTest(cook());
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+      expect(rawSent, isEmpty, reason: '확인 전에는 가전 버튼을 누르지 않는다');
+      expect(state.confirmQuestionForTest, '30초 조리를 시작할까요? "네" 또는 "아니요"로 답해 주세요.');
+      expect(find.byKey(VoiceListeningScreenState.confirmRunKey), findsOneWidget);
+      expect(find.byKey(VoiceListeningScreenState.confirmCancelKey), findsOneWidget);
+      await tester.pump(const Duration(seconds: 4));
+    });
+
+    testWidgets("'실행'을 누르면 그때 보낸다", (tester) async {
+      stubStopAck('STOPPED');
+      final state = await pumpScreen(tester);
+      // ignore: unawaited_futures
+      state.handleCommandForTest(cook());
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+      await tester.ensureVisible(find.byKey(VoiceListeningScreenState.confirmRunKey));
+      await tester.tap(find.byKey(VoiceListeningScreenState.confirmRunKey));
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 300));
+      }
+      expect(rawSent, isNotEmpty, reason: '확인한 뒤에는 명령을 보낸다');
+      expect(state.confirmQuestionForTest, isNull);
+      // 진행 중인 시퀀스를 정지로 끝내 테스트에 타이머가 남지 않게 한다.
+      await tester.tap(find.byKey(PressProgressView.stopButtonKey));
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump(const Duration(seconds: 3));
+    });
+
+    testWidgets('잘못 들었을 수 있으면 되묻고, 맞아요·아니에요 버튼으로도 답할 수 있다', (tester) async {
+      final state = await pumpScreen(tester);
+      // ignore: unawaited_futures
+      state.processSpeechForTest('30초 돌려줘', confidence: 0.2);
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+      expect(state.lowConfidenceQuestionForTest, contains('30초 돌려줘'));
+      expect(state.confirmQuestionForTest, isNull, reason: '되묻기 단계에서는 아직 실행 확인이 아니다');
+
+      final yes = find.byKey(VoiceListeningScreenState.lowConfidenceYesKey);
+      await tester.ensureVisible(yes);
+      await tester.tap(yes);
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+      // '맞아요' 뒤에는 되묻기를 닫고 원문을 다시 처리한다(이 테스트 환경에는 등록 가전이
+      // 없어 거기서 멈춘다). 되묻기 단계에서는 아무것도 보내지 않는다.
+      expect(state.lowConfidenceQuestionForTest, isNull);
+      expect(state.statusMessageForTest, isNot(contains('라고 들었어요')));
+      expect(rawSent, isEmpty);
+      await tester.pump(const Duration(seconds: 4));
+    });
+
+    testWidgets('되묻기에서 아니에요를 누르면 아무것도 하지 않고 다시 말하라고 한다', (tester) async {
+      final state = await pumpScreen(tester);
+      // ignore: unawaited_futures
+      state.processSpeechForTest('30초 돌려줘', confidence: 0.2);
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+      final no = find.byKey(VoiceListeningScreenState.lowConfidenceNoKey);
+      await tester.ensureVisible(no);
+      await tester.tap(no);
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+      expect(state.lowConfidenceQuestionForTest, isNull);
+      expect(state.confirmQuestionForTest, isNull);
+      expect(state.statusMessageForTest, '알겠습니다. 다시 말씀해 주세요.');
+      expect(rawSent, isEmpty);
+      await tester.pump(const Duration(seconds: 4));
+    });
+
+    testWidgets('확인 질문은 실행·취소 위에 계속 보인다 (마이크가 켜져도 덮이지 않음)', (tester) async {
+      final state = await pumpScreen(tester);
+      // ignore: unawaited_futures
+      state.handleCommandForTest(cook());
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+      final question = state.confirmQuestionForTest!;
+      expect(
+        find.bySemanticsLabel('실행 확인 질문. $question'),
+        findsOneWidget,
+      );
+      await tester.ensureVisible(find.byKey(VoiceListeningScreenState.confirmCancelKey));
+      await tester.tap(find.byKey(VoiceListeningScreenState.confirmCancelKey));
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+      expect(find.bySemanticsLabel(RegExp('실행 확인 질문')), findsNothing);
+      await tester.pump(const Duration(seconds: 4));
+    });
+
+    testWidgets("'취소'를 누르면 아무것도 보내지 않는다", (tester) async {
+      final state = await pumpScreen(tester);
+      // ignore: unawaited_futures
+      state.handleCommandForTest(cook());
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+      await tester.ensureVisible(find.byKey(VoiceListeningScreenState.confirmCancelKey));
+      await tester.tap(find.byKey(VoiceListeningScreenState.confirmCancelKey));
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+      expect(rawSent, isEmpty);
+      expect(state.confirmQuestionForTest, isNull);
+      expect(state.statusMessageForTest, '알겠습니다. 취소할게요.');
+      expect(find.byKey(VoiceListeningScreenState.confirmRunKey), findsNothing);
+      await tester.pump(const Duration(seconds: 4));
+    });
+  });
+
+  testWidgets('버튼 위치가 저장되지 않은 기기는 데모 좌표로 누르지 않고 거절한다', (tester) async {
+    VoiceListeningScreenState.allowMockMappingFallback = false;
+    final state = await pumpScreen(tester);
+    // ignore: unawaited_futures
+    state.runConfirmedForTest({
+      'action': 'MICROWAVE_CONTROL',
+      'commands': ['BT-02', 'BT-05'],
+      'inferred_seconds': 30,
+      'confidence': 0.99,
+      'needs_confirmation': false,
+      'message': '30초 조리를 시작합니다.',
+    });
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    expect(rawSent, isEmpty, reason: '매핑 없는 실제 기기에 데모 좌표로 보내면 엉뚱한 버튼이 눌린다');
+    expect(state.statusMessageForTest, contains('버튼 위치가 아직 설정되지 않았습니다'));
+    expect(find.byType(EmergencyStopScreen), findsNothing);
+    await tester.pump(const Duration(seconds: 4));
+  });
 
   testWidgets('실행 중 정지 버튼 한 번 탭으로 우선 정지 경로가 호출되고 잔여 명령이 끊긴다', (tester) async {
     stubStopAck('STOPPED');
@@ -128,7 +283,7 @@ void main() {
     expect(find.byType(EmergencyStopScreen), findsNothing);
     expect(state.isExecutingForTest, isFalse);
     // 정지 안내가 남아 있고, 늦게 돌아온 실행 결과 문구로 덮이지 않았다.
-    expect(state.statusMessageForTest, '기기를 멈췄습니다. 안전합니다.');
+    expect(state.statusMessageForTest, '터치브릿지를 멈췄습니다. 가전도 끄려면 "취소해 줘"라고 말씀하세요.');
     expect(TtsService().getRecentLog().join('\n'), isNot(contains('취소했습니다')));
   });
 
@@ -265,7 +420,7 @@ void main() {
 
   testWidgets('정지 버튼이 뜬 뒤 전송 시작 전(연결 중)에 정지하면 버튼을 하나도 누르지 않는다', (tester) async {
     // 아직 시작 전인 시퀀스가 정지로 올라간 epoch를 새 기준으로 잡으면 안 된다.
-    // 그러면 "기기를 멈췄습니다. 안전합니다." 안내 뒤에도 G-code(Z 하강 포함)가
+    // 그러면 "터치브릿지를 멈췄습니다. 가전도 끄려면 "취소해 줘"라고 말씀하세요." 안내 뒤에도 G-code(Z 하강 포함)가
     // 나가고 조리 타이머 화면까지 진입한다.
     slowFirstConnect();
     stubStopAck('STOPPED');
@@ -284,7 +439,7 @@ void main() {
     expect(find.byType(StopDoneScreen), findsOneWidget);
     expect(find.byType(EmergencyStopScreen, skipOffstage: false), findsNothing,
         reason: '정지했는데 조리 타이머로 들어가면 안 된다');
-    expect(state.statusMessageForTest, '기기를 멈췄습니다. 안전합니다.');
+    expect(state.statusMessageForTest, '터치브릿지를 멈췄습니다. 가전도 끄려면 "취소해 줘"라고 말씀하세요.');
   });
 
   testWidgets('화면 밖(전역 비상 버튼 등)에서 온 정지도 전송 시작 전 구간에서 시퀀스를 막는다', (tester) async {

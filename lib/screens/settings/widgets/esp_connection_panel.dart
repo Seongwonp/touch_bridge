@@ -52,7 +52,7 @@ class EspConnectionPanel extends StatelessWidget {
                 ),
                 Text(
                   connected ? connectedId : '다른 ESP를 테스트하려면 선택하세요',
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: AppColors.textTertiary, fontSize: 11 * rs),
                 ),

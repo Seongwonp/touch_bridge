@@ -141,4 +141,15 @@ void main() {
       );
     });
   });
+
+  test('가전이 낼 수 없는 전력(센서 이상)은 상태를 모름으로 둔다', () {
+    expect(
+      PowerStatusService.parseLine('{"event":"power","w":3870.6,"state":"on"}')?.state,
+      PowerState.unknown,
+    );
+    expect(
+      PowerStatusService.parseLine('{"event":"power","w":1200.0,"state":"on"}')?.state,
+      PowerState.on,
+    );
+  });
 }

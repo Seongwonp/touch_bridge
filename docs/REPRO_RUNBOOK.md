@@ -1,210 +1,105 @@
-# Touch Bridge 재현 가이드 (심사용)
+# 실행 가이드
 
-## 1) 사전 준비
-- **Flutter 3.44.0 이상 / Dart 3.12.0 이상** — `pubspec.lock` 하단 `sdks` 섹션이
-  요구하는 하한이며, CI는 3.47.5로 검증한다.
-  이보다 낮은 버전에서 `flutter pub get`을 돌리면 SDK가 핀하는 패키지
-  (`meta`/`matcher`/`test_api`/`vector_math`)가 다운그레이드되어 락파일이
-  변경되므로, 재현 시에는 하한 이상을 쓸 것.
-- Python 3.10+ (백엔드 실행용)
-- 실제 또는 테스트용 BLE 주변기기
+## 1. 준비
 
-## 2) 환경 변수
-### 앱 루트 `.env`
+- Flutter 3.44 이상 / Dart 3.12 이상 (CI는 3.47.5로 검증)
+- Python 3.10 이상 (백엔드)
+- Android 기기 (음성 인식·BLE 실사용 기준)
+- 실제 장치를 쓸 경우: ESP32 두 대(모터 제어기, CT 노드), SwitchBot Bot. 배선과 첫 구동은 [`hardware/touchbridge_corexy/README.md`](../hardware/touchbridge_corexy/README.md)를 따른다.
+
+## 2. 환경 변수
+
+### 앱 (`.env`, 저장소 루트)
+
 ```env
 AI_BACKEND_URL=http://127.0.0.1:8000
-# 실기기 테스트 시 백엔드 PC의 같은 Wi-Fi IP 또는 <호스트명>.local 주소를 사용
-# 예: AI_BACKEND_URL=http://192.168.0.10:8000
-# 백엔드에 BACKEND_API_KEY를 설정한 경우 같은 값 지정
+# 실기기에서는 백엔드 PC의 같은 네트워크 IP를 쓴다. 예: http://192.168.0.10:8000
 AI_BACKEND_API_KEY=
 ```
-`.env`는 **선택이 아니라 필수**다. `pubspec.yaml`이 `.env`를 asset으로 선언하므로
-파일이 없으면 `flutter analyze`가 `asset_does_not_exist` 경고를 내고 릴리스 빌드가
-실패한다. `.env`는 gitignore 대상이라 클론 직후에는 존재하지 않는다:
+
+`pubspec.yaml`이 `.env`를 asset으로 선언하므로 파일이 없으면 빌드가 실패한다. 클론 직후 한 번 만든다.
 
 ```bash
-cp .env_ex .env   # 클론 후 최초 1회
+cp .env_ex .env
 ```
 
-테스트(`flutter test`)는 네트워크를 타지 않으므로 값이 비어 있어도 된다.
+### 백엔드 (`backend/.env`)
 
-### 백엔드 `.env` (`backend` 실행 환경)
 ```env
-GOOGLE_API_KEY=YOUR_REAL_KEY
+AI_PROVIDER=google            # google | school
+GOOGLE_API_KEY=
 GEMINI_MODEL=gemini-1.5-flash
-BACKEND_API_KEY=
+BACKEND_API_KEY=              # 설정하면 모든 요청에 X-API-Key를 요구한다
 MONGO_URI=mongodb://localhost:27017/
 ```
-(`backend/.env_ex` 참고. MongoDB가 없어도 인메모리 폴백으로 동작한다.)
 
-## 2-1) 하드웨어 안전 체크리스트 (실기기 연동 시)
+MongoDB가 없으면 메모리 저장소로 동작한다. 전체 항목은 `backend/.env_ex`를 본다.
 
-전원 인가 전:
-- [ ] FIT0482 두 축의 정지전류를 실측하고 H-브리지 정격·전류 제한·퓨즈에 여유가 있는지 확인
-- [ ] 6V 모터 전원과 ESP32 로직 전원이 분리되어 있고 GND는 공통인지 확인
-- [ ] X/Y 엔코더 A/B상 배선·방향을 확인 (엔코더 전원은 3.3V — 5V면 출력이 5V가 될 수 있음)
-- [ ] 리미트 스위치는 **기본 미사용**(펌웨어 v4는 벽 감지로 원점 복귀). 달 경우
-      `config.h`의 `PIN_LIMIT_X/Y`가 ESP32에 없는 핀(30, 100)이므로 실제 핀으로 먼저 고칠 것
-- [ ] 모터 전원 스위치가 즉시 손 닿는 위치인지 확인 (물리적 최종 비상 차단)
-- [ ] SwitchBot Bot 확인 — `config_local.h`의 주소, 앱에서 누름(Press) 모드·비밀번호 해제,
-      배터리, 부착 상태. 다른 기기가 Bot에 연결 중이면 ESP32가 붙지 못한다
-- [ ] 축 이동 범위 안 장애물/손 제거
+## 3. 실행
 
-전원 인가 후:
-- [ ] ESP32 모션 프로토콜 v2 상태 응답 수신 확인
-- [ ] `home` 명령으로 벽 감지 원점 복귀 확인 (원점 = 좌하단, X-·Y- 방향 벽)
-- [ ] 각 축 단독 `move_only` 소거리 이동으로 방향·엔코더 카운트·오차 확인
-- [ ] 홈 미완료·허용 오차 초과·오래된 위치 토큰에서는 Bot 누름이 차단되는지 확인
-- [ ] 정지 시험: `STOPPED`는 모터 정지와 큐 폐기를 뜻한다. 이미 Bot에 쓴 누름은 되돌릴 수 없으므로 누름 도중에는 Bot이 움직일 수 있다
-
-벨트를 걸기 전 첫 구동 순서(모터·엔코더 방향 맞추기)는 펌웨어 폴더의
-[`hardware/touchbridge_corexy/README.md`](../hardware/touchbridge_corexy/README.md)를 따른다.
-
-현행 소프트웨어 계약은 [ESP32_MOTION_PROTOCOL_V2.md](ESP32_MOTION_PROTOCOL_V2.md)와
-펌웨어 소스(`hardware/touchbridge_corexy/`)를 기준으로 한다.
-[XY_SWITCHBOT_SOFTWARE_PLAN.md](XY_SWITCHBOT_SOFTWARE_PLAN.md)는 X/Y 설계 배경이며 현재 누름부는
-SwitchBot Bot이다(v3의 솔레노이드를 대체). 과거 스텝모터/GRBL 문서는 레거시 설계 기록으로만 사용한다.
-
-## 3) 백엔드 실행
-
-### macOS
 ```bash
-brew services start mongodb-community   # 선택 (없어도 인메모리 폴백)
+# 백엔드
 cd backend
-source .venv/bin/activate               # 최초 1회: python3 -m venv .venv && pip install -r requirements.txt
-python3 -m uvicorn main:app --host 0.0.0.0 --port 8000
-```
-
-### Windows
-```powershell
-cd backend
-.venv\Scripts\Activate.ps1              # 최초 1회: python -m venv .venv; pip install -r requirements.txt
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\Activate.ps1
+pip install -r requirements.txt
 python -m uvicorn main:app --host 0.0.0.0 --port 8000
-```
 
-기본 주소: `http://localhost:8000` (앱 `.env`의 AI_BACKEND_URL 포트와 일치해야 함)
-
-## 4) 앱 실행
-```bash
-cd /path/to/touch_bridge
+# 앱
 flutter pub get
-flutter run -d chrome
+flutter run                                          # 연결된 Android 기기
+flutter run --dart-define=TOUCH_BRIDGE_DEMO=true     # 장치 없이 데모 기기·가짜 전송으로 실행 (debug 빌드)
+flutter build apk --release --dart-define=TOUCH_BRIDGE_BOOTH=true   # 시연용: 보조 기능 진입점 숨김
 ```
 
-모바일 기기 테스트 시 `-d android` 또는 `-d ios` 사용
+## 4. 검증
 
-## 5) 검증 명령
 ```bash
-flutter analyze
+flutter analyze --fatal-infos
 flutter test
 cd backend && python -m unittest discover -s . -p "test_*.py"
 ```
 
-### Windows에서 한글 경로일 때 (2026-09-27 확인)
-사용자 폴더나 프로젝트 경로에 한글이 있으면(예: `C:\Users\삼성\...\한이음드림업`)
-Flutter 3.47.5 기준 두 가지가 깨진다.
+GitHub Actions가 push·PR마다 같은 명령을 실행한다.
 
-- `flutter test`: 임시 폴더(`%TEMP%`)가 한글 경로라 `flutter_tester`가 시작 직후
-  종료되고 "Connection closed before test suite loaded"만 남는다.
-  → 세션에서 임시 폴더만 ASCII 경로로 바꾸면 원본 위치에서 그대로 돈다.
+### Windows에서 경로에 한글이 있을 때
+
+- `flutter test`: 임시 폴더가 한글 경로면 테스트 실행기가 바로 종료된다. 임시 폴더를 ASCII 경로로 바꾼다.
   ```powershell
   $env:TEMP = "C:\src\tmp"; $env:TMP = "C:\src\tmp"; flutter test
   ```
-- `flutter analyze`: 분석 서버가 프로젝트 경로 길이를 잘못 세어 JSON 파싱 오류로
-  죽는다(`FormatException: Unterminated string`). 임시 폴더로는 해결되지 않으므로
-  ASCII 경로에 복사본을 두고 거기서 돌린다.
+- `flutter analyze`: 분석 서버가 한글 경로에서 실패한다. ASCII 경로에 복사본을 두고 실행한다.
   ```powershell
   robocopy <프로젝트> C:\src\tb /E /XD .dart_tool build .git
-  cd C:\src\tb; $env:TEMP = "C:\src\tmp"; $env:TMP = "C:\src\tmp"; flutter analyze --fatal-infos
+  cd C:\src\tb; flutter analyze --fatal-infos
   ```
-  `dart analyze`는 복사본에서만 정상 동작을 확인했다.
-- `flutter pub get`이 `linux/`·`macos/`·`windows/`의 생성 파일을 줄바꿈만 바꿔
-  건드릴 수 있다. 커밋 전에 `git checkout -- linux macos windows`로 되돌린다.
+- `flutter pub get`이 `linux/`·`macos/`·`windows/` 생성 파일의 줄바꿈만 바꿀 수 있다. 커밋 전에 `git checkout -- linux macos windows`로 되돌린다.
 
-## 6) 데모 체크리스트
+## 5. 앱 동작 확인
 
-> 합격 기준: 항목 1~7은 화면을 가리고(또는 눈을 감고) 음성 안내만으로 완료 가능해야 한다.
-> 시각 확인이 필요했던 항목은 "실패"로 기록하고 문구/플로우를 보완한다.
+1. 홈의 '말하기'를 누르고 "10분 돌려줘"라고 말한다. 앱이 "10분 조리를 시작할까요?"라고 묻는다.
+2. "네"라고 답하면 장치로 명령을 보내고, 누르는 동안 화면에 '즉시 정지'가 보인다. 한 번 누르면 바로 정지한다.
+3. "만두 데워줘"처럼 규칙에 없는 말은 백엔드 AI가 해석해 시간을 정하고 다시 묻는다.
+4. 설정 → 보호자 설정에서 가전을 추가하고, 사진으로 버튼 위치를 찾거나 1·5·10mm 단위로 직접 맞춘다.
+5. TalkBack을 켠 상태에서 1~2를 반복해, 앱 음성과 낭독기 음성이 겹치지 않는지 확인한다.
 
-1. 홈 화면 기기 선택 가능
-2. 보호자 모드 ON에서 기기 관리/기기 추가 진입 가능
-3. 보호자 모드 OFF에서 하단 바가 홈/비상/설정으로 단순화되는지 확인
-4. 홈의 `말하기` 버튼으로 음성 명령 파싱 및 제어 화면 전환
-5. 홈 화면을 빠르게 3회 터치했을 때 현재 선택 기기의 음성 명령 화면으로 진입하는지 확인
-6. 음성 명령에서 기기명만 말하면 동작을 되묻고, 기기명 없이 동작만 말하면 현재 선택 기기를 사용하는지 확인
-7. 비상 탭의 즉시 중단 동작
-8. 설정 > 접근성 실험 지표 수치 갱신 확인
-9. 네 모서리 보정 후 버튼 정규화 좌표가 실제 X/Y mm로 변환되는지 확인
+## 6. 장치 연동 확인
 
-## 6-0) 모드 분리 검증
-1. 사용자 모드: 보호자 모드 OFF, 개발자 모드 OFF 상태에서 홈/비상/설정만 보이는지 확인한다.
-2. 보호자 모드: 보호자 모드 ON 상태에서 기기 관리와 기기 추가/매핑 흐름이 보이는지 확인한다.
-3. 개발자 모드: 개발자 모드 ON 상태에서 설정 > 개발자/시연 도구가 보이는지 확인한다.
-4. 개발자 콘솔에서 `ESP 선택`으로 다른 ESP32를 검색/연결할 수 있는지 확인한다.
-5. 개발자 콘솔 또는 매핑 화면에서 X/Y `move_only` 명령과 상태 로그를 확인한다.
+전원을 넣기 전:
+- 6V 모터 전원과 ESP32 로직 전원을 분리하고 GND를 공통으로 묶는다.
+- X/Y 엔코더 A/B상 배선과 방향을 확인한다.
+- 모터 전원을 바로 끌 수 있는 스위치를 손 닿는 곳에 둔다.
+- SwitchBot Bot의 주소(`config_local.h`), 누름 모드, 배터리를 확인한다.
 
-## 6-0-1) 모션 v2 오류/통신 신뢰성 검증 (개발자 모드)
-1. 홈 미완료 상태에서 이동 명령 전송 → `ERROR_NOT_HOMED` 상태와 사용자용 안전 안내 확인.
-2. 작업영역(`config.h`의 `X_MAX_MM`/`Y_MAX_MM`) 밖 좌표 전송 → `ERROR_LIMIT` 상태와 누름 차단 확인.
-3. 연속 명령 10회 전송 → 유실/순서 뒤바뀜 없는지 로그로 확인.
-4. 전송 중 BLE 범위 이탈 → 연결 끊김 감지와 앱 안내 확인.
-5. 이미 실행한 `press`를 같은 `positionToken`으로 재전송 → 토큰이 1회용이라
-   `ERROR_INVALID_TOKEN`으로 거부되고 다시 누르지 않는지 확인.
-   (펌웨어 v4는 `commandId` 단위로 이전 결과를 저장했다가 다시 돌려주지는 않는다.)
-6. 일반 명령 처리 중 비상 정지 → 큐보다 우선 처리되고 모터 출력이 즉시 차단되는지 확인.
+전원을 넣은 뒤:
+1. `home`으로 벽 감지 원점 복귀를 확인한다.
+2. 각 축을 `move_only`로 조금씩 움직여 방향과 오차를 확인한다.
+3. 원점 복귀 전, 허용 오차 초과, 오래된 위치 토큰에서는 누름이 거부되는지 확인한다.
+4. `STOPPED`는 모터 정지와 대기 명령 폐기를 뜻한다. 이미 Bot에 보낸 누름은 되돌릴 수 없다.
 
-## 6-1) 매핑/조작 검증
-1. 촬영 안내에 따라 가전 정면·수평·전체 패널이 보이게 사진을 촬영한다.
-2. 사진의 네 모서리와 실제 패널 가로·세로 길이를 입력해 투영 보정을 완료한다.
-3. 각 버튼 마커를 `move_only`로 한 점씩 이동 검증하고, 실제 오차를 기록한다.
-4. 저장 후 홈 > 기기 선택 > 이미지로 제어 화면에 들어가, 노란 마커가 사진에서 찍은 위치 그대로 표시되는지 확인한다.
-5. 이미지 제어 화면에서 같은 버튼을 눌렀을 때 저장된 `buttonMachinePositions`의 X/Y mm가 실행되는지 확인한다.
-6. 작은 화면/큰 화면/가로로 긴 사진/세로로 긴 사진에서 사진이 잘리지 않고, 레터박스 영역을 눌러도 매핑 포인트가 추가되지 않는지 확인한다.
-7. 오차 허용 범위 안에서 발급된 최신 위치 토큰으로 한 점만 실제 누름 검증한다. 전체 자동 누름은 금지한다.
-8. 드래그 없이 상·하·좌·우 미세 조정 버튼만으로 버튼 위치를 수정할 수 있는지 확인한다.
-9. 두 버튼을 같은 칸에 겹치게 찍으면 저장이 차단되고 버튼 이름이 음성으로 안내되는지 확인한다.
-10. 실행 로그에서 `mapping.button_position_nudged`, 검증 오차, `command_id`, 목표/실측 mm, 상태가 기록되는지 확인한다.
+## 7. 자주 생기는 문제
 
-## 6-1-1) 매핑 저장 → 음성 실행 검증
-1. 네 모서리 캘리브레이션과 실제 패널 크기를 저장한다.
-2. 사진 매핑 화면에서 버튼 라벨과 정규화 중심 좌표를 저장한다.
-   - 백엔드 응답은 `button_id`, `x`, `y`, `label`, `confidence`를 검증한다.
-3. 홈에서 같은 기기를 선택한 뒤 음성 명령을 실행한다.
-   - 저장된 `buttonMachinePositions`가 있으면 해당 실제 mm 좌표를 우선 사용한다.
-   - 저장 매핑이 없을 때만 `docs/MOCK_MAPPING_DATA.md` 좌표 fallback을 사용한다.
-4. 모션 로그에서 고유 `commandId`, 목표 X/Y mm, 상태 전이와 ACK를 확인한다.
-
-## 6-2) 연동 규약 문서
-- `docs/HW_APP_INTEGRATION_CONTRACT_KO.md`를 기준으로 enum/명령/주의점을 준수한다.
-
-## 6-3) 스크린리더 병행 검증 (VoiceOver / TalkBack)
-1. VoiceOver(iOS) 또는 TalkBack(Android)을 켜고 6) 데모 체크리스트 1~7을 반복한다.
-2. 단순 화면 이동은 스크린리더 활성 시 앱의 추가 확인 없이 이동하고,
-   실제 가전 작동·삭제·비상 동작은 위험도 기반 확인이 유지되는지 확인한다.
-3. 앱 TTS와 스크린리더 음성이 겹쳐 알아들을 수 없는 구간을 기록한다.
-   (앱은 스크린리더 활성 시 화면 안내(navigation)를 억제하고 결과/비상 안내만
-   재생한다 — `tts_service.dart` 억제 계약.)
-4. 모든 버튼에 의미 있는 라벨이 읽히는지 확인한다 ("버튼"만 읽히면 실패).
-5. 비상 정지 실행 후 성공/미확인/실패 결과 음성이 스크린리더 상태에서도 들리는지 확인한다.
-
-## 7) 장애 대응 플랜 B
-- 백엔드 미연결:
-  - 증상: 음성/사진 분석 실패
-  - 대응: `AI_BACKEND_URL` 확인, 백엔드 재실행
-- BLE 연결 실패:
-  - 증상: 연결 상태 실패
-  - 대응: 기기 전원/근접 확인, 스캔 재시도
-- 마이크 권한 거부:
-  - 증상: STT 시작 불가
-  - 대응: 권한 허용 후 앱 재시작
-
-## 8) 릴리스 전 회귀 최소 세트
-- [ ] 이중 탭 첫 탭 안내 / 둘째 탭 실행 / 20초 타임아웃 해제
-- [ ] 비상 정지 3초 홀드 + "멈춰" 음성 최우선 처리
-- [ ] 6-3) 스크린리더 병행 1회
-- [ ] 매핑 저장 → 사용자 모드 음성 실행 경로
-- [ ] 보호자 모드 OFF에서 기기 관리 미노출, 개발자 모드 OFF에서 개발자 도구 미노출
-- [ ] flutter analyze / flutter test 통과
-
-## 9) 결과 기록 양식
-날짜: / 테스터: / 빌드·커밋: / 플랫폼: / 스크린리더 사용 여부: / 실패 항목과 증상:
+| 증상 | 확인할 것 |
+|---|---|
+| 음성 명령 해석 실패 | `AI_BACKEND_URL`, 백엔드 실행 여부. 무료 서버는 첫 요청이 느릴 수 있다 |
+| BLE 연결 실패 | 장치 전원, 거리, 다른 앱이 장치에 연결돼 있는지 |
+| 음성 인식이 시작되지 않음 | 마이크 권한, 휴대폰의 음성 인식 서비스 |

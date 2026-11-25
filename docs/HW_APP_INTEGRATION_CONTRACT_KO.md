@@ -1,4 +1,4 @@
-# Touch Bridge 앱-하드웨어 연동 계약서 (실무 기준)
+# 앱–하드웨어 명령 규약 (G-code · 텍스트 명령)
 
 > 이 문서는 GRBL XYZ 기반 v1 계약이다. 현행 펌웨어 v4(`hardware/touchbridge_corexy/`,
 > FIT0482 X/Y CoreXY + SwitchBot Bot)는 v2 JSON 계약(`ESP32_MOTION_PROTOCOL_V2.md`)을
@@ -51,7 +51,7 @@
   2. **기기 선택**: 홈 화면에서 가전 선택 시, 저장된 `bleId`를 사용하여 백엔드에서 **자동 연결** 시도.
   3. **그리드 동기화**: 연결 직후 해당 기기의 `SET_GRID` 정보를 하드웨어에 전송.
   4. **좌표 제어**: 명령 시퀀스(`BT-xx`)를 현재 기기의 `buttonMap`과 그리드 규격에 맞춰 인덱스로 변환 후 `BTN_n` 명령 전송.
-  5. **Fallback**: 기기별 저장 매핑이 없을 때만 `docs/MOCK_MAPPING_DATA.md`의 검증된 데모 물리 좌표를 사용한다.
+  5. **Fallback**: 기기별 저장 매핑이 없을 때만 앱에 내장된 데모 물리 좌표(`MicrowaveCommandService.btnToPhysical`)를 사용한다.
 
 ## 5) 테스트 체크리스트
 1. BLE 미연결 상태: 음성 명령 -> 로그 생성 확인(파이프라인 점검)

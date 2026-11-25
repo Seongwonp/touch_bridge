@@ -16,6 +16,9 @@
 
 // ─── 모터 ESP32 링크(Serial2, 3.3V UART) ────────────────────────────────────
 #define CT_LINK_BAUD           115200
+// 무선(ESP-NOW) 전송. 선과 함께 보낸다. 채널은 모터 ESP32의 CT_ESPNOW_CHANNEL과 같아야 한다.
+#define CT_LINK_ESPNOW         1
+#define CT_ESPNOW_CHANNEL      1
 #define PIN_CT_LINK_TX         17      // → 모터 ESP32 GPIO21(RX)
 #define PIN_CT_LINK_RX         16      // ← 모터 ESP32 GPIO22(TX). 예비선, 받은 데이터는 읽지 않는다
 #define CT_LINK_TX_BUFFER_BYTES 256    // 버퍼를 두어 쓰기가 샘플링·워치독을 막지 않게 한다

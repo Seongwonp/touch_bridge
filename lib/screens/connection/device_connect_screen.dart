@@ -16,7 +16,6 @@ import '../../theme/app_colors.dart';
 import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../home/appliance_selection_screen.dart';
-import 'qr_scan_screen.dart';
 
 int _iconCodePointForType(String type) {
   return switch (type.toLowerCase()) {
@@ -48,9 +47,9 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
   void initState() {
     super.initState();
     _tts.speak(
-      '기기 연결 화면입니다. 네 가지 연결 방법이 있습니다. 화면 위쪽의 블루투스 허브 연결이 '
-      '음성 안내로 가장 쉽게 진행할 수 있는 방법입니다. QR 스캔과 기기 코드 입력은 화면이나 '
-      '기기에 적힌 글자를 확인해야 할 수 있습니다.',
+      '기기 연결 화면입니다. 세 가지 연결 방법이 있습니다. 화면 위쪽의 블루투스 허브 연결이 '
+      '음성 안내로 가장 쉽게 진행할 수 있는 방법입니다. 기기 코드 입력은 기기에 적힌 글자를 '
+      '확인해야 할 수 있습니다.',
       source: 'DeviceConnectScreen',
       interrupt: true,
     );
@@ -150,12 +149,13 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
         if (ok) {
           setState(() {
             _connected = true;
-            _statusMessage = 'BLE 연결 완료';
+            _statusMessage = '연결되었습니다';
           });
 
           _tts.speak(
             '연결에 성공했습니다. 이제 이 하드웨어에 등록할 가전 기기를 선택해 주세요.',
             source: 'DeviceConnectScreen',
+            priority: TtsPriority.result,
           );
 
           Navigator.of(context).pushReplacement(
@@ -167,23 +167,10 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
             ),
           );
         } else {
-          _tts.speak('연결에 실패했습니다. 다시 시도해 주세요.', source: 'DeviceConnectScreen');
+          setState(() => _statusMessage = '연결에 실패했습니다. 다시 시도해 주세요.');
+          _tts.speak('연결에 실패했습니다. 다시 시도해 주세요.', source: 'DeviceConnectScreen', priority: TtsPriority.result);
         }
       }
-    }
-  }
-
-  Future<void> _onQrScanTap() async {
-    final result = await Navigator.of(
-      context,
-    ).push<String>(MaterialPageRoute(builder: (_) => const QrScanScreen()));
-
-    if (result != null && result.isNotEmpty) {
-      if (result.startsWith('http')) {
-        _tts.speak('지원되지 않는 QR 형식입니다.');
-        return;
-      }
-      await _processCloudDeviceId(result);
     }
   }
 
@@ -355,7 +342,7 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
     return '${safe}_$ts';
   }
 
-  Future<void> _registerDevice(
+  Future<bool> _registerDevice(
     BuildContext context, {
     required String name,
     required String type,
@@ -371,9 +358,9 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
 
     if (devices.any((d) => d['id'] == candidateId)) {
       if (context.mounted) {
-        _tts.speak('$name 기기는 이미 등록되어 있습니다.', source: 'DeviceConnectScreen');
+        _tts.speak('$name 기기는 이미 등록되어 있습니다.', source: 'DeviceConnectScreen', priority: TtsPriority.result);
       }
-      return;
+      return false;
     }
 
     final newDevice = {
@@ -381,6 +368,7 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
       'name': name,
       'status': '작동 대기 중',
       'iconCodePoint': _iconCodePointForType(type),
+      if (type.isNotEmpty) 'deviceType': type,
       'bleId': bleId,
       'bleName': bleName,
     };
@@ -394,9 +382,11 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
       bleName: bleName,
     );
 
+    ActiveDeviceService.instance.notifyDeviceListChanged();
     if (context.mounted) {
-      _tts.speak('$name 기기가 홈에 추가되었습니다.', source: 'DeviceConnectScreen');
+      _tts.speak('$name 기기가 홈에 추가되었습니다.', source: 'DeviceConnectScreen', priority: TtsPriority.result);
     }
+    return true;
   }
 
   Future<void> _processCloudDeviceId(String deviceId) async {
@@ -407,21 +397,23 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
         deviceId,
       );
       final name = (profileData['device_type'] as String?) ?? '새 기기';
+      // 매핑을 먼저 해석한다. 등록 뒤에 해석이 실패하면 매핑 없는 기기만 홈에 남는다.
+      final profile = DeviceMappingProfile.fromJson(profileData);
       if (!mounted) return;
 
-      await _registerDevice(
+      final registered = await _registerDevice(
         context,
         name: name,
         type: name == '전자레인지' ? 'microwave' : (name == '세탁기' ? 'washer' : ''),
         preferredDeviceId: deviceId,
       );
+      // 이미 등록된 기기면 기존 매핑을 덮어쓰지 않는다("이미 등록" 안내는 위에서 했다).
+      if (!registered) return;
 
-      final profile = DeviceMappingProfile.fromJson(profileData);
       await DeviceMappingService.instance.save(deviceId, profile);
-
-      _tts.speak('$name 정보 로드 완료.', source: 'DeviceConnectScreen');
+      _tts.speak('$name 정보를 불러왔습니다.', source: 'DeviceConnectScreen', priority: TtsPriority.result);
     } catch (e) {
-      _tts.speak('정보를 가져오지 못했습니다.', source: 'DeviceConnectScreen');
+      _tts.speak('정보를 가져오지 못했습니다.', source: 'DeviceConnectScreen', priority: TtsPriority.result);
     }
   }
 
@@ -532,14 +524,6 @@ class _DeviceConnectScreenState extends State<DeviceConnectScreen> {
                   onTap: _onBluetoothConnectTap,
                   rs: rs,
                   isPrimary: true,
-                ),
-                SizedBox(height: ResponsiveScale.v(context, 12)),
-                _buildConnectOption(
-                  icon: Icons.qr_code_scanner_rounded,
-                  title: '기기 QR 스캔',
-                  desc: '가전제품에 부착된 QR 코드를 인식합니다.',
-                  onTap: _onQrScanTap,
-                  rs: rs,
                 ),
                 SizedBox(height: ResponsiveScale.v(context, 12)),
                 _buildConnectOption(

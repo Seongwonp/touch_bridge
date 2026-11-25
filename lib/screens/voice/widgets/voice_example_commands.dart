@@ -4,19 +4,32 @@ import '../../../theme/app_colors.dart';
 
 export '../../../models/voice_example_commands.dart' show kVoiceExampleCommands;
 
-/// 대기 상태에서 보여주는 예시 명령어 칩 목록. 탭하면 해당 명령을 바로 실행한다.
-class VoiceExampleCommands extends StatelessWidget {
+/// 대기 상태에서 보여주는 예시 명령어 칩 목록.
+///
+/// 칩을 누르면 그 문장을 명령으로 보낸다. 가전을 누르기 전에는 음성 화면이
+/// '실행'·'취소'로 한 번 확인하므로, 칩 자체에는 두 번 누르기를 두지 않는다.
+class VoiceExampleCommands extends StatefulWidget {
   const VoiceExampleCommands({
     super.key,
     required this.scale,
-    required this.onCommandTap,
+    required this.onSelected,
   });
 
   final double scale;
-  final ValueChanged<String> onCommandTap;
+
+  /// 칩을 눌렀을 때. 화면은 이 문장을 해석한 뒤 실행할지 묻는다.
+  final ValueChanged<String> onSelected;
+
+  @override
+  State<VoiceExampleCommands> createState() => _VoiceExampleCommandsState();
+}
+
+class _VoiceExampleCommandsState extends State<VoiceExampleCommands> {
+  void _onTap(String cmd) => widget.onSelected(cmd);
 
   @override
   Widget build(BuildContext context) {
+    final scale = widget.scale;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -38,10 +51,15 @@ class VoiceExampleCommands extends StatelessWidget {
               .map(
                 (cmd) => Semantics(
                   button: true,
-                  label: '$cmd 명령 실행',
+                  label: '예시 명령, $cmd',
+                  excludeSemantics: true,
+                  onTap: () => _onTap(cmd),
                   child: GestureDetector(
-                  onTap: () => onCommandTap(cmd),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _onTap(cmd),
                   child: Container(
+                    constraints: const BoxConstraints(minHeight: 48),
+                    alignment: Alignment.center,
                     padding: EdgeInsets.symmetric(
                       horizontal: 14 * scale,
                       vertical: 8 * scale,

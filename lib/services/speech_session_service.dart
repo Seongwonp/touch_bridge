@@ -37,11 +37,21 @@ class SpeechSessionService {
   SpeechClient? get _current => _clients.isEmpty ? null : _clients.last;
 
   bool get isListening => _speech.isListening;
+
+  /// 음성 화면이 사용자의 말을 기다리는 동안(엔진을 조용히 다시 여는 틈 포함) true.
+  /// 이때 다른 화면 요소가 낭독기를 말하게 하면 그 소리가 녹음돼 명령으로 들어간다
+  /// (예: 연결 배너의 "Touch Bridge 연결 안 됨").
+  bool micWindowActive = false;
+
+  /// 지금 낭독기·앱 음성을 내면 마이크에 들어갈 수 있는지.
+  bool get shouldStayQuiet => micWindowActive || _speech.isListening;
   bool get isAvailable => _available;
 
-  /// 패키지 초기화 — 몇 번을 불러도 실제 초기화(콜백 등록)는 한 번만 한다.
+  /// 패키지 초기화 — 성공한 뒤에는 다시 하지 않는다. 실패는 기억하지 않고 다음 호출에서
+  /// 다시 시도한다. 음성 엔진이 잠깐 바쁠 때 실패할 수 있는데, 실패를 기억하면 앱을 다시
+  /// 켤 때까지 음성을 쓸 수 없다.
   Future<bool> initialize() async {
-    if (_initAttempted) return _available;
+    if (_initAttempted && _available) return true;
     _initAttempted = true;
 
     // macOS 26 beta TCC 버그 가드.

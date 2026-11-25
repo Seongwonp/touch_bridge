@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:touch_bridge/services/active_device_service.dart';
@@ -42,6 +44,25 @@ void main() {
       expect(outcome.acknowledged, isFalse,
           reason: '전송/연결이 안 됐는데 "멈췄습니다"로 안내되면 안 된다');
       expect(outcome.message, isNotEmpty);
+    });
+
+    test('정지가 직접 재연결하는 동안 isStopping이 true다 (자동 재연결이 물러서는 기준)', () async {
+      BleService.instance.setTestOverrides(connect: (_) async => false);
+      await ActiveDeviceService.instance.setActiveDevice(
+        deviceId: 'device-1',
+        bleId: 'AA:BB:CC:DD:EE:01',
+      );
+      final gate = Completer<bool>();
+      BleService.instance.setTestOverrides(connect: (_) => gate.future);
+
+      expect(EmergencyStopService.instance.isStopping, isFalse);
+      final pending = EmergencyStopService.instance.stopActiveDevice();
+      await Future<void>.delayed(Duration.zero);
+      expect(EmergencyStopService.instance.isStopping, isTrue);
+
+      gate.complete(false);
+      await pending;
+      expect(EmergencyStopService.instance.isStopping, isFalse);
     });
   });
 }

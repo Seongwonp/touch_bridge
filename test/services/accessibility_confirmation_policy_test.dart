@@ -27,13 +27,28 @@ void main() {
     }
   });
 
-  test('화면읽기가 꺼져 있으면 화면 이동 확인을 유지한다', () {
+  test('화면읽기가 꺼져 있어도 화면 이동은 앱 확인 없이 바로 한다', () {
     expect(
       AccessibilityConfirmationPolicy.requiresAppConfirmation(
         kind: ConfirmationActionKind.navigation,
         screenReaderActive: false,
       ),
-      isTrue,
+      isFalse,
     );
+  });
+
+  test('물리·파괴 동작 확인은 화면읽기를 쓰지 않아도 유지한다', () {
+    for (final kind in [
+      ConfirmationActionKind.physicalAction,
+      ConfirmationActionKind.destructiveAction,
+    ]) {
+      expect(
+        AccessibilityConfirmationPolicy.requiresAppConfirmation(
+          kind: kind,
+          screenReaderActive: false,
+        ),
+        isTrue,
+      );
+    }
   });
 }

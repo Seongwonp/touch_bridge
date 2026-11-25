@@ -1,6 +1,6 @@
 #pragma once
 // CT 입력 — ADS1115(I2C 차동, 단발 변환 돌려 읽기) 또는 ESP32 내장 ADC. config.h OUTLET_CT_SOURCE가 고른다.
-// 채널 수는 OUTLET_CT_CHANNELS(2026-10-06: 전자레인지 ch0 + 세탁기 ch1). 샘플 한 점은 마이크로볼트(µV) 정수다.
+// 채널 수는 OUTLET_CT_CHANNELS(전자레인지 ch0 + 세탁기 ch1). 샘플 한 점은 마이크로볼트(µV) 정수다.
 // 실효값·전력 환산은 ct_window_finish가 채널마다 그 채널의 보정값(config.h *_CH 표)으로 한다.
 #include <stdint.h>
 

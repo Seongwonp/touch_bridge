@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'accessibility_settings.dart';
 
@@ -47,6 +48,10 @@ class TtsService {
 
   Future<void> _initTts() async {
     try {
+      // 안드로이드에 음성 엔진이 여럿이면(삼성·구글) 기본값이 바뀌거나 한국어 음성이
+      // 없는 엔진이 잡혀 외국인이 읽는 듯한 발음이 난다. 삼성 엔진을 먼저 쓴다.
+      // 엔진을 바꾸면 속도·음량이 초기화되므로 그보다 먼저 고른다.
+      await _preferKoreanEngine();
       final settings = AccessibilitySettings.instance;
       await _tts.setSpeechRate((settings.ttsSpeed / 2.0).clamp(0.1, 1.0));
       await _tts.setVolume(settings.ttsVolume.clamp(0.0, 1.0));
@@ -136,6 +141,18 @@ class TtsService {
   }
 
   /// 최근 TTS 로그 반환 (디버깅용)
+  /// 최근 30초 안에 말했거나 낭독기에 넘긴 문장들(억제·누락 표시는 제외).
+  /// 마이크가 그 소리를 다시 받았는지(메아리) 가리는 데 쓴다.
+  List<String> recentSpokenTexts({Duration within = const Duration(seconds: 30)}) {
+    final since = DateTime.now().subtract(within);
+    return [
+      for (final e in _speakLog)
+        if (e.timestamp.isAfter(since) && !e.text.startsWith('(SUPPRESSED') &&
+            !e.text.startsWith('(DROPPED'))
+          e.text.replaceFirst('(ANNOUNCE) ', ''),
+    ];
+  }
+
   List<String> getRecentLog() {
     return _speakLog
         .map(
@@ -194,6 +211,19 @@ class TtsService {
       }
       // 큐에 같은 문구가 이미 대기 중이면 중복 제거
       if (_queue.any((q) => q.text == message)) return;
+
+      // ── 낭독기가 켜져 있으면 앱 음성 엔진을 쓰지 않고 낭독기에 넘긴다 ─────────
+      // 낭독기와 앱이 같은 음성 엔진을 동시에 쓰면 앱 쪽 발화가 품질 낮은 음성으로
+      // 바뀌어 "외국인이 억지로 읽는" 소리가 나고, 두 목소리가 겹친다. 낭독기
+      // 공지로 보내면 사용자가 고른 낭독기 목소리로 차례대로 읽힌다.
+      if (_screenReaderActive && !kIsWeb && !disableEngineForTest) {
+        _lastSpokenText = message;
+        _lastSpokenAt = now;
+        _addLog('(ANNOUNCE) $message', source);
+        // ignore: deprecated_member_use
+        await SemanticsService.announce(message, TextDirection.ltr);
+        return;
+      }
 
       final utterance = _Utterance(message, pr, source);
       final preempt = interrupt || pr == TtsPriority.emergency;
@@ -320,10 +350,28 @@ class TtsService {
   /// force:true로 "동일 멘트 반복" 억제를 우회하고, interrupt로 즉시 재생한다.
   Future<void> replayLast() async {
     if (_lastSpokenText.isEmpty) {
-      await speak('다시 들려줄 안내가 없습니다.', interrupt: true);
+      await speak('다시 들려줄 안내가 없습니다.', interrupt: true, priority: TtsPriority.result);
       return;
     }
-    await speak(_lastSpokenText, force: true, interrupt: true);
+    // 사용자가 직접 다시 들려 달라고 한 것이라 낭독기를 써도 들려야 한다(navigation이면 억제됨).
+    await speak(_lastSpokenText, force: true, interrupt: true, priority: TtsPriority.result);
+  }
+
+  static const _preferredEngines = ['com.samsung.SMT', 'com.google.android.tts'];
+
+  Future<void> _preferKoreanEngine() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    try {
+      final engines = (await _tts.getEngines as List?)?.cast<Object?>() ?? const [];
+      for (final engine in _preferredEngines) {
+        if (engines.contains(engine)) {
+          await _tts.setEngine(engine);
+          return;
+        }
+      }
+    } catch (e) {
+      debugPrint('[TTS] engine selection skipped: $e');
+    }
   }
 
   Future<void> setLanguage(String languageCode) async {

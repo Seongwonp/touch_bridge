@@ -32,7 +32,9 @@ class HelpIntent {
   /// 목록을 사용해 시각 사용자와 동일한 정보를 준다.
   static String buildResponse({int exampleCount = 3}) {
     final examples = kVoiceExampleCommands.take(exampleCount).join(', ');
-    return '이렇게 말해보세요. $examples. 말한 뒤 다시 한 번 확인하면 실행됩니다. '
-        '멈추고 싶으면 언제든 "멈춰"라고 말하세요.';
+    // 버튼을 누르는 동안에는 마이크가 닫혀 있으므로 "언제든 멈춰"라고 약속하지 않는다.
+    return '이렇게 말해보세요. $examples. 확인을 물으면 "네"라고 답하면 실행됩니다. '
+        '어느 화면에서든 오른쪽 위 모서리의 빨간 버튼을 누르면 바로 멈춥니다. '
+        '남은 시간을 셀 때는 "멈춰"라고 말해도 됩니다.';
   }
 }

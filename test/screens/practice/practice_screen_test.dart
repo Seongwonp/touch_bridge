@@ -26,7 +26,7 @@ void main() {
     testWidgets('세 가지 레슨이 모두 표시된다', (tester) async {
       await pumpPractice(tester);
 
-      expect(find.text('1. 이중 탭 연습'), findsOneWidget);
+      expect(find.text('1. 가전 버튼 확인 연습'), findsOneWidget);
       expect(find.text('2. 비상 정지 연습'), findsOneWidget);
       expect(find.text('3. 음성 명령 연습'), findsOneWidget);
       // 핵심 약속: 아무것도 실제로 실행되지 않는다는 안내.

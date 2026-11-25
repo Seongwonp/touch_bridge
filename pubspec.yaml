@@ -9,15 +9,14 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
 
-  cupertino_icons: ^1.0.8
   flutter_tts: ^4.2.5
   speech_to_text: ^7.4.0
   http: ^1.2.2
   http_parser: ^4.0.0
-  path_provider: ^2.1.4
   flutter_dotenv: ^5.1.0
-  google_generative_ai: ^0.2.0
   shared_preferences: ^2.3.2
   image_picker: ^1.1.2
   flutter_blue_plus: ^1.35.5
@@ -28,6 +27,7 @@ dependencies:
   flutter_secure_storage: ^8.0.0
   audioplayers: ^6.1.0
   vibration: ^2.0.1
+  wakelock_plus: ^1.5.2
 
 dev_dependencies:
   flutter_test:

@@ -111,16 +111,18 @@ class VoiceIntentRouter {
 
     // 9. 파싱된 명령 확인 응답.
     if (hasPendingCommand) {
-      if (VoiceTextMatcher.isAffirmative(text)) {
+      // 부정을 먼저 본다. 거절을 승인으로 잘못 읽으면 가전이 눌리고, 승인을
+      // 거절로 잘못 읽으면 다시 말하면 된다.
+      if (VoiceTextMatcher.isNegative(text)) {
         return VoiceIntentDecision(
-          VoiceIntentKind.pendingAccepted,
+          VoiceIntentKind.pendingRejected,
           clearPendingCommand: true,
           clearPendingLowConfidence: consumingLowConfidence,
         );
       }
-      if (VoiceTextMatcher.isNegative(text)) {
+      if (VoiceTextMatcher.isAffirmative(text)) {
         return VoiceIntentDecision(
-          VoiceIntentKind.pendingRejected,
+          VoiceIntentKind.pendingAccepted,
           clearPendingCommand: true,
           clearPendingLowConfidence: consumingLowConfidence,
         );

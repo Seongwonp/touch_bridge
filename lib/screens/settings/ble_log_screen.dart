@@ -110,8 +110,8 @@ class _BleLogScreenState extends State<BleLogScreen> {
           ),
           SafeArea(child: Padding(
             padding: EdgeInsets.all(16 * rs),
-            child: SizedBox(
-              width: double.infinity, height: 56 * rs,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: double.infinity, minHeight: 56 * rs),
               child: ElevatedButton(
                 onPressed: () => BleService.instance.sendGetServo(),
                 style: ElevatedButton.styleFrom(

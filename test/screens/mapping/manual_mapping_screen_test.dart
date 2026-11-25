@@ -26,7 +26,7 @@ void main() {
 
     expect(find.text('보호자 설정 · 위치 맞추기'), findsOneWidget);
     expect(find.text('조이스틱으로 미세 조정'), findsOneWidget);
-    expect(find.text('현재 위치 · 앱 기준'), findsOneWidget);
+    expect(find.text('현재 위치 · 확인 안 됨'), findsOneWidget);
     expect(find.text('버튼 선택 · 0개 등록됨'), findsOneWidget);
     expect(find.text('버튼 추가'), findsOneWidget);
     expect(find.text('현재 위치 눌러보기'), findsOneWidget);
@@ -48,7 +48,10 @@ void main() {
 
     await tester.tap(find.text('버튼 추가'));
     await tester.pumpAndSettle();
-    expect(find.text('버튼 이름'), findsOneWidget);
+    expect(find.text('어떤 버튼인가요?'), findsOneWidget);
+    // 이 가전의 버튼 기능 목록에서 고른다(자유 이름이 아니다).
+    expect(find.text('시작'), findsOneWidget);
+    expect(find.text('30초'), findsOneWidget);
 
     await tester.tap(find.text('취소'));
     await tester.pumpAndSettle();

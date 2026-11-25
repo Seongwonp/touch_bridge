@@ -7,6 +7,7 @@ import 'package:touch_bridge/services/active_device_service.dart';
 import 'package:touch_bridge/services/ble_service.dart';
 import 'package:touch_bridge/services/run_status_service.dart';
 import 'package:touch_bridge/services/tts_service.dart';
+import 'package:touch_bridge/services/power_status_service.dart';
 
 /// 비상 정지 화면의 안전 계약 검증.
 ///
@@ -74,7 +75,7 @@ void main() {
     required Duration hold,
   }) async {
     final gesture = await tester.startGesture(
-      tester.getCenter(find.bySemanticsLabel('비상 정지')),
+      tester.getCenter(find.bySemanticsLabel('즉시 중단')),
     );
     await tester.pump(const Duration(milliseconds: 600));
     // AnimationController는 첫 tick에서 기준 시각만 잡고 elapsed=0이다.
@@ -108,7 +109,7 @@ void main() {
       TtsService().getRecentLog().any((line) => line.contains(fragment));
 
   group('비상 정지 화면 — 남은 시간 안내', () {
-    testWidgets('남은 시간을 MM:SS Semantics value로 노출한다 (스크린리더 포커스 시 낭독)', (
+    testWidgets('남은 시간을 "2분 30초" Semantics value로 노출한다 (스크린리더 포커스 시 낭독)', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -117,7 +118,7 @@ void main() {
       await tester.pump();
 
       // 화면에는 시각용 헤딩 Text('남은 시간')와 값을 담은
-      // Semantics(label:'남은 시간', value:'02:30')가 함께 있어 라벨만으로는
+      // Semantics(label:'남은 시간', value:'2분 30초')가 함께 있어 라벨만으로는
       // 노드가 둘 매칭된다. value를 가진 쪽을 정확히 지목한다.
       final semantics = tester.getSemantics(
         find.byWidgetPredicate(
@@ -129,7 +130,7 @@ void main() {
       );
       expect(
         semantics.value,
-        '02:30',
+        '2분 30초',
         reason: '숫자 텍스트는 ExcludeSemantics로 가려져 있어, value가 유일한 낭독 경로다',
       );
 
@@ -142,8 +143,10 @@ void main() {
       );
       await tester.pump();
 
-      expect(spoke('세탁기 작동 중입니다'), isTrue);
-      expect(spoke('3초간 누르세요'), isTrue);
+      // 가전이 실제로 돌았는지는 모르므로 "작동 중"이라 단정하지 않는다.
+      expect(spoke('세탁기에 명령을 전달했고'), isTrue);
+      expect(spoke('작동 중입니다'), isFalse);
+      expect(spoke('한 번 누르세요'), isTrue);
 
       await disposeScreen(tester);
     });
@@ -173,6 +176,37 @@ void main() {
   });
 
   group('비상 정지 화면 — 3초 홀드', () {
+    testWidgets('가운데 버튼을 한 번 탭하면 바로 정지 명령을 보낸다', (tester) async {
+      // 일반 터치도 3초 홀드 없이 한 번 탭으로 정지해야 한다.
+      await registerActiveDevice();
+      stubStopAck('STOPPED');
+      await tester.pumpWidget(
+        wrap(const EmergencyStopScreen(initialSeconds: 60, deviceName: '전자레인지')),
+      );
+      await tester.pump();
+
+      await tester.tap(find.bySemanticsLabel('즉시 중단'));
+      await settleStopFlow(tester);
+
+      expect(stopCalls, ['TEST-BLE-0001']);
+      await disposeScreen(tester);
+    });
+
+    testWidgets('오른쪽 위 비상 정지도 이 화면의 정지 절차로 바로 멈춘다', (tester) async {
+      await registerActiveDevice();
+      stubStopAck('STOPPED');
+      await tester.pumpWidget(
+        wrap(const EmergencyStopScreen(initialSeconds: 60, deviceName: '전자레인지')),
+      );
+      await tester.pump();
+
+      await tester.tap(find.bySemanticsLabel('비상 정지'));
+      await settleStopFlow(tester);
+
+      expect(stopCalls, ['TEST-BLE-0001']);
+      await disposeScreen(tester);
+    });
+
     testWidgets('3초를 채우기 전에 떼면 정지 명령이 나가지 않는다', (tester) async {
       await registerActiveDevice();
       stubStopAck('STOPPED');
@@ -223,6 +257,58 @@ void main() {
     });
   });
 
+  group('비상 정지 화면 — 전류 센서', () {
+    testWidgets('센서 보고가 없으면 작동 상태를 보이지 않는다', (tester) async {
+      await tester.pumpWidget(wrap(const EmergencyStopScreen(initialSeconds: 60)));
+      await tester.pump();
+      expect(find.byKey(const Key('countdown_power_status')), findsNothing);
+      await disposeScreen(tester);
+    });
+
+    testWidgets('작동 보고를 받으면 표시하고, 꺼지면 한 번 알린다', (tester) async {
+      PowerStatusService.instance; // 응답 스트림 구독 시작
+      await tester.pumpWidget(
+        wrap(const EmergencyStopScreen(initialSeconds: 60, deviceName: '전자레인지')),
+      );
+      await tester.pump();
+
+      BleService.instance.injectResponseForTest('{"event":"power","w":1020.0,"state":"on"}');
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('전자레인지 작동 중 · 약 1020 W'), findsOneWidget);
+
+      BleService.instance.injectResponseForTest('{"event":"power","w":3.0,"state":"off"}');
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('전자레인지 전원 꺼짐 (전류 센서)'), findsOneWidget);
+      expect(spoke('전원이 꺼진 것으로 보입니다'), isTrue);
+
+      await disposeScreen(tester);
+      // 신선도 타이머(5초)가 남지 않게 흘려보낸다.
+      await tester.pump(const Duration(seconds: 6));
+    });
+  });
+
+  group('비상 정지 화면 — 화면 낭독기', () {
+    testWidgets('낭독기의 두 번 탭(semantics tap)으로 바로 정지한다', (tester) async {
+      await registerActiveDevice();
+      stubStopAck('STOPPED');
+      final handle = tester.ensureSemantics();
+
+      await tester.pumpWidget(wrap(const EmergencyStopScreen(initialSeconds: 150)));
+      await tester.pump();
+
+      tester.semantics.tap(find.semantics.byLabel('즉시 중단'));
+      await settleStopFlow(tester);
+
+      expect(stopCalls, isNotEmpty, reason: '길게 누르기를 모르는 낭독기 사용자도 멈출 수 있어야 한다');
+      expect(find.byType(StopDoneScreen), findsOneWidget);
+
+      handle.dispose();
+      await disposeScreen(tester);
+    });
+  });
+
   group('비상 정지 화면 — 거짓 완료 금지', () {
     testWidgets('기기가 정지를 확인하면(STOPPED) 완료 화면으로 이동한다', (tester) async {
       await registerActiveDevice();
@@ -235,7 +321,7 @@ void main() {
       await settleStopFlow(tester);
 
       expect(find.byType(StopDoneScreen), findsOneWidget);
-      expect(spoke('기기를 멈췄습니다'), isTrue);
+      expect(spoke('터치브릿지를 멈췄습니다'), isTrue);
 
       await disposeScreen(tester);
     });
@@ -258,6 +344,11 @@ void main() {
         reason: '타임아웃은 정지 확인이 아니다 — "안전하게 중단" 화면으로 넘기면 거짓 완료다',
       );
       expect(spoke('응답을 확인하지 못했습니다'), isTrue);
+      expect(
+        find.textContaining('응답을 확인하지 못했습니다'),
+        findsOneWidget,
+        reason: '음성은 한 번 지나간다 — 낭독기로 다시 훑으면 실패 상태를 읽을 수 있어야 한다',
+      );
 
       // _stopInProgress가 풀려 재시도가 가능해야 한다.
       //

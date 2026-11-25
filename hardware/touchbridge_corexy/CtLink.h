@@ -1,10 +1,11 @@
 // =====================================================================
-//  Touch Bridge - CT 노드 수신기 (실기기에서 실행한 적 없음)
+//  Touch Bridge - CT 노드 수신기
 //  CT_LINK_ENABLED가 1일 때만 포함한다.
 //
 //  CT 노드가 1초마다 보내는 {"t":"ct","w":..,"a":..,"seq":..} 줄을 loop()에서 읽어
-//  5초 이동 평균과 ON/OFF/UNKNOWN 상태를 만든다. 대기 없이 도착한 바이트만 처리해
-//  모션 루프와 BLE를 막지 않는다.
+//  5초 이동 평균과 ON/OFF/UNKNOWN 상태를 만든다. ON/OFF는 측정에서 쓴 유지 시간
+//  판정(CT_ON_WATTS 이상 CT_ON_HOLD_MS → 작동, CT_OFF_WATTS 이하 CT_OFF_HOLD_MS → 종료)이다.
+//  대기 없이 도착한 바이트만 처리해 모션 루프와 BLE를 막지 않는다.
 //
 //  표시 전용이다. 안전 판단(정지, 누름 허용, 완료 판정)에 쓰지 말 것.
 // =====================================================================
@@ -14,6 +15,11 @@
 #include <math.h>
 #include <string.h>
 #include "config.h"
+#if CT_LINK_ESPNOW
+#include <WiFi.h>
+#include <esp_now.h>
+#include <esp_wifi.h>
+#endif
 
 namespace ctlink {
 
@@ -41,11 +47,43 @@ static int      sampleCount = 0;
 static bool     everReceived = false;
 static uint32_t lastRxMs = 0;
 static uint32_t lastEmitMs = 0;
+// 유지 시간 판정 상태. 두 문턱 사이에서는 직전 판정을 유지한다(켜짐·꺼짐 깜빡임 방지).
+static State    judged = State::OFF;
+static bool     above = false, below = false;
+static uint32_t aboveSince = 0, belowSince = 0;
+
+#if CT_LINK_ESPNOW
+// 무선 수신: 콜백(와이파이 태스크)은 최신 줄 하나만 맡겨 두고, loop의 poll()이 꺼내 해석한다.
+// 1초에 한 줄이라 한 칸이면 충분하고, 덮어써도 최신 값이 남는다.
+static portMUX_TYPE rxMux = portMUX_INITIALIZER_UNLOCKED;
+static char     rxLine[CT_LINE_MAX + 1];
+static size_t   rxLen = 0;
+static bool     rxReady = false;
+
+inline void onEspNowRecv(const esp_now_recv_info_t*, const uint8_t* data, int len) {
+  if (len <= 0 || len > (int)CT_LINE_MAX) return;
+  size_t n = (size_t)len;
+  while (n > 0 && (data[n - 1] == '\n' || data[n - 1] == '\r')) n--;
+  portENTER_CRITICAL(&rxMux);
+  memcpy(rxLine, data, n);
+  rxLine[n] = '\0';
+  rxLen = n;
+  rxReady = true;
+  portEXIT_CRITICAL(&rxMux);
+}
+#endif
 
 inline void begin() {
   Serial2.setRxBufferSize(CT_LINK_RX_BUFFER_BYTES);
   // 기본 핀 16/17은 엔코더다. 반드시 핀을 지정해서 연다.
   Serial2.begin(CT_LINK_BAUD, SERIAL_8N1, PIN_CT_LINK_RX, PIN_CT_LINK_TX);
+#if CT_LINK_ESPNOW
+  // 공유기에 붙지 않고 CT 노드와 같은 고정 채널에서 받는다. BLE와 함께 동작한다.
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  esp_wifi_set_channel(CT_ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
+  if (esp_now_init() == ESP_OK) esp_now_register_recv_cb(onEspNowRecv);
+#endif
   lastEmitMs = millis();
 }
 
@@ -55,6 +93,19 @@ inline void addSample(uint32_t now, float w) {
   if (sampleCount < kSampleSlots) sampleCount++;
   lastRxMs = now;
   everReceived = true;
+
+  if (w >= CT_ON_WATTS) {
+    if (!above) { above = true; aboveSince = now; }
+  } else {
+    above = false;
+  }
+  if (w <= CT_OFF_WATTS) {
+    if (!below) { below = true; belowSince = now; }
+  } else {
+    below = false;
+  }
+  if (above && now - aboveSince >= CT_ON_HOLD_MS) judged = State::ON;
+  if (below && now - belowSince >= CT_OFF_HOLD_MS) judged = State::OFF;
 }
 
 // 잘못된 줄은 버리고 신선도도 갱신하지 않는다.
@@ -72,6 +123,20 @@ inline void parseLine(char* line, size_t len, uint32_t now) {
 
 // loop()에서 호출한다. 한 번에 CT_POLL_BUDGET 바이트까지만 처리한다.
 inline void poll() {
+#if CT_LINK_ESPNOW
+  {
+    char line[CT_LINE_MAX + 1];
+    size_t len = 0;
+    portENTER_CRITICAL(&rxMux);
+    if (rxReady) {
+      memcpy(line, rxLine, rxLen + 1);
+      len = rxLen;
+      rxReady = false;
+    }
+    portEXIT_CRITICAL(&rxMux);
+    if (len > 0) parseLine(line, len, millis());
+  }
+#endif
   int budget = CT_POLL_BUDGET;
   while (budget-- > 0 && Serial2.available() > 0) {
     const int c = Serial2.read();
@@ -105,7 +170,7 @@ inline Report current(uint32_t now) {
   }
   if (n == 0) return {State::UNKNOWN, false, 0.0f};
   const float avg = sum / n;
-  return {avg >= CT_ON_WATTS ? State::ON : State::OFF, true, avg};
+  return {judged, true, avg};
 }
 
 // 보고할 시각이면 true.

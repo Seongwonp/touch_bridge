@@ -1,9 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../../models/appliance_config.dart';
 import '../../services/active_device_service.dart';
+import '../../services/device_mapping_service.dart';
 import '../../services/home_device_store.dart';
 import '../../services/recommendation_service.dart';
 import '../../services/tts_service.dart';
@@ -11,8 +13,8 @@ import '../../widgets/responsive_scale.dart';
 import '../../widgets/top_app_bar.dart';
 import '../../theme/app_colors.dart';
 import '../mapping/manual_mapping_screen.dart';
+import '../mapping/mapping_image_source.dart';
 import '../mapping/photo_mapping_screen.dart';
-import 'widgets/camera_alignment_guide.dart';
 
 IconData _iconForApplianceType(ApplianceType type) {
   switch (type) {
@@ -56,104 +58,31 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
     super.dispose();
   }
 
-  /// 매핑용 이미지 선택.
-  ///
-  /// 반환 계약: null = 사용자가 취소(시트 dismiss 또는 피커 취소). 이때 호출부는
-  /// 매핑 화면으로 진입하면 안 된다. 샘플 이미지 선택은
-  /// `(path: null, useSample: true)`로 구분한다.
-  Future<({String? path, bool useSample})?> _chooseImageForMapping(
-    BuildContext context,
-  ) async {
-    final choice = await showModalBottomSheet<int>(
-      context: context,
-      backgroundColor: AppColors.surfaceElevated,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.camera_alt, color: Colors.white),
-              title: const Text('사진 촬영', style: TextStyle(color: Colors.white)),
-              onTap: () => Navigator.of(ctx).pop(0),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library, color: Colors.white),
-              title: const Text(
-                '갤러리에서 선택',
-                style: TextStyle(color: Colors.white),
-              ),
-              onTap: () => Navigator.of(ctx).pop(1),
-            ),
-            ListTile(
-              leading: const Icon(Icons.image, color: Colors.white),
-              title: const Text(
-                '샘플 이미지 사용',
-                style: TextStyle(color: Colors.white),
-              ),
-              onTap: () => Navigator.of(ctx).pop(2),
-            ),
-            const SizedBox(height: 12),
-          ],
-        ),
-      ),
-    );
-
-    if (choice == null) return null; // 시트 dismiss = 취소
-    if (choice == 2) return (path: null, useSample: true); // 샘플 이미지로 진행
-
-    if (choice == 0) {
-      if (!context.mounted) return null;
-      final ready = await showCameraAlignmentGuide(context);
-      if (!ready) return null;
-    }
-
-    try {
-      // iOS 리소스 격리: 피커를 열기 전에 고부하 작업을 멈춘다.
-      await _tts.stop();
-      // TODO: 블루투스 스캔 중이면 중지.
-
-      // iOS XPC 세션 안정화를 위해 충분한 대기
-      await Future.delayed(const Duration(milliseconds: 1500));
-
-      final ImagePicker isolatedPicker = ImagePicker();
-      final xfile = await isolatedPicker.pickImage(
-        source: choice == 0 ? ImageSource.camera : ImageSource.gallery,
-        maxWidth: 1024, // 해상도 하향 조정으로 메모리 부담 완화
-        imageQuality: 80,
-      );
-
-      // 피커 종료 후 다시 대기
-      await Future.delayed(const Duration(milliseconds: 800));
-
-      if (xfile == null) {
-        // 피커에서 취소 — 매핑 진입 없이 원래 화면 유지.
-        _tts.speak('사진 선택을 취소했습니다.', priority: TtsPriority.result);
-        return null;
-      }
-      return (path: xfile.path, useSample: false);
-    } catch (e) {
-      debugPrint('Error picking image (Critical Isolation): $e');
-      _tts.speak('사진을 가져오는 중 오류가 발생했습니다.', priority: TtsPriority.result);
-      return null;
-    }
-  }
-
   String _newDeviceId(String prefix) {
     final safe = prefix.replaceAll(RegExp(r'\s+'), '_');
     final ts = DateTime.now().microsecondsSinceEpoch;
     return '${safe}_$ts';
   }
 
-  /// 사진 매핑을 건너뛰고 바로 기기를 등록한 뒤 좌표 기반 설정 화면으로 이동한다.
+  /// 사진 매핑을 건너뛰고 좌표 기반 설정 화면으로 이동한다.
   /// 시각 확인 없이(화살표+테스트 눌러보기만으로) 최초 등록을 끝낼 수 있는 경로.
+  ///
+  /// 설정 화면이 이 기기를 활성 기기로 쓰므로 먼저 등록하지만, 저장까지 마치지
+  /// 않고 돌아오면 등록을 되돌린다. 그러지 않으면 뒤로 가기만 해도 매핑 없는
+  /// 가전이 홈에 남는다.
   Future<void> _registerAndStartCoordinateSetup(
     BuildContext context,
     ApplianceConfig appliance,
   ) async {
     final deviceId = _newDeviceId(appliance.name.replaceAll(' ', '_'));
+    final active = ActiveDeviceService.instance;
+    final previous = (
+      id: active.getActiveDeviceId(),
+      name: active.getActiveDeviceName(),
+      bleId: active.getActiveBleId(),
+      bleName: await active.getActiveBleName(),
+      type: active.getActiveDeviceType(),
+    );
 
     final devices = await HomeDeviceStore.loadDevices();
     devices.add({
@@ -175,22 +104,51 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
     );
     ActiveDeviceService.instance.notifyDeviceListChanged();
 
-    await _tts.speak(
-      '${appliance.name} 기기가 등록되었습니다. 이제 좌표로 버튼 위치를 설정합니다.',
+    // 아직 등록이 끝난 것이 아니므로 "등록되었습니다"라고 하지 않는다.
+    unawaited(_tts.speak(
+      '${appliance.name}의 버튼 위치를 좌표로 설정합니다. 저장하면 등록이 끝납니다.',
       source: 'ApplianceSelectionScreen',
       interrupt: true,
-    );
+      priority: TtsPriority.result,
+    ));
 
-    if (!context.mounted) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ManualMappingScreen(
-          deviceId: deviceId,
-          deviceName: appliance.name,
-          showCompletionCheck: true,
-        ),
-      ),
+    final completed = context.mounted
+        ? await Navigator.push<bool>(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ManualMappingScreen(
+                deviceId: deviceId,
+                deviceName: appliance.name,
+                showCompletionCheck: true,
+              ),
+            ),
+          )
+        : null;
+    if (completed == true) return;
+
+    // 저장하지 않고 돌아왔다 — 등록·매핑·활성 기기를 되돌린다.
+    await HomeDeviceStore.removeById(deviceId);
+    await DeviceMappingService.instance.delete(deviceId);
+    if (active.getActiveDeviceId() == deviceId) {
+      final prevId = previous.id;
+      if (prevId != null && prevId.isNotEmpty &&
+          await HomeDeviceStore.findById(prevId) != null) {
+        await active.setActiveDevice(
+          deviceId: prevId,
+          deviceName: previous.name,
+          bleId: previous.bleId,
+          bleName: previous.bleName,
+          deviceType: previous.type,
+        );
+      } else {
+        await active.clearActiveDevice();
+      }
+    }
+    active.notifyDeviceListChanged();
+    _tts.speak(
+      '${appliance.name} 등록을 취소했습니다.',
+      source: 'ApplianceSelectionScreen',
+      priority: TtsPriority.result,
     );
   }
 
@@ -221,7 +179,7 @@ class _ApplianceSelectionScreenState extends State<ApplianceSelectionScreen> {
                 Navigator.of(sheetCtx).pop();
               }
 
-              final result = await _chooseImageForMapping(context);
+              final result = await chooseImageForMapping(context, tts: _tts);
               if (result == null) return; // 취소 — 매핑 화면으로 넘어가지 않는다
               if (!context.mounted) return;
 
@@ -322,13 +280,6 @@ class _ApplianceCard extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    Text(
-                      '추천 킷: ${appliance.recommendedKit}',
-                      style: TextStyle(
-                        color: AppColors.textTertiary,
-                        fontSize: 13 * rs,
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -374,59 +325,10 @@ class _ApplianceCard extends StatelessWidget {
               ],
             ),
             SizedBox(height: ResponsiveScale.v(context, 24)),
+            // 가전별 부품·부착 가이드는 두지 않는다. 하드웨어(CoreXY 프레임 + SwitchBot Bot)는
+            // 가전 종류와 무관하게 같다.
             Text(
-              '필요한 부품 구성',
-              style: TextStyle(
-                color: AppColors.primary,
-                fontWeight: FontWeight.bold,
-                fontSize: 16 * rs,
-              ),
-            ),
-            SizedBox(height: ResponsiveScale.v(context, 12)),
-            SizedBox(
-              height: 100 * rs,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: appliance.parts.length,
-                itemBuilder: (context, index) {
-                  final part = appliance.parts[index];
-                  return Container(
-                    width: 90 * rs,
-                    margin: EdgeInsets.only(right: 12 * rs),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceElevated,
-                      borderRadius: BorderRadius.circular(12 * rs),
-                      border: Border.all(color: AppColors.borderDefault),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(part.icon, color: Colors.white70, size: 28 * rs),
-                        Text(
-                          part.name,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 11 * rs,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        Text(
-                          '${part.count}개',
-                          style: TextStyle(
-                            color: AppColors.primary,
-                            fontSize: 11 * rs,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-            SizedBox(height: ResponsiveScale.v(context, 24)),
-            Text(
-              '부착 가이드',
+              '설치 순서',
               style: TextStyle(
                 color: AppColors.primary,
                 fontWeight: FontWeight.bold,
@@ -435,7 +337,9 @@ class _ApplianceCard extends StatelessWidget {
             ),
             SizedBox(height: ResponsiveScale.v(context, 8)),
             Text(
-              appliance.assemblyGuide,
+              '1. 터치브릿지 프레임을 조작부 위에 붙입니다.\n'
+              '2. 누름 장치가 버튼에 닿도록 놓습니다.\n'
+              '3. 아래에서 버튼 위치를 설정하고 저장하면 등록이 끝납니다.',
               style: TextStyle(
                 color: Colors.white70,
                 height: 1.5,

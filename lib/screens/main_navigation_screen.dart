@@ -8,17 +8,26 @@ import 'home/home_screen.dart';
 import 'voice/voice_listening_screen.dart';
 import 'safety/emergency_access_screen.dart';
 import 'settings/settings_screen.dart';
-import 'settings/device_management_screen.dart';
 import '../services/tts_service.dart';
 import '../services/accessibility_settings.dart';
 import '../services/feedback_service.dart';
 import '../services/accessibility_confirmation_policy.dart';
 import '../services/app_logger.dart';
+import '../services/active_device_service.dart';
+import '../services/power_status_service.dart';
 import '../widgets/responsive_scale.dart';
 import '../../theme/app_colors.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
+
+  /// 다른 화면이 하단 탭을 바꿔 달라고 요청한다(예: 보호자 설정을 마치고 "홈으로").
+  /// 설정 탭에서 보호자 설정에 들어갔다가 첫 화면까지 돌아오면 설정 탭이 그대로 보여,
+  /// "홈에서 말하기"라는 안내와 화면이 어긋난다.
+  static final ValueNotifier<int?> tabRequest = ValueNotifier<int?>(null);
+
+  /// 홈 탭 번호. 하단 탭 순서는 홈·비상·설정으로 고정이다.
+  static const int homeTab = 0;
   @override
   State<MainNavigationScreen> createState() => _MainNavigationScreenState();
 }
@@ -29,36 +38,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Timer? _navResetTimer;
   int? _armedNavIndex;
 
-  List<_NavDestination> _destinations(bool guardianMode) {
-    if (guardianMode) {
-      return const [
-        _NavDestination(
-          icon: Icons.home_rounded,
-          label: '홈',
-          guide: '홈 화면입니다. 말하기 버튼으로 음성 제어를 시작합니다.',
-          screen: HomeScreen(),
-        ),
-        _NavDestination(
-          icon: Icons.manage_search_rounded,
-          label: '기기 관리',
-          guide: '기기 관리 화면입니다. 기기를 등록합니다.',
-          screen: DeviceManagementScreen(),
-        ),
-        _NavDestination(
-          icon: Icons.emergency_rounded,
-          label: '비상',
-          guide: '비상 정지입니다. 버튼을 눌러 기기를 중단합니다.',
-          screen: EmergencyAccessScreen(),
-        ),
-        _NavDestination(
-          icon: Icons.settings_rounded,
-          label: '설정',
-          guide: '설정 화면입니다. 음성 속도와 접근성을 조정합니다.',
-          screen: SettingsScreen(),
-        ),
-      ];
-    }
-
+  /// 하단 탭은 모드와 상관없이 홈·비상·설정 세 개다. 가전 등록·버튼 위치 같은 보호자 기능은
+  /// 설정의 "보호자 설정" 한곳에만 둔다.
+  List<_NavDestination> _destinations() {
     return const [
       _NavDestination(
         icon: Icons.home_rounded,
@@ -84,7 +66,49 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   @override
   void initState() {
     super.initState();
+    MainNavigationScreen.tabRequest.addListener(_onTabRequest);
+    _lastPower = PowerStatusService.instance.state;
+    PowerStatusService.instance.status.addListener(_onPowerStatus);
     _announceQuickStart();
+  }
+
+  PowerState _lastPower = PowerState.unknown;
+
+  /// 전류 센서(CT)가 가전 작동 시작·끝을 판정하면 홈·비상·설정 어디서든 한 번 알린다.
+  /// 보호자가 가전을 손으로 눌러 돌렸어도 끝났는지 알 수 있게 한다. 남은 시간·정지 완료
+  /// 화면은 스스로 알리므로, 이 화면이 맨 위일 때만 말한다(겹쳐 말하지 않게).
+  /// 전류 판정은 참고 정보라 "…것으로 보입니다"로 말하고, 안전 판단에는 쓰지 않는다.
+  void _onPowerStatus() {
+    final now = PowerStatusService.instance.state;
+    final before = _lastPower;
+    _lastPower = now;
+    if (!mounted || now == before) return;
+    if (ModalRoute.of(context)?.isCurrent != true) return;
+    final name = ActiveDeviceService.instance.getActiveDeviceName() ?? '가전';
+    final String? msg = switch ((before, now)) {
+      (PowerState.on, PowerState.off) =>
+        '전류 센서 기준으로 $name 작동이 끝난 것으로 보입니다.',
+      (_, PowerState.on) => '전류 센서 기준으로 $name가 작동 중입니다.',
+      _ => null,
+    };
+    if (msg == null) return;
+    AppLogger.info('power.announce', {'state': now.name});
+    _tts.speak(msg, priority: TtsPriority.result);
+    ScaffoldMessenger.maybeOf(context)
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(msg), duration: const Duration(seconds: 6)));
+  }
+
+  void _onTabRequest() {
+    final index = MainNavigationScreen.tabRequest.value;
+    if (index == null || !mounted) return;
+    MainNavigationScreen.tabRequest.value = null;
+    if (index < 0 || index >= _destinations().length) return;
+    _navResetTimer?.cancel();
+    setState(() {
+      _currentIndex = index;
+      _armedNavIndex = null;
+    });
   }
 
   Future<void> _announceQuickStart() async {
@@ -92,40 +116,33 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     final seen = prefs.getBool('quick_start_seen') ?? false;
     if (seen) return;
 
-    final guardianMode = AccessibilitySettings.instance.guardianModeEnabled;
     // 첫 실행 1회뿐인 핵심 온보딩 안내 — result 우선순위로 재생해
     // (a) 스크린리더 활성 시에도 들리고, (b) 홈 화면의 navigation 안내가
     // 큐에서 이 안내를 대체(navigation 최신 1건 유지 규칙)하지 못하게 한다.
-    if (guardianMode) {
-      await _tts.speak(
-        '보호자 안내입니다. 기기 관리에서 기기를 등록하세요.',
-        source: 'MainNavigationScreen',
-        interrupt: true,
-        priority: TtsPriority.result,
-      );
-      await _tts.speak(
-        '등록 후 홈에서 기기를 선택하고 말하기 버튼으로 제어합니다.',
-        source: 'MainNavigationScreen',
-        priority: TtsPriority.result,
-      );
-    } else {
-      await _tts.speak(
-        'Touch Bridge입니다. 보호자가 기기를 먼저 등록해야 합니다.',
-        source: 'MainNavigationScreen',
-        interrupt: true,
-        priority: TtsPriority.result,
-      );
-      await _tts.speak(
-        '설정에서 보호자 모드를 켜고 기기를 등록한 뒤, 홈에서 말하기를 누르세요.',
-        source: 'MainNavigationScreen',
-        priority: TtsPriority.result,
-      );
-    }
+    await _tts.speak(
+      'Touch Bridge입니다. 가전 등록은 보호자가 설정의 보호자 설정에서 합니다.',
+      source: 'MainNavigationScreen',
+      interrupt: true,
+      priority: TtsPriority.result,
+    );
+    await _tts.speak(
+      '등록한 뒤에는 홈에서 말하기를 누르세요.',
+      source: 'MainNavigationScreen',
+      priority: TtsPriority.result,
+    );
+    // 비상 정지 버튼은 위치를 알려 주지 않으면 화면을 볼 수 없는 사용자가 찾을 수 없다.
+    // 모서리는 손으로 더듬어 찾기 쉬운 자리이고, 모든 화면에서 같은 자리에 있다.
+    await _tts.speak(
+      '어느 화면에서든 오른쪽 위 모서리의 빨간 비상 정지 버튼을 한 번 누르면 바로 멈춥니다. '
+      '화면 읽기를 쓰면 화면 제목 바로 다음에 있습니다.',
+      source: 'MainNavigationScreen',
+      priority: TtsPriority.result,
+    );
     await prefs.setBool('quick_start_seen', true);
 
     // 사용자 모드 첫 실행 시 시각적 온보딩 다이얼로그도 노출한다.
     // TalkBack이 AlertDialog content를 자동으로 낭독 → TTS와 이중 보장.
-    if (!guardianMode && mounted) {
+    if (mounted) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         showDialog<void>(
@@ -144,11 +161,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               ),
             ),
             content: const Text(
-              '보호자가 아래 순서로 먼저 설정해야 합니다.\n\n'
-              '1. 설정 → 보호자 모드 켜기\n'
-              '2. 기기 관리 → 기기 등록\n'
-              '3. 보호자 모드 끄기\n\n'
-              '이후 홈 화면에서 음성으로 기기를 제어할 수 있습니다.',
+              '1. 가전 등록은 보호자가 설정의 "보호자 설정"에서 합니다.\n'
+              '2. 등록한 뒤 홈에서 "말하기"를 누르면 음성으로 제어합니다.\n\n'
+              '비상 정지: 어느 화면에서든 오른쪽 위 모서리의 빨간 버튼을 한 번 누르면 바로 멈춥니다.',
               style: TextStyle(
                 color: AppColors.textSecondary,
                 height: 1.6,
@@ -177,9 +192,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 
   Future<void> _handleBottomTap(int index) async {
-    final destinations = _destinations(
-      AccessibilitySettings.instance.guardianModeEnabled,
-    );
+    final destinations = _destinations();
     if (_currentIndex == index) {
       // 다른 탭이 armed 상태로 남아 있으면 여기서 해제한다. 그러지 않으면
       // 그 탭으로 되돌아왔을 때 armed가 유지돼, 한 번만 눌러도 확인 없이 이동한다.
@@ -261,13 +274,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     BuildContext context,
     List<_NavDestination> destinations,
   ) {
+    // 높이를 고정하지 않고 최소 높이만 둔다. 시스템 글자를 키우면 탭 글자도 커지고
+    // 바가 따라 높아진다.
     return Container(
-      height: ResponsiveScale.v(context, 80),
+      constraints: BoxConstraints(minHeight: ResponsiveScale.v(context, 80)),
       decoration: const BoxDecoration(
         color: AppColors.surface,
         border: Border(top: BorderSide(color: AppColors.borderDefault)),
       ),
-      child: Row(
+      child: IntrinsicHeight(
+        child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: List.generate(destinations.length, (index) {
           final item = destinations[index];
           final bool isActive = _currentIndex == index;
@@ -283,6 +300,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               value: isArmed ? '이동 대기 중' : null,
               hint: isArmed ? '한 번 더 누르면 이동합니다' : null,
               liveRegion: isArmed,
+              // 라벨이 '홈 탭'이므로 아래 글자 '홈'을 한 번 더 읽지 않게 한다.
+              excludeSemantics: true,
+              onTap: () => _handleBottomTap(index),
               child: GestureDetector(
                 onTap: () => _handleBottomTap(index),
                 child: AnimatedContainer(
@@ -313,8 +333,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                           ]
                         : null,
                   ),
+                  padding: EdgeInsets.symmetric(vertical: 6 * rs),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
                         item.icon,
@@ -325,7 +347,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                       Text(
                         item.label,
                         style: TextStyle(
-                          fontSize: 11 * rs,
+                          fontSize: 15 * rs,
                           fontWeight: FontWeight.w800,
                           color: isActive
                               ? Colors.black
@@ -339,12 +361,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             ),
           );
         }),
+        ),
       ),
     );
   }
 
   @override
   void dispose() {
+    MainNavigationScreen.tabRequest.removeListener(_onTabRequest);
+    PowerStatusService.instance.status.removeListener(_onPowerStatus);
     _navResetTimer?.cancel();
     // TtsService는 앱 전역 싱글톤 큐다. 여기서 stop()을 부르면 이 화면이
     // dispose되는 순간(보통 다음 화면 initState 직후) 다음 화면이 막 넣은
@@ -355,9 +380,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   @override
   Widget build(BuildContext context) {
     final rs = ResponsiveScale.factor(context);
-    final destinations = _destinations(
-      AccessibilitySettings.instance.guardianModeEnabled,
-    );
+    final destinations = _destinations();
     final currentIndex = _currentIndex.clamp(0, destinations.length - 1);
     if (currentIndex != _currentIndex) {
       _currentIndex = currentIndex;
@@ -378,16 +401,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       customSemanticsActions: {
         const CustomSemanticsAction(label: '음성 명령 시작'): openVoice,
       },
-      child: GestureDetector(
-        onLongPress: openVoice,
-        child: Scaffold(
-          backgroundColor: AppColors.background,
-          body: IndexedStack(
-            index: _currentIndex,
-            children: destinations.map((d) => d.screen).toList(growable: false),
-          ),
-          bottomNavigationBar: _buildBottomBar(rs, context, destinations),
+      // 화면 전체 길게 누르기로 음성을 여는 단축은 두지 않는다. 앱 전체를 감싼 길게
+      // 누르기는 비상 정지 버튼의 탭을 이겨, 정지 버튼을 꾹 누르면 멈추지 않고 음성 화면이
+      // 열린다. 낭독기 사용자는 위의 '음성 명령 시작' 동작을 쓴다.
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        body: IndexedStack(
+          index: _currentIndex,
+          children: destinations.map((d) => d.screen).toList(growable: false),
         ),
+        bottomNavigationBar: _buildBottomBar(rs, context, destinations),
       ),
     );
   }

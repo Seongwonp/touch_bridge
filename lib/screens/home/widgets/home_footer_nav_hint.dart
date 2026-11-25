@@ -31,13 +31,17 @@ class HomeFooterNavHint extends StatelessWidget {
           Semantics(
             label: '이전 기기',
             button: true,
+            excludeSemantics: true,
+            onTap: onPrevious,
             child: IconButton(
               tooltip: '이전 기기',
               onPressed: onPrevious,
               icon: Icon(Icons.chevron_left_rounded, color: AppColors.textTertiary, size: 28 * rs),
             ),
           ),
-          Text(
+          // 화면용 안내다. 낭독기는 양옆 버튼 이름으로 충분해 읽지 않는다.
+          ExcludeSemantics(
+            child: Text(
             screenReaderActive ? '버튼으로 기기 전환' : '좌우로 밀어서 기기 전환',
             style: TextStyle(
               fontSize: 12 * rs,
@@ -46,9 +50,12 @@ class HomeFooterNavHint extends StatelessWidget {
               color: AppColors.textTertiary,
             ),
           ),
+          ),
           Semantics(
             label: '다음 기기',
             button: true,
+            excludeSemantics: true,
+            onTap: onNext,
             child: IconButton(
               tooltip: '다음 기기',
               onPressed: onNext,

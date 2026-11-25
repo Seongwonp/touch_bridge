@@ -15,6 +15,10 @@ class ActiveDeviceService {
     deviceListUpdateNotifier.value++;
   }
 
+  /// 선택 기기 이름이 바뀌면 알린다(상단 상태 줄 등 표시 전용).
+  /// 기기 목록 알림과 분리해, 목록을 다시 불러오는 화면이 반응하지 않게 한다.
+  final ValueNotifier<String?> activeDeviceNameNotifier = ValueNotifier<String?>(null);
+
   // 메모리 캐시
   String? _activeDeviceId;
   String? _activeDeviceName;
@@ -31,6 +35,7 @@ class ActiveDeviceService {
     final prefs = await SharedPreferences.getInstance();
     _activeDeviceId = prefs.getString(_kActiveDeviceId);
     _activeDeviceName = prefs.getString(_kActiveDeviceName);
+    activeDeviceNameNotifier.value = _activeDeviceName;
     _activeBleId = prefs.getString(_kActiveBleId);
     _activeDeviceType = prefs.getString(_kActiveDeviceType);
   }
@@ -47,8 +52,16 @@ class ActiveDeviceService {
     String? bleName,
     String? deviceType,
   }) async {
+    // 호출부가 종류를 넘기지 않으면 저장된 기기 기록에서 찾는다. 그냥 비우면
+    // 명령 라우터가 이름으로 종류를 추측하게 된다.
+    if (deviceType == null || deviceType.isEmpty) {
+      final record = await HomeDeviceStore.findById(deviceId);
+      final stored = record?['deviceType'];
+      if (stored is String && stored.isNotEmpty) deviceType = stored;
+    }
     _activeDeviceId = deviceId;
     _activeDeviceName = deviceName;
+    activeDeviceNameNotifier.value = deviceName;
     _activeBleId = bleId;
     _activeDeviceType = deviceType;
 
@@ -72,8 +85,9 @@ class ActiveDeviceService {
         });
       }
     } else {
+      // 허브(bleId)가 없는 기기(QR·NFC·코드 등록)를 골랐다고 지금 연결을 끊지 않는다.
+      // 끊으면 이미 연결된 허브까지 놓쳐 "기기 연결을 요청해 주세요"만 듣게 된다.
       await prefs.remove(_kActiveBleId);
-      await BleService.instance.disconnect();
     }
 
     if (bleName != null) {
@@ -88,6 +102,19 @@ class ActiveDeviceService {
       await prefs.remove(_kActiveDeviceType);
     }
     return bleConnected;
+  }
+
+  /// 활성 기기를 비운다(활성 기기를 지웠거나 등록을 취소했을 때). BLE 연결은 그대로 둔다.
+  Future<void> clearActiveDevice() async {
+    _activeDeviceId = null;
+    _activeDeviceName = null;
+    _activeBleId = null;
+    _activeDeviceType = null;
+    activeDeviceNameNotifier.value = null;
+    final prefs = await SharedPreferences.getInstance();
+    for (final k in [_kActiveDeviceId, _kActiveDeviceName, _kActiveBleId, _kActiveBleName, _kActiveDeviceType]) {
+      await prefs.remove(k);
+    }
   }
 
   String? getActiveDeviceId() => _activeDeviceId;

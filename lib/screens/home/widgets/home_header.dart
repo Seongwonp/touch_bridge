@@ -36,13 +36,19 @@ class HomeHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              // 낭독기에서 화면 제목으로 이동할 수 있게 제목으로 표시하고, 아래 줄과 함께
+              // 다른 상태 문구에 섞여 한 덩어리로 읽히지 않게 따로 둔다.
+              Semantics(
+                header: true,
+                container: true,
+                child: Text(
                 '내 기기',
                 style: TextStyle(
                   fontSize: 24 * rs,
                   fontWeight: FontWeight.w800,
                   color: AppColors.textPrimary,
                 ),
+              ),
               ),
               SizedBox(height: ResponsiveScale.v(context, 2)),
               Text(

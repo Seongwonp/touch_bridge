@@ -111,7 +111,7 @@ void main() {
       expect(mw('1분 시작 안 할래'), isNull);
     });
 
-    test('부정어 판정은 어절 기준이라 정상 문장을 오탐하지 않는다 (재리뷰 P2)', () {
+    test('부정어 판정은 어절 기준이라 정상 문장을 오탐하지 않는다', () {
       expect(MicrowaveCommandService.hasNegation('30초 동안 해줘'), isFalse);
       expect(MicrowaveCommandService.hasNegation('국에 밥 말아 데워줘'), isFalse);
       expect(MicrowaveCommandService.hasNegation('30초 시작'), isFalse);

@@ -127,6 +127,25 @@ void main() {
       expect(resolved, (row: 1, col: 1));
     });
 
+    test('보호자가 등록한 버튼이 있으면 등록하지 않은 버튼을 격자로 짐작하지 않는다', () {
+      const profile = DeviceMappingProfile(
+        rows: 3,
+        cols: 3,
+        originX: 0,
+        originY: 0,
+        pitchX: 1,
+        pitchY: 1,
+        buttonMap: {'BT-05': (row: 1, col: 1)},
+      );
+
+      final resolved = MappingExecutionService.instance.resolveButton(
+        profile: profile,
+        buttonId: 'BT-02',
+      );
+
+      expect(resolved, isNull);
+    });
+
     test('fallback 좌표가 현재 그리드 밖이면 null을 반환한다', () {
       final profile = DeviceMappingProfile.defaultGrid(rows: 2, cols: 2);
 
@@ -182,6 +201,27 @@ void main() {
   });
 
   group('MappingExecutionResult.userMessage (사용자 문구 정직화)', () {
+    test('도중에 실패하면 이미 눌렸을 수 있는 버튼을 알린다', () {
+      const r = MappingExecutionResult(
+        ok: false,
+        message: 'fail',
+        explicitUserMessage: '명령을 보내지 못했습니다.',
+        pressedBefore: ['BT-02'],
+      );
+      expect(r.userMessage, contains('30초 버튼은 이미 눌렸을 수 있습니다'));
+      expect(r.userMessage, contains('취소해 줘'));
+    });
+
+    test('정지로 끊긴 경우는 정지 안내에 맡기고 덧붙이지 않는다', () {
+      const r = MappingExecutionResult(
+        ok: false,
+        message: 'stop',
+        stoppedByEmergency: true,
+        pressedBefore: ['BT-02'],
+      );
+      expect(r.userMessage, isNot(contains('이미 눌렸을')));
+    });
+
     test('매핑 미등록 실패는 버튼 등록 요청을 안내하고 내부 ID를 노출하지 않는다', () {
       const result = MappingExecutionResult(
         ok: false,
@@ -579,7 +619,7 @@ void main() {
       expect(result.userMessage, isNot(contains('연결을 확인')));
     });
 
-    test('전송 전 대기 중 정지가 오면 한 줄도 보내지 않는다 (재리뷰 P1)', () async {
+    test('전송 전 대기 중 정지가 오면 한 줄도 보내지 않는다', () async {
       final sent = <String>[];
       BleService.instance.setSendRawOverride((cmd) async {
         sent.add(cmd);

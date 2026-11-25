@@ -423,7 +423,8 @@ class _RemoteControlScreenState extends State<RemoteControlScreen>
                       crossAxisCount: 3,
                       crossAxisSpacing: 12 * rs,
                       mainAxisSpacing: 12 * rs,
-                      childAspectRatio: 1.3, // 명도와 크기를 위해 비율 조정
+                      // 글자를 키우면 키를 세로로 늘려 숫자가 잘리지 않게 한다.
+                      childAspectRatio: (1.3 / MediaQuery.textScalerOf(context).scale(1)).clamp(0.7, 1.3),
                       children: [
                         _numberKey(1, rs),
                         _numberKey(2, rs),

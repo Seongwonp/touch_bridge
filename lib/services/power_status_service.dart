@@ -53,6 +53,9 @@ class PowerStatusService {
 
   /// 전력 이벤트 한 줄을 읽는다. 다른 줄이거나 형식이 틀리면 null이다.
   @visibleForTesting
+  /// 이보다 큰 전력은 센서 이상으로 본다(전자레인지 소비전력 약 1~1.5 kW).
+  static const double maxPlausibleWatts = 2500;
+
   static PowerStatus? parseLine(String line) {
     if (!BleService.isPowerEventLine(line)) return null;
     final Object? decoded;
@@ -74,6 +77,10 @@ class PowerStatusService {
     if (state == null) return null;
     if (state == PowerState.unknown) return PowerStatus.unknown;
     if (w is! num || !w.isFinite || w < 0) return null;
+    // 가전 한 대가 낼 수 없는 값은 센서 이상(신호선 풀림·떠 있는 입력)으로 보고
+    // 상태를 모른다고 둔다. 입력이 떠 있으면 대기 중에도 SEN0211 최대 20 A의 끝값
+    // 근처(약 17 A, 4 kW 가까이)가 찍힐 수 있다.
+    if (w > maxPlausibleWatts) return PowerStatus.unknown;
     return PowerStatus(state, w.toDouble());
   }
 

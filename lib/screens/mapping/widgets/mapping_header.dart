@@ -45,7 +45,7 @@ class MappingHeader extends StatelessWidget {
                   fontWeight: FontWeight.w900,
                   color: Colors.white,
                 ),
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -56,6 +56,9 @@ class MappingHeader extends StatelessWidget {
                   backgroundColor: const Color(0xFF1A1A1A),
                   side: const BorderSide(color: Color(0xFFFFEB00)),
                   padding: EdgeInsets.symmetric(horizontal: 12 * rs),
+                  // 앱 테마의 버튼 최소 폭이 화면 전체라, 글자와 한 줄에 두면 레이아웃 오류로
+                  // release에서 줄 전체가 사라진다. 폭을 내용에 맞춘다.
+                  minimumSize: Size(0, 44 * rs),
                 ),
                 child: isAiAnalyzing
                     ? SizedBox(
