@@ -1,415 +1,106 @@
 # Touch Bridge
 
-**시각장애인을 위한 가전 터치패드 자동 입력 시스템**
+시각장애인과 저시력자를 위한 가전 버튼 대리 입력 장치입니다. 말로 명령하면, 가전 터치 패널 위에 붙인 장치가 버튼을 대신 누릅니다.
 
-> 2026 한이음 드림업 공모전 — 3팀 멜론머스크 (박성원 · 서예솔)  
-
-> **프로젝트 최종 보고서·동영상 제출 완료 (2026-10-28)** · ACK 2026 발표 예정: 11월 6일 · 제24회 프로젝트 발표회: 11월 18일
-
----
-
-## 왜 이 문제인가
-
-> 2024년 장애인차별금지법 이행 실태조사에서 시각장애인 응답자의
-> **77.1%**가 편의 기능 미비·부족으로 키오스크 이용에 어려움을 겪었다고
-> 답했습니다. ([보건복지부 자료 KDI 보관본](https://eiec.kdi.re.kr/policy/materialView.do?num=269629))
-
-국내 등록 시각장애인은 약 **24만 7천 명**입니다
-([보건복지부 2024년 등록장애인 현황](https://www.mohw.go.kr/board.es?mid=a10503000000&bid=0027&list_no=1485363&act=view)).
-전자레인지·세탁기·인덕션 등의 평면 터치패널은 버튼 위치를 촉각만으로
-구분하기 어렵습니다.
-
-- **기존 대안의 한계**: LG·삼성의 점자 스티커·음성 매뉴얼은 여전히 *정확한 위치를 사용자가 직접 터치*해야 합니다.  
-- **스마트홈 가전 교체**: 비용이 크고, 이미 집에 있는 가전은 그대로 못 씁니다.
-
-Touch Bridge는 **교체가 아닌 부착**으로 기존 가전을 그대로 접근성 있게 만듭니다.  
-물리 터치 대행 방식은 UIST 2023
-[BrushLens 원 연구](https://dl.acm.org/doi/10.1145/3586183.3606730)에서도
-검토된 접근법입니다. 논문의 실험 결과는 Touch Bridge의 실기 성능을 의미하지
-않으며, 본 프로젝트 수치는 별도 반복 시험으로 검증합니다.
-
----
-
-## 프로젝트 개요
-
-전자레인지·세탁기·키오스크 등 터치패널 기반 가전이 시각장애인에게 접근하기 어렵다는 문제를 해결합니다.  
-가전 터치패드 위에 부착하는 **IoT 하드웨어 장치**가 스마트폰 앱·음성 명령을 받아 **물리적으로 버튼을 대신 눌러주는** 시스템입니다.
-
-## 제출 및 발표 현황
-
-- 한이음 최종보고서와 동영상 제출을 완료했습니다 (2026-10-28).
-- 논문 「시각장애인용 가전 입력 대행 시스템의 안내–동작 불일치 완화를 위한 소프트웨어 안전 계약」은 ACK 2026 게재가 확정됐으며, 11월 6일 발표 예정입니다.
-- 제24회 프로젝트 발표회는 11월 18일 예정입니다.
-- 자동화 검증과 펌웨어 소스 준비 상태는 실기기에서의 모터 정지·ACK 검증과 구분합니다.
-
----
-
-## 논문
-
-박성원, 서예솔, "시각장애인용 가전 입력 대행 시스템의 안내–동작 불일치 완화를 위한 소프트웨어 안전 계약", 한국정보처리학회 ACK 2026 학술발표대회, 포스터 발표, 2026.11. (게재 확정)
-
-- 앱에 흩어져 있던 안전 규칙을 세 가지 계약(확인 기반 피드백, 실행 토큰 기반 정지 전파, 보수적 명령 해석)으로 정리하고, 계약이 빠져 있던 경로까지 확장했다.
-- 같은 결함을 기준 코드와 확장 코드에 주입해 비교한 결과, 비상 정지 이후 전송된 명령은 시나리오에 따라 7~20줄에서 0줄로 줄었다. 이 값은 앱 측 가상 전송 계층의 기록이며, 실기기에서 모터 정지를 검증한 결과는 아니다.
-
-## 데모 화면
+2026 한이음 드림업 · 3팀 멜론머스크 · 2026.04 – 2026.11
 
 <table>
   <tr>
-    <td align="center" width="25%"><img src="docs/screenshots/home.png" width="200" alt="홈 화면"><br><b>홈 · 내 기기</b><br><sub>큰 말하기 버튼 · 현재 기기</sub></td>
-    <td align="center" width="25%"><img src="docs/screenshots/control_sheet.png" width="200" alt="제어 방식 선택"><br><b>제어 방식 선택</b><br><sub>음성·이미지·코스·숫자패드</sub></td>
-    <td align="center" width="25%"><img src="docs/screenshots/emergency.png" width="200" alt="비상 정지"><br><b>비상 정지</b><br><sub>전역 정지 · 실행 화면 단일 탭 정지</sub></td>
-    <td align="center" width="25%"><img src="docs/screenshots/settings.png" width="200" alt="접근성·모드 설정"><br><b>접근성 · 모드</b><br><sub>큰 글씨·고대비·보호자/개발자</sub></td>
+    <td align="center"><img src="docs/screenshots/01_home.png" width="190" alt="홈 화면"><br>말하기</td>
+    <td align="center"><img src="docs/screenshots/02_confirm.png" width="190" alt="확인 질문"><br>"10분 돌려줘" → 다시 묻기</td>
+    <td align="center"><img src="docs/screenshots/03_pressing.png" width="190" alt="누르는 중"><br>"네" → 누르는 중</td>
+    <td align="center"><img src="docs/screenshots/press.gif" width="190" alt="장치가 10분 버튼을 누르는 장면"><br>장치가 10분 버튼을 누름</td>
   </tr>
 </table>
 
-> 고대비 다크 테마 · 큰 터치 영역 · 일반 동작은 2단계 탭 확인 · 실행 중 정지는 단일 탭 · 하단 3탭(홈 / 비상 / 설정) 구조.
-> (스크린샷은 데모 데이터 기준)
+## 왜 만들었나
 
----
+전자레인지·세탁기 같은 가전이 평평한 터치 패널로 바뀌면서, 손끝으로 버튼 위치를 찾을 수 없게 됐습니다. 위치를 찾으려고 더듬는 동작 자체가 잘못된 입력이 되기도 합니다. 점자 스티커나 음성 안내는 위치만 알려 줄 뿐 결국 사용자가 정확한 지점을 눌러야 하고, 스마트 가전으로 바꾸려면 비용이 큽니다.
+
+Touch Bridge는 가전을 바꾸지 않고, 지금 쓰는 가전 위에 붙여서 버튼 누르는 일 자체를 대신합니다.
 
 ## 주요 기능
 
-### 음성 명령 (STT + Gemini AI)
-- `speech_to_text`로 음성 수집 → 백엔드/Gemini로 의도 파싱
-- 지원 명령: 기기 작동(초 단위), 비상 정지, 화면 이동(NAVIGATE), 상태 질의("얼마나 남았어?"), 재실행("아까 그거 다시" — 확인 후 실행)
-- 기기 별명 지원: "우리집 세탁기"처럼 평소 부르는 이름으로 호출 가능 (기기 관리에서 등록)
-- 침묵 감지 타임아웃 5~15초 — 설정에서 개인 맞춤 조절 가능
-- STT 연속 실패 시 에스컬레이션: 2회 실패 → "도움말" 힌트 자동 안내
+- **음성 명령:** "10분 돌려줘", "만두 데워줘"처럼 말하면 눌러야 할 버튼 순서를 만듭니다. 자주 쓰는 말은 앱이 바로 처리하고, 나머지는 AI가 해석합니다.
+- **실행 전 확인:** 가전을 누르는 명령은 항상 "10분 조리를 시작할까요?"라고 다시 묻고, "네"라고 답해야 실행합니다.
+- **즉시 정지:** 실행 중에는 화면의 정지 버튼을 한 번만 누르면 장치가 멈추고, 남은 명령은 보내지 않습니다.
+- **사진으로 버튼 등록:** 보호자가 패널 사진을 찍으면 AI가 버튼 이름과 위치를 찾고, 네 모서리 보정으로 실제 mm 좌표를 계산합니다. 1·5·10mm 단위로 직접 맞출 수도 있습니다.
+- **작동 확인:** 전류 센서(CT)로 가전이 실제로 켜지고 꺼졌는지 알려 줍니다.
+- **화면 없이 사용:** 음성 안내와 진동으로 상태를 알리고, 화면 낭독기(TalkBack)와 함께 쓸 수 있습니다.
 
-### TTS 음성 안내
-- 모든 화면 진입·버튼 탭·완료 시 한국어 음성 피드백
-- 속도·음량 설정 저장 (SharedPreferences)
-- TalkBack/VoiceOver 활성 시 이중 낭독 자동 억제
+## 구조
 
-### 비상 정지
-- **실행 진행 화면**: 단일 탭으로 정지를 요청하고, ACK 확인·응답 미확인·전송 실패를 구분해 안내하며 미확인·실패 시 재시도 제공
-- **전역 비상 버튼**: 다른 화면에서는 확인 절차 후 정지 요청
-- 음성 "멈춰"/"정지"/"그만"은 음성 입력이 열려 있을 때 동작합니다. 실행 중에는 마이크가 닫혀 있어 음성 정지는 지원하지 않습니다.
-- 카운트다운 구간(5분·2분·1분·30초·10초·5초·3초) 자동 음성 안내
-- 정지 결과는 하드웨어 ACK 확인 기반으로만 "멈췄습니다" 안내 (거짓 완료 금지)
+```mermaid
+flowchart LR
+  U["사용자"] --> APP["Flutter 앱"]
+  APP -- "규칙에 없는 말" --> BE["FastAPI 백엔드 · AI"]
+  BE --> APP
+  APP -- "BLE" --> MC["ESP32 모터 제어기<br/>CoreXY"]
+  MC -- "BLE" --> BOT["SwitchBot Bot<br/>누름"]
+  CT["ESP32 CT 노드"] -- "ESP-NOW" --> MC
+```
 
-### 이중 탭(2단계) 확인 패턴
-- 가전 동작 등 확인이 필요한 조작은 **첫 탭에서 안내 + 대기 강조, 둘째 탭에서 실행** (오작동 방지)
-- 실행 중 비상 정지는 지체를 줄이기 위해 단일 탭으로 요청
-- 대기(armed) 시간 **20초** (WCAG 2.2.1 준수)
+자세한 설명은 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)에 있습니다.
 
-### 사용자 / 보호자 모드 분리
-- **사용자 모드** (기본): 일상 조작은 홈·비상 정지·설정에 집중하되, 독립 설치가 필요한 사용자는 홈의 명시적 진입점에서 기기를 추가할 수 있음
-- **보호자 모드**: 기기 관리 탭과 연결·매핑 도구를 추가 노출 — 가족·시설 관리자의 초기 설정과 유지보수에 적합
+## 설계에서 신경 쓴 점
 
-### Gemini Vision 버튼 자동 매핑
-- 가전기기 사진 촬영 → Gemini Vision API로 버튼 위치 인식
-- 버튼 중심 정규화 좌표를 생성하고, 네 모서리 캘리브레이션으로 실제 X/Y mm 좌표로 변환
-- 드래그 외에도 상·하·좌·우 미세 조정 버튼으로 위치를 수정하고 한 점씩 검증 가능
-- 기기별 독립 저장 (deviceId 기반)
+**안내와 실제 동작을 맞춘다.** 화면을 보지 못하는 사용자에게는 앱의 안내가 곧 결과입니다. 그래서 명령을 보낸 것과 장치가 실제로 동작한 것을 구분해 안내하고, 정지 응답을 받았을 때만 "멈췄습니다"라고 말합니다. 정지를 누르면 실행 토큰을 무효화해, 대기 중이던 명령과 복구 이동까지 모두 보내지 않습니다. 이 규칙을 정리한 논문이 학회에 게재됐습니다.
 
-### 설정 영속화
-- TTS 속도·음량, STT 타임아웃, 접근성 옵션 → 앱 재시작 후에도 유지
+**AI는 버튼 이름까지만 정한다.** AI는 "10분 버튼, 시작 버튼" 같은 논리 버튼 ID만 돌려주고, 실제 좌표는 보호자가 확인하고 저장한 매핑에서만 나옵니다. AI가 잘못 답해도 엉뚱한 위치를 누르지 않습니다.
 
----
+**의심스러운 명령은 실행하지 않는다.** "30초 시작하지 마"처럼 부정어가 있으면 규칙으로 실행하지 않고, "300분"처럼 비정상적인 시간은 20분으로 줄여서 다시 묻습니다.
+
+**장치 명령은 인증한다.** 휴대폰과 장치는 HMAC 챌린지-응답으로 인증하고, 누르기 직전에는 장치가 발급한 1회용 위치 토큰을 확인합니다. 보안 설계와 남은 약점은 [docs/SECURITY.md](docs/SECURITY.md)에 정리했습니다.
 
 ## 기술 스택
 
-| 분류 | 패키지 | 버전 |
-|------|--------|------|
-| 프레임워크 | Flutter / Dart | 3.x / 3.x |
-| 음성 인식 | `speech_to_text` | ^7.4.0 |
-| TTS | `flutter_tts` | ^4.2.5 |
-| AI (NLU + Vision) | `google_generative_ai` (백엔드 프록시) | ^0.2.0 |
-| BLE 통신 | `flutter_blue_plus` | ^1.35.5 |
-| NFC 태그 | `nfc_manager` | ^3.3.0 |
-| 전화 연결 | `url_launcher` | ^6.3.1 |
-| 사진 선택 | `image_picker` | ^1.1.2 |
-| 설정 저장 | `shared_preferences` | ^2.3.2 |
-| 환경 변수 | `flutter_dotenv` | ^5.1.0 |
+| 영역 | 사용 기술 |
+|---|---|
+| 앱 | Flutter / Dart, `flutter_blue_plus`, `speech_to_text`, `flutter_tts` |
+| 백엔드 | Python, FastAPI, Gemini(또는 학교 API 게이트웨이), MongoDB(선택) |
+| 펌웨어 | ESP32(Arduino), 엔코더 DC 모터 + TB6612 드라이버, SwitchBot Bot, CT 센서(SEN0211) |
+| CI | GitHub Actions (`flutter analyze`, `flutter test`, 백엔드 unittest) |
 
----
+## 폴더 구성
 
-## 플랫폼 지원
-
-| 기능 | Android | iOS | macOS 앱 | Chrome (웹) |
-|------|:-------:|:---:|:--------:|:-----------:|
-| TTS 음성 안내 | ✅ | ✅ | ❌ * | ✅ |
-| STT 음성 명령 | ✅ | ✅ | ❌ * | ✅ |
-| Gemini AI | ✅ | ✅ | ✅ | ✅ |
-| 사진 매핑 | ✅ | ✅ | ✅ (갤러리) | ✅ |
-| 설정 영속화 | ✅ | ✅ | ✅ | ✅ |
-
-> \* macOS 26 (Tahoe) beta OS 버그로 TTS/STT 비활성화. 정식 출시 후 재확인 예정.
-
----
-
-## 환경 설정
-
-### 앱(Flutter)
-프로젝트 루트 `.env`:
-
-```env
-AI_BACKEND_URL=http://127.0.0.1:8000
-# 백엔드에 BACKEND_API_KEY가 설정된 경우 같은 값 지정
-AI_BACKEND_API_KEY=
+```
+lib/                 Flutter 앱
+  screens/           홈 · 음성 · 비상 정지 · 보호자 설정 · 매핑 화면
+  services/          명령 해석 · BLE · 좌표 변환 · 실행 · 음성 안내
+backend/             FastAPI 서버 (명령 해석, 사진 분석)
+hardware/
+  touchbridge_corexy/  모터 제어기 펌웨어
+  touchbridge_ct/      CT 노드 펌웨어
+test/                앱 자동 테스트
+docs/                구조 · 통신 규약 · 보안 · 실행 가이드
 ```
 
-앱은 Gemini API 키를 직접 사용하지 않고, 백엔드 API를 통해 AI 기능을 호출합니다.
-(`.env_ex` 참고)
-
-`.env`는 `pubspec.yaml`에 asset으로 선언돼 있어 **없으면 analyze 경고와 빌드 실패**가
-발생합니다. 앱 asset은 APK에 포함되므로 `AI_BACKEND_API_KEY`를 비밀 키처럼 취급할 수 없습니다.
-현재 구성은 프로토타입이며 공개 배포 전 인증 구조를 다시 설계해야 합니다. gitignore 대상이므로 클론 직후 한 번 만들어 주세요:
+## 실행
 
 ```bash
 cp .env_ex .env
-```
-
-### 백엔드(FastAPI)
-`backend` 실행 환경 `.env`:
-
-```env
-# AI 제공자 선택: google(기본, Gemini 직접 호출) | school(수원대 API Gateway)
-# school 선택 시 실패해도 Google로 자동 우회하지 않습니다.
-AI_PROVIDER=google
-
-# google 제공자용
-GOOGLE_API_KEY=여기에_실제_키_입력
-GEMINI_MODEL=gemini-1.5-flash
-
-# school 제공자용 (수원대학교 API Gateway, OpenAI 호환)
-SCHOOL_API_KEY=
-SCHOOL_API_BASE_URL=https://factchat-cloud.mindlogic.ai/v1/gateway
-SCHOOL_API_MODEL=gemini-3.8-flash
-# 사진 분석용 모델을 따로 쓰려면 지정 (미지정 시 SCHOOL_API_MODEL과 동일)
-SCHOOL_API_VISION_MODEL=
-
-# 배포 시 필수 — 설정하면 모든 API 요청에 X-API-Key 헤더를 요구합니다
-BACKEND_API_KEY=
-# MongoDB (미설정 시 localhost, 연결 실패 시 인메모리 폴백)
-MONGO_URI=mongodb://localhost:27017/
-```
-(`backend/.env_ex` 참고)
-
-#### Render 배포 (학교 API Gateway 사용 시)
-1. Render 서비스의 Environment에 다음 변수를 설정:
-   - `AI_PROVIDER=school`
-   - `SCHOOL_API_KEY=<학교 발급 키>` (Git/예제 파일에 절대 넣지 말 것)
-   - `SCHOOL_API_BASE_URL=https://factchat-cloud.mindlogic.ai/v1/gateway`
-   - `SCHOOL_API_MODEL=gemini-3.8-flash`
-   - (선택) `SCHOOL_API_VISION_MODEL=<사진 분석용 모델 ID>`
-   - `BACKEND_API_KEY=<앱과 공유할 서버 인증 키>`
-2. 코드 변경을 push하면 Render가 자동 재배포합니다 (수동이면 Manual Deploy →
-   Deploy latest commit).
-3. 배포 확인 순서:
-   - `GET /` 응답의 `ai_provider`가 `school`인지 확인 (설정 확인용일 뿐,
-     **AI 연결 성공의 증거는 아님** — `/healthz` 200도 마찬가지)
-   - `/parse-command`에 규칙에 없는 문장(예: "안녕하세요")을 보내고,
-     Render 로그에서 `ai.call provider=school model_req=... model_resp=...
-     status=ok` 라인으로 실제 학교 API 사용을 확인
-4. 사진 분석(`/vision-mapping`)도 `gemini-3.8-flash`로 동작 확인됨(2026-09-07).
-   다른 모델로 바꾸려면 `SCHOOL_API_VISION_MODEL`을 설정하세요 — 게이트웨이는
-   제공자 네이티브 전체 API를 지원하지 않으므로, 모델을 바꿀 때는 사진 1장으로
-   재확인하는 것이 안전합니다.
-
-> **Branch 주의**: Render Settings → Build & Deploy → **Branch가 `main`인지**
-> 확인하세요. 다른 브랜치로 설정돼 있으면 `main`에 푸시해도 배포되지 않고
-> 구버전이 계속 서비스됩니다(2026-09-07에 실제로 겪은 문제).
-> 새 코드 반영 여부는 `GET /` 응답의 `ai_provider` 필드 유무로 즉시 판별됩니다.
-
-> 백엔드에는 IP당 분당 60회(비전 10회) 레이트리밋, 업로드 5MB 상한,
-> AI 응답 스키마 검증(버튼 ID 화이트리스트 등)이 적용되어 있습니다.
-
----
-
-## 실행 방법
-
-```bash
-# 의존성 설치
 flutter pub get
-
-# Chrome에서 실행 (개발·테스트 권장)
-flutter run -d chrome
-
-# Android
-flutter run -d android
-
-# iOS
-flutter run -d ios
+flutter run --dart-define=TOUCH_BRIDGE_DEMO=true   # 장치 없이 데모 데이터로 실행
 ```
 
-> Chrome 첫 실행 시 마이크 권한 팝업이 뜹니다. 허용해야 음성 명령이 동작합니다.  
-> TTS는 첫 사용자 탭 이후부터 작동합니다 (Chrome 자동재생 정책).
+백엔드와 실제 장치 연동은 [docs/REPRO_RUNBOOK.md](docs/REPRO_RUNBOOK.md)를 참고하세요.
 
----
+## 검증 범위
 
-## 플랫폼별 권한 설정
+| 상태 | 항목 |
+|---|---|
+| 실제 장치로 확인 | 음성 → 확인 질문 → 명령 전송, 앱 ↔ 장치 BLE 연결과 자동 재연결, 사진으로 버튼 위치 찾기, CT 작동 표시, 10분 버튼 실제 누름 |
+| 자동 테스트로 확인 | 명령 해석 규칙, 정지 뒤 남은 명령 차단, 좌표 변환, BLE 명령 대기열, 접근성 의미 구조 (앱 685개 · 백엔드 57개) |
+| 남은 과제 | 좌표 이동부터 누름까지 이어진 전체 흐름의 반복 시험, 정지 후 모터가 멈추는 시간 측정, 시각장애인 사용자 평가 |
 
-### Android (`android/app/src/main/AndroidManifest.xml`)
-```xml
-<uses-permission android:name="android.permission.RECORD_AUDIO"/>
-<uses-permission android:name="android.permission.INTERNET"/>
-<uses-permission android:name="android.permission.CAMERA"/>
-<uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
-```
+## 팀
 
-### iOS (`ios/Runner/Info.plist`)
-```xml
-<key>NSMicrophoneUsageDescription</key>
-<string>음성 명령을 듣기 위해 마이크 접근이 필요합니다.</string>
-<key>NSSpeechRecognitionUsageDescription</key>
-<string>음성 명령을 텍스트로 인식하기 위해 권한이 필요합니다.</string>
-<key>NSCameraUsageDescription</key>
-<string>가전기기 버튼을 AI로 인식하기 위해 카메라 접근이 필요합니다.</string>
-<key>NSPhotoLibraryUsageDescription</key>
-<string>기기 사진을 선택하여 버튼을 매핑하기 위해 사진 라이브러리 접근이 필요합니다.</string>
-```
+| 이름 | 역할 |
+|---|---|
+| 박성원 | 소프트웨어 — Flutter 앱, FastAPI 백엔드, AI 명령 해석, BLE 통신과 앱–펌웨어 규약, 테스트 |
+| 서예솔 | 하드웨어 — CoreXY 기구 설계와 3D 프린팅, 배선과 전원, ESP32 펌웨어, CT 전류 측정 |
 
-### macOS (`macos/Runner/Info.plist` + entitlements)
-- Info.plist: NSMicrophoneUsageDescription, NSSpeechRecognitionUsageDescription, NSCameraUsageDescription, NSPhotoLibraryUsageDescription
-- Entitlements: audio-input, speech-recognition, photos-library, camera, network.client
+## 성과
 
----
-
-## 프로젝트 구조
-
-```
-lib/
-├── main.dart                              # 앱 진입점, dotenv·설정 로드
-├── screens/       # 홈·음성·제어·연결·매핑·설정 화면
-├── services/      # BLE·음성·명령 해석·매핑·안전 실행
-├── models/        # 기기·명령·매핑 데이터
-├── theme/         # 색상·타이포그래피·테마
-└── widgets/       # 공용 UI 위젯
-```
-
----
-
-## Gemini AI 명령 형식
-
-```json
-{
-  "action": "MICROWAVE_CONTROL | EMERGENCY_STOP | NAVIGATE | NONE",
-  "device": "전자레인지",
-  "seconds": 30,
-  "commands": ["BT-02", "BT-05"],
-  "target": "connection | mapping | settings",
-  "message": "알겠어요. 전자레인지 30초 돌릴게요."
-}
-```
-
----
-
-## 하드웨어 연동
-
-현재 하드웨어는 소형화를 위해 **FIT0482 엔코더 DC 기어모터 2개(X/Y, CoreXY) + ESP32 폐루프 PID + SwitchBot Bot 누름부**로 구성합니다. 펌웨어(v4)는 [`hardware/touchbridge_corexy/`](hardware/touchbridge_corexy/)에 있고, 배선과 첫 구동 순서는 그 폴더의 README를 따릅니다. 설계 배경은 [`docs/XY_SWITCHBOT_SOFTWARE_PLAN.md`](docs/XY_SWITCHBOT_SOFTWARE_PLAN.md)입니다. 누름부는 중간에 솔레노이드를 거쳐 현재 SwitchBot Bot입니다.
-
-**현재 구성:**
-- X/Y: `FIT0482` 6V 310RPM 50:1 엔코더 DC 기어모터 2개, CoreXY 구동
-- 드라이버: JMOD-MOTOR-1 (TB6612FNG)
-- 제어: ESP32가 엔코더 피드백을 받아 위치 PID 수행 (1kHz)
-- 원점: 벽 감지(스톨) 원점 복귀가 기본, 리밋 스위치는 선택; 홈 완료 전 이동 금지
-- 누름: 별도 Z축 대신 SwitchBot Bot (ESP32가 BLE로 직접 제어, 허브 불필요)
-- 통신: 앱 → BLE → ESP32 (USB 시리얼은 디버깅용)
-- 전원: 모터 전원과 MCU 전원 분리, 공통 GND 유지
-
-**권장 실행 흐름:**
-- AI는 물리 좌표를 만들지 않고 논리 버튼 ID(`BT-xx`)만 반환합니다.
-- 사진 분석은 버튼 중심의 정규화 좌표와 신뢰도만 만들고, 보호자 캘리브레이션을 거쳐 X/Y mm로 확정합니다.
-- 앱은 `BT-xx → buttonMachinePositions → X/Y 목표 mm`를 전달합니다.
-- ESP32는 목표 위치 오차가 허용 범위 안에 들어온 뒤에만 Bot 누름을 요청하고, Bot의 응답을 받아 완료 상태를 회신합니다.
-- 펌웨어 v4는 앱 v2 JSON과 함께 GRBL 호환 G-code(Z축 하강 명령을 Bot 누름으로 해석)·`BTN_n`·`SET_GRID`도 받으므로, 음성 경로의 G-code 전송도 그대로 동작합니다.
-
-**v2 명령 흐름 (이동과 누름은 두 단계):**
-
-1) 이동만 — 도착하면 `POSITIONED`와 1회용 `positionToken`을 돌려줍니다.
-```json
-{
-  "version": 2,
-  "commandId": "c-001",
-  "action": "move_only",
-  "deviceId": "microwave_1",
-  "target": {"xMm": 42.5, "yMm": 18.25},
-  "toleranceMm": 1.0
-}
-```
-
-2) 받은 토큰으로 누름 — 토큰은 한 번만 쓸 수 있고, 그 사이 위치가 밀렸으면 거부됩니다(`ERROR_INVALID_TOKEN`).
-```json
-{
-  "version": 2,
-  "commandId": "c-002",
-  "action": "press",
-  "deviceId": "microwave_1",
-  "positionToken": "9f3a1c...",
-  "pressActuator": "switchbot"
-}
-```
-`pressActuator`는 레거시 호환 필드이며 펌웨어는 이 값을 읽지 않고 항상 SwitchBot Bot으로 누릅니다. 명세: [`docs/ESP32_MOTION_PROTOCOL_V2.md`](docs/ESP32_MOTION_PROTOCOL_V2.md)
-
----
-
-## 구현 현황과 검증 범위
-
-- 앱·백엔드 기능 구현과 자동화 검증은 완료했고, ESP32 펌웨어 v4 소스(CoreXY + SwitchBot Bot)도 저장소에 포함되어 있습니다.
-- 자동 테스트·정적 분석 수와 실행 날짜는 아래 테스트 절의 최신 검증 결과를 기준으로 기록합니다.
-- `STOPPED`는 모터가 멈췄고 대기 큐를 버렸다는 뜻입니다. 이미 Bot에 쓴 누름은 되돌릴 수 없습니다.
-- 비상 정지 계약은 앱 코드와 mock 기반 전송 테스트로 확인합니다. 이를 실제 가전의 모터 정지·ACK 검증 결과로 해석하지 않습니다.
-- 실기기 PID 튜닝·앱-펌웨어 전체 E2E, 전맹·저시력 참여자 과업 평가, TalkBack/VoiceOver 실기 흐름 확인은 별도 검증 범위입니다.
-- 후속 확인: 작은 화면에서 글자 크기와 레이아웃 배율 분리, 사진 선택 전 BLE 스캔 중단 여부, 공개 배포용 API 인증·레이트리밋 프록시 신뢰 설정, 미프로비저닝 BLE 기기의 fail-open 정책. 상세: [`CLAUDE.md`](CLAUDE.md), [`docs/SECURITY.md`](docs/SECURITY.md), [`docs/WORK_LOG.md`](docs/WORK_LOG.md).
-
-## 작업 로그
-
-자세한 변경 이력은 [`docs/WORK_LOG.md`](docs/WORK_LOG.md)를 참고하세요.
-
-## 심사용 문서
-
-- [심사 요약서](docs/JUDGING_BRIEF.md)
-- [3분 데모 스크립트](docs/DEMO_SCRIPT_3MIN.md)
-- [재현 가이드/런북](docs/REPRO_RUNBOOK.md)
-- [접근성 지침·법률 조사 (WCAG 2.2 / KS X 3253 / 장애인차별금지법)](docs/ACCESSIBILITY_GUIDELINES_RESEARCH.md)
-- [2026-09-04 근거자료 출처 감사](docs/SOURCE_AUDIT_2026-09-04.md)
-- [시각장애인 당사자 검증 계획/기록 양식](docs/USER_VALIDATION_PLAN.md)
-- [ESP32 펌웨어 v4 (CoreXY + SwitchBot Bot)](hardware/touchbridge_corexy/README.md)
-- [FIT0482 X/Y + 스위치봇 소프트웨어 계획](docs/XY_SWITCHBOT_SOFTWARE_PLAN.md) — 설계 배경 (누름부는 현재 SwitchBot Bot)
-- [앱-하드웨어 연동 계약서 (BLE/Wi-Fi, XYZ G-code, 레거시 명령)](docs/HW_APP_INTEGRATION_CONTRACT_KO.md)
-- [하드웨어 마이그레이션 계획서](docs/HARDWARE_MIGRATION_PLAN.md)
-- [하드웨어 작업 및 안전 체크리스트](docs/HARDWARE_TASKS.md)
-- [AI 시스템 통합 가이드](docs/AI_SYSTEM_OVERVIEW_KO.md)
-
-## 테스트
-
-```bash
-flutter analyze --fatal-infos
-flutter test
-python -m unittest discover -s backend -p 'test_*.py'
-```
-
-- 자동 테스트 **446개 통과 (Flutter 391 + 백엔드 55, 2026-10-10 기록)**. GitHub Actions도 `flutter analyze --fatal-infos`·`flutter test`·백엔드 unittest를 실행합니다.
-- 주요 범위: 음성 규칙·시간 파싱, 좌표 보정, BLE 명령 큐·재연결, 실행 중 정지 토큰 전파, 접근성 의미 구조·화면 전환, 백엔드 응답 검증.
-- 실제 모터 구동·정지 ACK, 기기별 실사용 흐름, TalkBack/VoiceOver의 전체 과업 완주 검증은 자동 테스트 수에 포함하지 않습니다.
-
-## 접근성 실험 지표
-
-설정 화면의 `접근성 실험 지표` 섹션에서 다음 항목을 누적 확인할 수 있습니다.
-- 총 작업 수 / 완료 / 중단 / 완료율 / 평균 완료 시간
-- 음성·수동 **모드별 분리 집계** (작업 수, 완료 수, 평균 완료 시간 — 당사자 검증의 핵심 비교 지표)
-- 비상 정지 횟수 / 이중탭 타임아웃 횟수
-
-`지표 내보내기`로 CSV를 클립보드에 복사해 시트에 붙여 넣을 수 있고,
-`지표 초기화`(확인 다이얼로그)로 실험 배치를 리셋할 수 있습니다.
-
----
-
-## 하드웨어 작업 및 안전 (요약)
-
-하드웨어는 프로토타입 수준에서 동작하지만, 설치·운영 전 반드시 물리적 안전 조치를 수행해야 합니다. 자세한 체크리스트와 회로 권장 사항은 `docs/HARDWARE_TASKS.md`를 먼저 확인하세요.
-
-간단히 확인해야 할 항목:
-- FIT0482 X/Y 모터 2개의 실측 정지전류를 기준으로 H-브리지와 전류 제한을 선정
-- 6V 모터 전원과 ESP32 로직 전원을 분리하고 공통 GND 연결
-- 엔코더 A/B상 방향·카운트 확인, 벽 감지 원점 복귀와 추종 오차(걸림) 감지 동작 확인
-  (리밋 스위치를 달 경우 fail-safe 동작도 확인)
-- 홈 완료 전 이동 금지, 허용 오차 밖에서는 Bot 누름 금지 확인
-- Bot 비밀번호 해제, 누름(Press) 모드, 배터리 잔량, ESP32와의 BLE 거리 확인
-- 적정 퓨즈 장착
-- 하드웨어 비상정지(E‑STOP) 회로 구성(필수)
-
-보안 관련 권장사항은 `docs/SECURITY.md`에 정리되어 있습니다. 프로덕션 전환 전 BLE LE Secure Connections 및 OTA 서명 도입을 권장합니다.
-
+- 논문: 박성원, 서예솔, 「시각장애인용 가전 입력 대행 시스템의 안내–동작 불일치 완화를 위한 소프트웨어 안전 계약」, 한국정보처리학회 ACK 2026 추계학술발표대회, 포스터 발표 (2026.11)
+- 제24회 정보보호학과 프로젝트 발표회 부스 전시 (2026.11.18)

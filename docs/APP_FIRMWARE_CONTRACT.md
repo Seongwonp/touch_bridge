@@ -1,8 +1,8 @@
-# 앱–펌웨어 약속 (2026-11-10 초안)
+# 앱–펌웨어 응답 규약
 
 앱(SW)과 모터 ESP32 펌웨어(HW)가 같은 응답을 같은 뜻으로 읽도록 정리한다. 코드가 기준이다. 이 문서와 코드가 어긋나면 코드를 믿고 이 문서를 고친다. 펌웨어를 바꾸는 사람과 앱을 바꾸는 사람이 함께 고친다.
 
-작성 근거: `hardware/touchbridge_corexy/touchbridge_corexy.ino`(v4, `fw/bot-link-not-app-disconnect` 브랜치 포함), `lib/services/ble_service.dart`, `lib/services/mapping_execution_service.dart`.
+작성 근거: `hardware/touchbridge_corexy/touchbridge_corexy.ino`(v4), `lib/services/ble_service.dart`, `lib/services/mapping_execution_service.dart`.
 
 ## 1. 펌웨어가 스스로 멈추는 경우
 

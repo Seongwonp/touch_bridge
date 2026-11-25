@@ -2,10 +2,9 @@
 
 이 문서는 Touch Bridge 저장소에서 코드를 고칠 때 지켜야 하는 규칙을 모은 것이다.
 빌드·테스트·커밋 절차와, 안전·접근성 때문에 바꾸면 안 되는 코드 계약을 다룬다.
-프로젝트 소개는 [README.md](README.md), 앱-하드웨어 명령 규격은
-[docs/HW_APP_INTEGRATION_CONTRACT_KO.md](docs/HW_APP_INTEGRATION_CONTRACT_KO.md)와
-[docs/ESP32_MOTION_PROTOCOL_V2.md](docs/ESP32_MOTION_PROTOCOL_V2.md), 변경 이력은
-[docs/WORK_LOG.md](docs/WORK_LOG.md)를 본다.
+프로젝트 소개는 [README.md](README.md), 구조는 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
+앱–하드웨어 명령 규격은 [docs/ESP32_MOTION_PROTOCOL_V2.md](docs/ESP32_MOTION_PROTOCOL_V2.md)와
+[docs/HW_APP_INTEGRATION_CONTRACT_KO.md](docs/HW_APP_INTEGRATION_CONTRACT_KO.md)를 본다.
 
 ## 1. 빌드와 테스트
 

@@ -1,9 +1,8 @@
 # Touch Bridge ESP32 모션 프로토콜 v2
 
-> 상태: 앱 측 계약 확정, **ESP32 펌웨어 v4 구현 완료**(`hardware/touchbridge_corexy/`),
-> 실기 검증 전. 아래 원칙 중 v4에서 아직 구현되지 않은 항목은 그 자리에 표시했다.
-> 적용 대상: FIT0482 엔코더 DC 모터 X/Y (CoreXY) + SwitchBot Bot 누름 액추에이터
-> (v3의 솔레노이드를 대체했다)
+> 구현: 앱(`lib/services/esp32_motion_protocol.dart`), 펌웨어 v4(`hardware/touchbridge_corexy/`).
+> 대상: FIT0482 엔코더 DC 모터 X/Y(CoreXY) + SwitchBot Bot 누름부.
+> v4에서 아직 구현하지 않은 항목은 그 자리에 표시했다.
 
 ## 안전 원칙
 
